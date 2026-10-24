@@ -78,14 +78,6 @@ const repos: Repo[] = [
     badge: '互动小站',
   },
   {
-    name: '二次元插画素材',
-    url: '/anime_pic/',
-    description:
-      '8 组「原图 / 插画成品」对照预览：统一为粗线稿 + 两阶平涂 + 奶油色手绘边框，保留原图角色神态；成品为长边 2560px 级 JPG，可直接用于贴纸与图文素材',
-    language: 'AI 插画',
-    badge: '素材对照',
-  },
-  {
     name: 'BlurLyric',
     url: 'https://github.com/Project-And-Factory/BlurLyric',
     description:
