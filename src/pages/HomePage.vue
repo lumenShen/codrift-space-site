@@ -384,6 +384,7 @@ const latestPosts = selectLatestPosts(3);
   gap: var(--space-2) var(--space-4);
   font-size: clamp(1.5rem, 3.6vw, 2.3rem);
   line-height: 1.15;
+  text-shadow: rgba(0, 0, 0, 0.55) 0px 0px 0.18em;
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -431,6 +432,7 @@ const latestPosts = selectLatestPosts(3);
   line-height: 1.22;
   letter-spacing: -0.02em;
   color: var(--fg-0);
+  text-shadow: rgba(0, 0, 0, 0.55) 0px 0px 0.18em;
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
 }
 
@@ -449,6 +451,7 @@ const latestPosts = selectLatestPosts(3);
   font-size: clamp(1.05rem, 2.4vw, 1.3rem);
   font-weight: 500;
   letter-spacing: 0.01em;
+  text-shadow: rgba(0, 0, 0, 0.55) 0px 0px 0.18em;
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both;
 }
 
