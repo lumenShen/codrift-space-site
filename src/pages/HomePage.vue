@@ -70,6 +70,22 @@ const repos: Repo[] = [
     highlight: 'AI驱动的知识笔记再优化，让晦涩难懂的语言更加易懂',
   },
   {
+    name: '摆烂处方笺',
+    url: '/daraku-rx/',
+    description:
+      '日系清新风的随机处方生成器「だらく診療所」：写下一个当下的烦恼，看五秒「正在编写处方」，领到一张带主药、辅药、剂量与禁忌的情绪处方；另有可播放背景音乐的隐藏菜单。Vue 3 + Vite 单页应用，独立构建后以子路径挂在本站',
+    language: 'Vue',
+    badge: '互动小站',
+  },
+  {
+    name: '二次元插画素材',
+    url: '/anime_pic/',
+    description:
+      '8 组「原图 / 插画成品」对照预览：统一为粗线稿 + 两阶平涂 + 奶油色手绘边框，保留原图角色神态；成品为长边 2560px 级 JPG，可直接用于贴纸与图文素材',
+    language: 'AI 插画',
+    badge: '素材对照',
+  },
+  {
     name: 'BlurLyric',
     url: 'https://github.com/Project-And-Factory/BlurLyric',
     description:
