@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从源文件到可执行文件：你的第一个 C 程序</title>
+<meta name="description" content="零基础 · 第 1 单元 · 建议 40 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-c-chapters-ch01-01-from-source-to-program-md { @top-right { content: "从源文件到可执行文件：你的第一个 C 程序"; } }
+#content { page: p-u-c-chapters-ch01-01-from-source-to-program-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/c.html">《c》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">从源文件到可执行文件：你的第一个 C 程序</h1><p class="doc-sub">零基础 · 第 1 单元 · 建议 40 分钟</p><p class="doc-meta">源文件 books/c/chapters/ch01/01-from-source-to-program.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h1">1.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h2">1.2 你的第一个 C 程序</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h3">1.3 一条命令背后：预处理 → 编译 → 汇编 → 链接</a></li><li class="toc-l3"><a href="#c-chapters-ch01-01-from-source-to-program-md-h4">预处理之后，printf 还是 printf 吗</a></li><li class="toc-l3"><a href="#c-chapters-ch01-01-from-source-to-program-md-h5">链接与运行</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h6">1.4 printf 凭什么能用：谁能看见谁</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h7">1.5 编译器说不行的时候</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h8">1.6 字符串在内存里长什么样</a></li><li class="toc-l2"><a href="#c-chapters-ch01-01-from-source-to-program-md-h9">1.7 这一节新增了什么，以及接下来</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清从 <code>hello.c</code> 到 <code>hello.exe</code> 中间<strong>真的</strong>发生了哪四步，每一步产出了什么文件；</li>
+<li>亲手把中间产物留下来（<code>gcc --save-temps</code>），并用 <code>ls</code> 看见它们；</li>
+<li>解释 <code>printf</code> 凭什么能被你调用：它住在哪、谁把它的名字告诉编译器、谁把它的实现体接进来；</li>
+<li>看见一个编译错误时，读懂 <code>文件:行:列: error: …</code> 这行字在说什么，并且知道往哪里改；</li>
+<li>说出字符串 <code>&quot;hi&quot;</code> 在内存里占几个字节，以及为什么不是两个。</li>
+</ul>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h1">1.1 先看工程长什么样</h2>
+<p>学 C 最容易走偏的地方，是一上来就背语法。我们先看<strong>文件和目录</strong>：一段程序从哪个文件开始，编译器要读几个文件，最后产出什么。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">把这一节的目的说成人话</span></header>
+<div class="box-b">
+<p>我写的文件叫<strong>源文件</strong>，编译器读它，产出一个<strong>可执行文件</strong>。中间它会顺手写几个临时文件（预处理结果、汇编、目标文件），平常它们写完就删，所以你看不到。这一节我们要做的，就是让它们别删，看一眼它们长什么样——因为<strong>你以后 80% 的报错，都发生在这几个文件之间的接缝上</strong>。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="3" data-viz-id="vz-7ef4508e">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> hello 工程：这一节里它长成了什么样</figcaption>
+<div class="viz-screen" role="group" aria-label="hello 工程：这一节里它长成了什么样：逐步演示">
+<input class="vs-radio" type="radio" name="vz-7ef4508e" id="vz-7ef4508e-1" checked>
+<input class="vs-radio" type="radio" name="vz-7ef4508e" id="vz-7ef4508e-2">
+<input class="vs-radio" type="radio" name="vz-7ef4508e" id="vz-7ef4508e-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-7ef4508e-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-7ef4508e-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-7ef4508e-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">trace.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">noinclude.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">string_memory.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>一开始只有草稿，一个源文件</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>加上清单，编译与输出才能被自动对账</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>这一节结束时，书里的例子目录长这样</p><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">trace.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">noinclude.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">string_memory.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是上手第一分钟的样子：一个目录、一个 <code>.c</code> 文件。第 2 帧多出来的 <code>hello.json</code> 不是 C 的东西，它是<strong>这本书的流水线</strong>要的东西：它声明「这段程序怎么编译、跑完应该输出什么」，这样正文里的输出就不可能是手抄的（后面 1.3 会用到它）。第 3 帧是这一节结束时 <code>examples/ch01/</code> 里的全部文件：多出来的四个 <code>.c</code> 各有用途，我们在 1.4、1.5、1.6 一个一个拆。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：目录怎么起名</span></header>
+<div class="box-b">
+<p><code>hello/</code> 这种「一个程序一个目录」的摆法不是标准规定的，是三十年攒下来的主流做法：</p>
+<ul>
+<li>每个可独立编译运行的小程序放<strong>自己的目录</strong>，目录名用英文小写，不用空格与中文；</li>
+<li>源文件用 <code>.c</code>（C）与 <code>.cpp</code>（C++），头文件用 <code>.h</code>——这是<strong>惯例</strong>，标准里没写「必须叫 .c」；</li>
+<li>一个目录里只放这个程序的相关文件，编译产出的 <code>*.exe</code>、<code>*.o</code> <strong>不要</strong>和源文件混在一起（本书统一产出到 <code>dist/work/</code> 下）。</li>
+</ul>
+<p>第 3 条是本书的硬规定：从第二个项目开始，<strong>不允许出现单文件工程</strong>。原因是单文件工程一旦超过 300 行，你就会开始分不清「哪些代码在互相依赖」；而分文件、写头文件这件事，越早练越省事。第一个程序（就是下面这个）允许单文件，因为它的全部意义是让你看见整条链。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h2">1.2 你的第一个 C 程序</h2>
+<p>下面这段程序来自真实文件 <code>examples/ch01/hello.c</code>，正文里的每一行、连同行号，都是这个文件里的真实内容——本书正文里的代码块一律这么来，<strong>不手抄</strong>：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/hello.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/hello.c</span><span class="cb-lines">第 1–10 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="10"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl is-marked" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span><span class="tk" style="color:#6A737D">                     /* 累加器：三行加起来是 6 */</span><span class="k-note">一个变量，四个字节</span></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">; i</span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        total </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> i;</span><span class="tk" style="color:#6A737D">                    /* 中文注释也能正常高亮 */</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl is-marked" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"三行相加 = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, total);</span><span class="k-note">把结果打到屏幕上</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">4</span>一个变量，四个字节</li><li><span class="cb-note-ln">8</span>把结果打到屏幕上</li></ol></figure>
+<p>跑出来是这样：</p>
+<figure class="term term-output" data-id="hello-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">hello-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">三行相加 = 6</span></span></pre></figure>
+<p>十行代码，你至少要认出五样东西：</p>
+<ol>
+<li>第 1 行 <code>#include &lt;stdio.h&gt;</code>：在<strong>编译之前</strong>把另一个文件的内容搬进来（1.3 会看到搬进来之后的样子）。</li>
+<li>第 3 行 <code>int main(void) {</code>：程序的入口。操作系统把控制权交给它，它 <code>return 0;</code> 表示「一切正常」。</li>
+<li>第 4 行 <code>int total = 0;</code>：一个变量，四个字节，初值是 0。</li>
+<li>第 8 行 <code>printf(...)</code>：把文字打到屏幕上。注意它<strong>不是</strong>语言的关键字，它是运行库里的一个函数——这件事是 1.4 的主角。</li>
+<li>第 9 行 <code>return 0;</code>：把 0 交回给操作系统。终端里 <code>echo $?</code> 看到的 <code>0</code> 就是这个数。</li>
+</ol>
+<section class="box box-syntax" data-box-type="syntax"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-braces" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.3 2.6c-1.5 0-1.7.8-1.7 1.7v2c0 .9-.4 1.5-1.4 1.7 1 .2 1.4.8 1.4 1.7v2c0 .9.2 1.7 1.7 1.7"/><path d="M9.7 2.6c1.5 0 1.7.8 1.7 1.7v2c0 .9.4 1.5 1.4 1.7-1 .2-1.4.8-1.4 1.7v2c0 .9-.2 1.7-1.7 1.7"/></svg></span><span class="box-kind">语法规则</span><span class="box-t">一个 C 程序的最小骨架</span></header>
+<div class="box-b">
+<p>骨架只有三件事（对着前面那个代码块的第 1、3、9 行看）：<strong>带进来</strong>（<code>#include</code>）、<strong>写一个 main</strong>、<strong>还一个整数</strong>（<code>return 0;</code>）。其余所有代码，都在 <code>main</code> 的花括号里面。分号 <code>;</code> 是<strong>语句的结尾</strong>，不是可有可无的装饰——少了它，编译器从出错的那一行的下一行开始报错（1.5 有真例子）。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">中文注释与中文字符串：编码这件事现在不用管，但要记住它在</span></header>
+<div class="box-b">
+<p>你在源文件里写的中文注释、<code>printf</code> 里写的中文，能不能正确显示，取决于<strong>源文件的字节</strong>、<strong>编译器用什么编码去读它</strong>、<strong>终端用什么编码去显示它</strong>三件事。本机实测（Windows 10 x64 (MSYS2 UCRT64)，gcc 16.1.0）这三件事是一致的：源文件是 UTF-8，编译出来的程序写出的也是 UTF-8，终端按 UTF-8 显示，所以上面那行 <code>三行相加 = 6</code> 是正常的。</p>
+<p>你会被坑到的场合是：把同一个 <code>.c</code> 文件复制到另一台用 GBK 默认编码的机器上，或者把程序输出重定向进一个按 GBK 解释的文件里——那时你会看到一串像 <code>涓夎岀浉鍔</code> 的乱码。<strong>看到乱码先别怀疑代码</strong>：代码没有错，错的是「谁把字节当成什么编码读」。记住这个排查顺序：先看源文件编码，再看编译器有没有加编码参数，最后看终端/文件的编码。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h3">1.3 一条命令背后：预处理 → 编译 → 汇编 → 链接</h2>
+<p>你敲的那条命令只有一行，但它让编译器做了四件事。我们先让中间产物别删掉——<code>--save-temps</code> 就是干这个的：</p>
+<figure class="term term-session" data-id="ch01-stages" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">让中间产物别删掉：--save-temps</span><span class="term-id">ch01-stages</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g --save-temps -c hello.c -o hello.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ ls -l hello.c hello.i hello.s hello.o</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">-rw-r--r-- 1 Administrator 197121   290 Oct 17 20:05 hello.c</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">-rw-r--r-- 1 Administrator 197121 78372 Oct 17 20:05 hello.i</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">-rw-r--r-- 1 Administrator 197121  2659 Oct 17 20:05 hello.o</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">-rw-r--r-- 1 Administrator 197121  5253 Oct 17 20:05 hello.s</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ wc -l hello.c hello.i hello.s</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">   10 hello.c</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code"> 1525 hello.i</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">  319 hello.s</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code"> 1854 total</span></span></pre></figure>
+<p>这条会话是从真实终端里抓下来的：<strong>10 行源文件</strong>，展开成 <strong>1525 行预处理结果</strong>，再压成 <strong>319 行汇编</strong>。这三个数字就是本节最想说的事——你以为你在写 10 行，编译器实际要处理 1525 行。</p>
+<figure class="viz" data-kind="graph" data-frames="5" data-viz-id="vz-9637a4a1">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 四个阶段：每一段都在把「上一种东西」翻译成下一种</figcaption>
+<div class="viz-screen" role="group" aria-label="四个阶段：每一段都在把「上一种东西」翻译成下一种：逐步演示">
+<input class="vs-radio" type="radio" name="vz-9637a4a1" id="vz-9637a4a1-1" checked>
+<input class="vs-radio" type="radio" name="vz-9637a4a1" id="vz-9637a4a1-2">
+<input class="vs-radio" type="radio" name="vz-9637a4a1" id="vz-9637a4a1-3">
+<input class="vs-radio" type="radio" name="vz-9637a4a1" id="vz-9637a4a1-4">
+<input class="vs-radio" type="radio" name="vz-9637a4a1" id="vz-9637a4a1-5">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-9637a4a1-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-9637a4a1-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-9637a4a1-3">第 3 步</label>
+<label class="vs-tab" data-step="4" for="vz-9637a4a1-4">第 4 步</label>
+<label class="vs-tab" data-step="5" for="vz-9637a4a1-5">第 5 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">hello.c ：你敲的源文件，10 行</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.i ：展开 #include 与宏，1525 行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.i</span><span class="ve-lbl">gcc -E</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.s ：这台机器的汇编，319 行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.i</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.s</span><span class="ve-lbl">gcc -S</span></div></div></div></div>
+<div class="vs-frame" data-step="4"><div class="viz-canvas" data-kind="graph" data-step="4"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.o ：机器码 + 符号表，还没接库</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.s</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.o</span><span class="ve-lbl">as</span></div></div></div></div>
+<div class="vs-frame" data-step="5"><div class="viz-canvas" data-kind="graph" data-step="5"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.exe ：把库接上，可以运行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.o</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.exe</span><span class="ve-lbl">ld（gcc 替你调）</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>起点</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">hello.c ：你敲的源文件，10 行</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>预处理</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.i ：展开 #include 与宏，1525 行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.i</span><span class="ve-lbl">gcc -E</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>编译</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.s ：这台机器的汇编，319 行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.i</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.s</span><span class="ve-lbl">gcc -S</span></div></div></div></div>
+<div class="viz-frame" data-step="4"><p class="viz-step"><span class="viz-step-no">第 4 步</span>汇编</p><div class="viz-canvas" data-kind="graph" data-step="4"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.o ：机器码 + 符号表，还没接库</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.s</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.o</span><span class="ve-lbl">as</span></div></div></div></div>
+<div class="viz-frame" data-step="5"><p class="viz-step"><span class="viz-step-no">第 5 步</span>链接</p><div class="viz-canvas" data-kind="graph" data-step="5"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">hello.exe ：把库接上，可以运行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">hello.o</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.exe</span><span class="ve-lbl">ld（gcc 替你调）</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是你手上的东西。第 2 帧是<strong>预处理</strong>：<code>#include &lt;stdio.h&gt;</code> 被就地展开成整个头文件的内容，<code>hello.c</code> 因此变成 1525 行。第 3 帧是<strong>编译</strong>：这 1525 行被翻成这台机器认识的汇编——注意是「这台机器」，换一个 CPU 架构，同一份 C 代码翻出来的汇编完全不同。第 4 帧是<strong>汇编</strong>：汇编被翻成机器码，装进目标文件 <code>hello.o</code>，但里面缺 <code>printf</code> 的实现体，它不知道要打印的到底是哪来的函数。第 5 帧是<strong>链接</strong>：链接器把 <code>hello.o</code> 与运行库接起来，<code>printf</code> 的实现体被接进去，产出一个能运行的可执行文件。</p>
+<h3 id="c-chapters-ch01-01-from-source-to-program-md-h4">预处理之后，<code>printf</code> 还是 <code>printf</code> 吗</h3>
+<p>预处理结果有 1525 行，但真正属于你的只有最后 7 行：</p>
+<figure class="term term-session" data-id="ch01-pre" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">预处理结果 hello.i 的最后 7 行</span><span class="term-id">ch01-pre</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ tail -n 7 hello.i</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">    int total = 0;</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">    for (int i = 1; i &lt;= 3; i++) {</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">        total += i;</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">    }</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">    printf("三行相加 = %d\n", total);</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">    return 0;</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">}</span></span></pre></figure>
+<p>你写的代码<strong>原封不动</strong>在文件末尾，前面 1500 多行全是头文件带进来的声明。这里有个反直觉的点：<code>#include</code> 不是「去库里拿东西」，而是<strong>把那个文件的文字搬过来</strong>。为了让编译器知道 <code>printf</code> 这个名字长什么样，你得把它的声明搬进来——这就是 1.4 的主题。</p>
+<p>预处理结果里的行号已经被打乱了（你的第 3 行变成了第 1517 行），所以预处理结果里夹着行号标记：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/hello.i"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">预处理结果（.i）的末尾：你的代码在这里</span><span class="cb-file">examples/ch01/hello.i</span><span class="cb-lines">第 1517–1525 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1517" data-to="1525"><span class="cl" data-ln="1517"><span class="ln" data-ln="1517" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E"># </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">"hello.c"</span></span></span>
+<span class="cl" data-ln="1518"><span class="ln" data-ln="1518" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="1519"><span class="ln" data-ln="1519" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="1520"><span class="ln" data-ln="1520" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">; i</span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="1521"><span class="ln" data-ln="1521" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        total </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> i;</span></span></span>
+<span class="cl" data-ln="1522"><span class="ln" data-ln="1522" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="1523"><span class="ln" data-ln="1523" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"三行相加 = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, total);</span></span></span>
+<span class="cl" data-ln="1524"><span class="ln" data-ln="1524" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="1525"><span class="ln" data-ln="1525" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>行首那些 <code># 3 &quot;hello.c&quot;</code> 就是<strong>行号标记</strong>。编译器靠它们，才能在报错时告诉你「问题在 <code>hello.c</code> 的第 8 行」，而不是「在 <code>hello.i</code> 的第 1524 行」。你以后看到的每条诊断都带着原始文件与行号，功劳就在这里。</p>
+<p>汇编里，字符串与调用长这样。先看数据部分——第 8 行那串 <code>\344\270\211</code> 就是你写的「三」：</p>
+<figure class="codeblock" data-lang="asm" data-file="examples/ch01/hello.s"><figcaption class="cb-head"><span class="cb-lang">asm</span><span class="cb-title">汇编（.s）：字符串被拆成字节，main 变成一个标号</span><span class="cb-file">examples/ch01/hello.s</span><span class="cb-lines">第 6–13 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="6" data-to="13"><span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.section .rdata,"dr"</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">.</span><span class="tk" style="color:#6F42C1">LC0:</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.ascii "\</span><span class="tk" style="color:#005CC5">344</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">270</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">211</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">350</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">241</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">214</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">347</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">233</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">270</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">345</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">212</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">240</span><span class="tk" style="color:#24292E"> = %d\</span><span class="tk" style="color:#005CC5">12</span><span class="tk" style="color:#24292E">\</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">"</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	</span><span class="tk" style="color:#6F42C1">.text</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.globl	main</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.def	main</span><span class="tk" style="color:#6A737D">;	.scl	2;	.type	32;	.endef</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.seh_proc	main</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6F42C1">main:</span></span></span></pre></div></figure>
+<figure class="codeblock" data-lang="asm" data-file="examples/ch01/hello.s"><figcaption class="cb-head"><span class="cb-lang">asm</span><span class="cb-title">汇编（.s）：printf 在这里只是一个待填的名字</span><span class="cb-file">examples/ch01/hello.s</span><span class="cb-lines">第 48–52 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="48" data-to="52"><span class="cl" data-ln="48"><span class="ln" data-ln="48" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	.loc </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">8</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">5</span></span></span>
+<span class="cl" data-ln="49"><span class="ln" data-ln="49" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	movl	-</span><span class="tk" style="color:#005CC5">4</span><span class="tk" style="color:#24292E">(%</span><span class="tk" style="color:#005CC5">rbp</span><span class="tk" style="color:#24292E">), %</span><span class="tk" style="color:#005CC5">eax</span></span></span>
+<span class="cl" data-ln="50"><span class="ln" data-ln="50" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	leaq	.LC0(%</span><span class="tk" style="color:#005CC5">rip</span><span class="tk" style="color:#24292E">), %</span><span class="tk" style="color:#005CC5">rcx</span></span></span>
+<span class="cl" data-ln="51"><span class="ln" data-ln="51" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	movl	%</span><span class="tk" style="color:#005CC5">eax</span><span class="tk" style="color:#24292E">, %</span><span class="tk" style="color:#005CC5">edx</span></span></span>
+<span class="cl" data-ln="52"><span class="ln" data-ln="52" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">	</span><span class="tk" style="color:#D73A49">call</span><span class="tk" style="color:#24292E">	printf</span></span></span></pre></div></figure>
+<p><code>call printf</code> 这一行里，<code>printf</code> 只是一个<strong>名字</strong>，地址还没定下来。链接器的工作就是在这个名字旁边填上真正的地址；填不上，你看到的报错是 <code>undefined reference to 'printf'</code>——那是链接期的错误，不是编译期的。1.5 会把这两类错误分清。</p>
+<h3 id="c-chapters-ch01-01-from-source-to-program-md-h5">链接与运行</h3>
+<figure class="term term-session" data-id="ch01-link-run" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">链接 + 运行 + 退出码</span><span class="term-id">ch01-link-run</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g hello.c -o hello.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ ./hello.exe</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">三行相加 = 6</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">0</span></span></pre></figure>
+<p>这就是完整的证据链：<code>hello.c</code> 在里面，<code>hello.exe</code> 出来了，跑出来的正是你写的那行字，退出码是 <strong>0</strong>。本节出现的命令、字节数、行数、退出码，都不是我写下来的，而是这台机器上真跑出来的；本书的规矩是——<strong>凡写作「实测」的数字，必须来自真跑，并且由流水线逐字对账</strong>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">本机实测：这一节的工具链与命令</span></header>
+<div class="box-b">
+<ul>
+<li>编译器：gcc 16.1.0，本书统一用 <code>-std=c17</code>（也就是 C17），目标三元组 x86_64-w64-mingw32；</li>
+<li>编译参数固定为 <code>-Wall -Wextra -Wpedantic -O0 -g</code>：警告全开、<strong>不做优化</strong>（<code>-O0</code>）、带调试信息（<code>-g</code>）；</li>
+<li><code>--save-temps</code> 让中间产物留在当前目录：<code>hello.i</code>（预处理）、<code>hello.s</code>（汇编）、<code>hello.o</code>（目标文件）；</li>
+<li>源文件 10 行 290 字节，预处理结果 <strong>1525 行 78372 字节</strong>——头文件带进来的量是你自己代码的 270 倍；</li>
+<li><code>./hello.exe</code> 的 stdout 是 <code>三行相加 = 6</code>，退出码 <strong>0</strong>。</li>
+</ul>
+<p>上面的数字里，行数与字节数由流水线在构建时抓取，路径写在 <code>examples/ch01/session-savetemps.txt</code>；对不上就说明源文件被改过。</p>
+</div>
+</section>
+<section class="box box-standard" data-box-type="standard"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-openBook" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4.2C7 3.3 5.6 3 4 3v9.2c1.6 0 3 .3 4 1.2 1-.9 2.4-1.2 4-1.2V3c-1.6 0-3 .3-4 1.2z"/><path d="M8 4.2v9.2"/></svg></span><span class="box-kind">标准原文</span><span class="box-t">标准原文：`#include` 到底做了什么</span></header>
+<div class="box-b">
+<p>C 语言标准（ISO/IEC 9899，C17）6.10.2 节「Source file inclusion」对 <code>#include &lt;...&gt;</code> 的规定是：</p>
+<blockquote>
+<p>A preprocessing directive of the form <code># include &lt;h-char-sequence&gt; new-line</code> searches a sequence of implementation-defined places for a named header, and causes the entire contents of that header to be replaced by the contents of the file.</p>
+</blockquote>
+<p>大意：<strong><code>#include</code> 把那个头文件的全部内容就地替换进来</strong>。注意标准刻意没说「去哪个目录找」——它写的是 <code>implementation-defined places</code>（由实现决定）。所以 <code>stdio.h</code> 在哪、里面写了什么，是<strong>工具链</strong>的事，不是语言的事；换一个编译器，<code>#include &lt;stdio.h&gt;</code> 搬进来的可能是完全不同的一份文字。</p>
+<p>出处：ISO/IEC 9899:2018（C17）§6.10.2 第 3 段。</p>
+</div>
+</section>
+<section class="box box-compiler" data-box-type="compiler"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-machine" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.2 5.6h9.6v7.2H3.2z"/><path d="M5.6 3.2h4.8v2.4H5.6z"/><circle cx="6" cy="9.2" r="0.85"/><circle cx="10" cy="9.2" r="0.85"/></svg></span><span class="box-kind">编译器视角</span><span class="box-t">编译器视角：它看到的不是「一个文件」，而是一条行号链</span></header>
+<div class="box-b">
+<p><code>gcc</code> 在你按下回车后做的事，可以概括成「带着一张行号地图，逐段改写文本」：</p>
+<ol>
+<li>预处理输出 <code>.i</code>，每段前面夹着 <code># 行号 &quot;文件名&quot;</code> 标记（上面那 9 行的开头就是 <code># 3 &quot;hello.c&quot;</code>）；</li>
+<li>编译把 <code>.i</code> 翻成 <code>.s</code>，并写进 <code>.loc 1 8 5</code> 这样的调试指令——「接下来这段机器码对应源文件第 8 行第 5 列」；</li>
+<li>汇编把 <code>.s</code> 变成 <code>.o</code>，符号表里留下「我引用了一个叫 <code>printf</code> 的外部名字」；链接再把地址填上。</li>
+</ol>
+<p>所以看到报错先问一句：这是<strong>哪一步</strong>在说话？两类的修法完全不同。</p>
+</div>
+</section>
+<section class="box box-debug" data-box-type="debug"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bug" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.4 6.6a2.6 2.6 0 0 1 5.2 0v2.9a2.6 2.6 0 0 1-5.2 0z"/><path d="M8 3.6v3"/><path d="M5.4 7.8H2.8M13.2 7.8h-2.6M5.6 10.4l-2.2 1.4M10.4 10.4l2.2 1.4M5.7 5.1L4.1 3.5M10.3 5.1l1.6-1.6"/></svg></span><span class="box-kind">调试实录</span><span class="box-t">调试实录：确认「程序真的从 main 开始」</span></header>
+<div class="box-b">
+<p>新手最常见的怀疑是「我的 <code>main</code> 到底有没有被调用」。这个问题不需要猜，用调试器看一眼就行。下面这段会话是真的（<code>trace.c</code> 也在 <code>examples/ch01/</code> 里）：</p>
+<p>下面两块是会话原文，按两次命中拆开；读法也只有三步：<code>break add</code> 是「在 add 的第一行停住」，<code>bt</code>（backtrace）是「把调用链打出来」，<code>continue</code> 是「继续跑、等下一次停」。</p>
+</div>
+</section>
+<figure class="term term-session" data-id="ch01-gdb-trace-1" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">第一次命中：里面那个 add(2, 3)</span><span class="term-id">ch01-gdb-trace-1</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g trace.c -o trace.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ gdb --batch -ex "break add" -ex run -ex bt -ex continue -ex bt ./trace.exe</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">Breakpoint 1 at 0x1400014ba: file trace.c, line 4.</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">[New Thread 63756.0x109e0]</span></span>
+
+<span class="cl is-text is-term" data-ln="6"><span class="code">Thread 1 hit Breakpoint 1, add (a=2, b=3) at trace.c:4</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">4	    return a + b;</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">#0  add (a=2, b=3) at trace.c:4</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">#1  0x00007ff76f0714e0 in main () at trace.c:8</span></span></pre></figure>
+<figure class="term term-session" data-id="ch01-gdb-trace-2" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">（续）第二次命中：外面那个 add(1, 5)</span><span class="term-id">ch01-gdb-trace-2</span></figcaption><pre class="term-body">
+<span class="cl is-text is-term" data-ln="2"><span class="code">Thread 1 hit Breakpoint 1, add (a=1, b=5) at trace.c:4</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">4	    return a + b;</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">#0  add (a=1, b=5) at trace.c:4</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">#1  0x00007ff76f0714ec in main () at trace.c:8</span></span></pre></figure>
+<p>两块合起来读，两次命中说明：<strong>里面那次 <code>add(2, 3)</code> 先算</strong>（<code>a=2, b=3</code>），返回之后<strong>外面那次 <code>add(1, 5)</code> 再算</strong>。<code>#1 … in main () at trace.c:8</code> 就是「谁在调用我」——调用链的下一层是 <code>main</code>。</p>
+<p><code>#1</code> 后面那串 <code>0x00007ff76f0714e0</code> 是<strong>返回地址</strong>，每次运行、每次改代码都会变，正常输出里不用管它；要紧的是 <code>#0</code>、<code>#1</code> 后面的行号（<code>trace.c:4</code>、<code>trace.c:8</code>），那些是稳定的。
+那次调试跑的程序 <code>trace.c</code> 自己也打印一行，输出可以直接对上：</p>
+<figure class="term term-output" data-id="trace-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">trace-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">total = 6</span></span></pre></figure>
+<figure class="viz" data-kind="calltree" data-frames="3" data-viz-id="vz-dba6c795">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> 调用树：把 gdb 打出来的两份 bt 画成一棵树</figcaption>
+<div class="viz-screen" role="group" aria-label="调用树：把 gdb 打出来的两份 bt 画成一棵树：逐步演示">
+<input class="vs-radio" type="radio" name="vz-dba6c795" id="vz-dba6c795-1" checked>
+<input class="vs-radio" type="radio" name="vz-dba6c795" id="vz-dba6c795-2">
+<input class="vs-radio" type="radio" name="vz-dba6c795" id="vz-dba6c795-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-dba6c795-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-dba6c795-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-dba6c795-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：trace.c:8，准备算 total</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：等我先算里面的</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">add(2, 3) ：trace.c:4，第一次命中</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">add(2, 3)</span><span class="ve-lbl">内层调用先发生</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">add(2, 3) ：已经返回 5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">add(1, 5) ：第二次命中，a=1 b=5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">add(2, 3)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">main()</span><span class="ve-lbl">返回值 5 交给调用者</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">add(1, 5)</span><span class="ve-lbl">再算外层</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>main 在第 8 行准备算 total</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：trace.c:8，准备算 total</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>先把括号里那个 add 算出来</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：等我先算里面的</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">add(2, 3) ：trace.c:4，第一次命中</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">add(2, 3)</span><span class="ve-lbl">内层调用先发生</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>内层返回 5，外层接着算</p><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">add(2, 3) ：已经返回 5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">add(1, 5) ：第二次命中，a=1 b=5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">add(2, 3)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">main()</span><span class="ve-lbl">返回值 5 交给调用者</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">add(1, 5)</span><span class="ve-lbl">再算外层</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧对应「刚进 <code>main</code>」，第 2 帧对应第一次 <code>Thread 1 hit Breakpoint 1, add (a=2, b=3)</code>，第 3 帧对应第二次命中 <code>add (a=1, b=5)</code>——<code>b</code> 变成 5，说明内层的 2+3 已经算完了。<strong>调用树讲的是「谁在等谁」</strong>：<code>main</code> 一直没走，它在等 <code>add</code> 返回。这一条以后会变成你理解递归的全部基础。</p>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h6">1.4 <code>printf</code> 凭什么能用：谁能看见谁</h2>
+<p><code>printf</code> 不是你写的函数，也不在 <code>hello.c</code> 里。它凭什么能被调用？把「谁看得见谁」画出来，这件事就清楚了：</p>
+<figure class="viz" data-kind="visibility" data-frames="3" data-viz-id="vz-14c29ec1">
+<figcaption class="viz-title"><span class="viz-kind">谁能看见谁</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-eye" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M1.6 8S4.2 3.8 8 3.8 14.4 8 14.4 8s-2.6 4.2-6.4 4.2S1.6 8 1.6 8z"/><circle cx="8" cy="8" r="1.9"/></svg></span> 谁能看见谁：从 main.c 一路到运行库</figcaption>
+<div class="viz-screen" role="group" aria-label="谁能看见谁：从 main.c 一路到运行库：逐步演示">
+<input class="vs-radio" type="radio" name="vz-14c29ec1" id="vz-14c29ec1-1" checked>
+<input class="vs-radio" type="radio" name="vz-14c29ec1" id="vz-14c29ec1-2">
+<input class="vs-radio" type="radio" name="vz-14c29ec1" id="vz-14c29ec1-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-14c29ec1-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-14c29ec1-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-14c29ec1-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="visibility" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main.c（编译单元） ：只有 main 一份代码</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">printf ：你在用的名字</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">printf</span><span class="ve-lbl">没有声明，编译器不知道它长什么样</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="visibility" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main.c（编译单元）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">stdio.h（头文件） ：里面写着 printf 的声明</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">stdio.h</span><span class="ve-lbl">#include &lt;stdio.h&gt;</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">stdio.h</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">printf</span><span class="ve-lbl">声明：名字、参数、返回值</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="visibility" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">运行库（UCRT） ：printf 的实现体住在这里</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">printf</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">运行库（UCRT）</span><span class="ve-lbl">链接器把两边对上</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">运行库（UCRT）</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.exe</span><span class="ve-lbl">实现体被接进可执行文件</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>只写 main.c，编译器不认识 printf</p><div class="viz-canvas" data-kind="visibility" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main.c（编译单元） ：只有 main 一份代码</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">printf ：你在用的名字</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">printf</span><span class="ve-lbl">没有声明，编译器不知道它长什么样</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>#include &lt;stdio.h&gt; 之后</p><div class="viz-canvas" data-kind="visibility" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main.c（编译单元）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">stdio.h（头文件） ：里面写着 printf 的声明</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main.c</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">stdio.h</span><span class="ve-lbl">#include &lt;stdio.h&gt;</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">stdio.h</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">printf</span><span class="ve-lbl">声明：名字、参数、返回值</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>链接时把实现体接上</p><div class="viz-canvas" data-kind="visibility" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">运行库（UCRT） ：printf 的实现体住在这里</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">printf</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">运行库（UCRT）</span><span class="ve-lbl">链接器把两边对上</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">运行库（UCRT）</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">hello.exe</span><span class="ve-lbl">实现体被接进可执行文件</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是新手最容易踩的坑：编译器<strong>只认它看见过的名字</strong>。你在 <code>main.c</code> 里写 <code>printf(&quot;...&quot;)</code>，如果没有任何地方告诉它 <code>printf</code> 长什么样，它会当场报错（1.5 有真实的报错文本）。第 2 帧是 <code>#include &lt;stdio.h&gt;</code> 干的事：把 <code>stdio.h</code> 的文字搬进来，于是编译器看到了 <code>int printf(const char * restrict format, ...);</code> 这行<strong>声明</strong>。第 3 帧是链接期：声明只是一张「名字与参数表」，真正的实现体住在运行库里，链接器负责把两边对上。</p>
+<p>用调试器能直接看到第 3 帧：在 <code>printf</code> 上打断点，程序停下时 <code>bt</code> 会告诉你它住在哪儿、谁调用了它。</p>
+<figure class="term term-session" data-id="ch01-gdb-printf" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">gdb：printf 住在这里，调用它的是 main</span><span class="term-id">ch01-gdb-printf</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gdb --batch -ex "set print frame-arguments none" -ex "break printf" -ex run -ex bt ./hello.exe</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">Breakpoint 1 at 0x1400024f0: file D:/W/B/src/mingw-w64/mingw-w64-crt/stdio/ucrt_printf.c, line 12.</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">[New Thread 38364.0xd300]</span></span>
+
+<span class="cl is-text is-term" data-ln="5"><span class="code">Thread 1 hit Breakpoint 1, printf (_Format=...) at D:/W/B/src/mingw-w64/mingw-w64-crt/stdio/ucrt_printf.c:12</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">warning: 12	D:/W/B/src/mingw-w64/mingw-w64-crt/stdio/ucrt_printf.c: No such file or directory</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">#0  printf (_Format=...) at D:/W/B/src/mingw-w64/mingw-w64-crt/stdio/ucrt_printf.c:12</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">#1  0x00007ff685d714ee in main () at hello.c:8</span></span></pre></figure>
+<p>三行关键信息：</p>
+<ul>
+<li><code>Breakpoint 1 at 0x1400024f0: file D:/W/B/src/mingw-w64/mingw-w64-crt/stdio/ucrt_printf.c, line 12.</code> —— <code>printf</code> 的实现体在运行库的源码文件 <code>ucrt_printf.c</code> 里（那是编译运行库时留下的调试信息，你机器上不一定有那个文件，所以会看到 <code>No such file or directory</code> 的提示）；</li>
+<li><code>#0  printf (...) at …/ucrt_printf.c:12</code> —— 现在停在运行库的代码里；</li>
+<li><code>#1  … in main () at hello.c:8</code> —— 调用者是<strong>你的</strong> <code>main</code>，第 8 行，正是 <code>printf</code> 那一行。</li>
+</ul>
+<section class="box box-standard" data-box-type="standard"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-openBook" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4.2C7 3.3 5.6 3 4 3v9.2c1.6 0 3 .3 4 1.2 1-.9 2.4-1.2 4-1.2V3c-1.6 0-3 .3-4 1.2z"/><path d="M8 4.2v9.2"/></svg></span><span class="box-kind">标准原文</span><span class="box-t">标准原文：`printf` 是什么</span></header>
+<div class="box-b">
+<p>同一个标准，7.21.6.3 节「The <code>printf</code> function」：</p>
+<blockquote>
+<p>The <code>printf</code> function is equivalent to <code>fprintf</code> with the argument <code>stdout</code> interposed before the arguments to <code>printf</code>.</p>
+</blockquote>
+<p>大意：<code>printf(...)</code> 等价于 <code>fprintf(stdout, ...)</code>——它只是「往标准输出写」的一个便利包装。这一节同时给出它的声明，<strong>声明</strong>决定了编译器允不允许你调用它、允许你传什么参数；<strong>实现</strong>在运行库里，标准只规定行为，不规定代码。</p>
+<p>出处：ISO/IEC 9899:2018（C17）§7.21.6.3。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">「声明」与「实现」分家，你会被这样坑到</span></header>
+<div class="box-b">
+<p>你把程序从这台机器挪到另一台机器，<code>hello.c</code> 一个字没改，报错却变成了：</p>
+<ul>
+<li><code>undefined reference to 'printf'</code> —— 链接器说「这个名字找不到实现体」；不是你的语法错了，是运行库没接上。</li>
+<li>反过来，<code>%d</code> 写成 <code>%s</code> 编译器<strong>多半不拦你</strong>（参数不是常量时看不出来），程序会在运行期打出荒唐的数字或直接崩掉。</li>
+</ul>
+<p><strong>你怎么会被坑到</strong>：看到 <code>undefined reference</code>，新手的反应是回 <code>hello.c</code> 里检查拼写、改来改去——而问题根本不在你的文件里。记住分工：<strong>编译期管声明，链接期管实现，运行期管格式与参数</strong>。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h7">1.5 编译器说不行的时候</h2>
+<p>现在把两个真实的编译错误摆出来。第一个：忘了写 <code>#include &lt;stdio.h&gt;</code>。源文件只有 6 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/noinclude.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">故意不写 #include &lt;stdio.h&gt;</span><span class="cb-file">examples/ch01/noinclude.c</span><span class="cb-lines">第 1–6 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="6"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 故意不写 #include &lt;stdio.h&gt;：</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">   看看编译器会不会自己猜到 printf 是什么。 */</span></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"没有声明也能打印？</span><span class="tk" style="color:#005CC5">\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>编译它。下面这块是真实的 stderr 原文——本书的诊断块一律照抄，连对齐用的空格都不动，所以你看到的插入符位置，就是编译器看到的位置；你按行号去源码里找，能找到同一列。</p>
+<figure class="term term-diagnostic" data-id="ch01-noinclude-diag" data-lang="compile-error"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-errorFile" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 2.6h5.4L12 5.2v8.2H4z"/><path d="M6.6 7.8l2.8 2.8M9.4 7.8l-2.8 2.8"/></svg></span><span class="term-kind">编译诊断</span><span class="term-title">gcc 的真实诊断（原文照抄）</span><span class="term-id">ch01-noinclude-diag</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">noinclude.c: In function 'main':</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">noinclude.c:4:5: error: implicit declaration of function 'printf' [-Wimplicit-function-declaration]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">    4 |     printf("没有声明也能打印？\n");</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">      |     ^~~~~~</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">noinclude.c:1:1: note: include '&lt;stdio.h&gt;' or provide a declaration of 'printf'</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">  +++ |+#include &lt;stdio.h&gt;</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">    1 | /* 故意不写 #include &lt;stdio.h&gt;：</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">noinclude.c:4:5: warning: incompatible implicit declaration of built-in function 'printf' [-Wbuiltin-declaration-mismatch]</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">    4 |     printf("没有声明也能打印？\n");</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">      |     ^~~~~~</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">noinclude.c:4:5: note: include '&lt;stdio.h&gt;' or provide a declaration of 'printf'</span></span></pre></figure>
+<p>第一个诊断一次给了三样东西。读它要按 <code>文件:行:列: 级别: 说明</code> 拆：</p>
+<ul>
+<li><code>noinclude.c:4:5: error: implicit declaration of function 'printf' [-Wimplicit-function-declaration]</code> —— 第 4 行第 5 列（调用 <code>printf</code> 的位置）出错；<code>implicit declaration</code> 是「你调用了一个我没见过声明的函数」；方括号里是<strong>控制这条诊断的开关名</strong>，可以用 <code>-W…</code> 打开、用 <code>-Wno-…</code> 关掉。本书固定打开 <code>-Wall -Wextra -Wpedantic</code>，就是要把这类信号全都放出来；</li>
+<li>紧跟着它把<strong>出错的那一行源码</strong>抄给你，并在下一行用 <code>^~~~~~</code> 标出位置——行号、源码、插入符一起看，就不会数错行；</li>
+<li><code>noinclude.c:1:1: note: include '&lt;stdio.h&gt;' or provide a declaration of 'printf'</code> 是 <code>note:</code>，它甚至把<strong>该补的那一行</strong>都写好了（<code>+++ |+#include &lt;stdio.h&gt;</code>）。gcc 经常这样：报错归报错，顺手把正解放在你面前。</li>
+</ul>
+<p>最后那条 <code>warning: incompatible implicit declaration of built-in function 'printf'</code> 是同一个问题的另一面：编译器认得 <code>printf</code> 这个内建名字，先按默认规则猜了个声明，再提醒你「这个猜测和真正的 <code>printf</code> 不兼容」。同一个根因，<code>error</code> 与 <code>warning</code> 各说了一遍——这也是为什么<strong>看到第一条错误就够了</strong>，后面几条经常是它的连锁反应。</p>
+<p>第二个错误：漏了一个分号。源文件是这样——先自己找一找，再往下看编译器怎么说。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/semicolon.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">第 4 行末尾少了一个分号</span><span class="cb-file">examples/ch01/semicolon.c</span><span class="cb-lines">第 1–7 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="7"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"total = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, total);</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>编译它。这次编译器会给你两个信号：一个 <code>error</code>、一个 <code>warning</code>，两个都值得看：先看错误本身，再看那个警告——它往往是错误的连带产物，改掉错误之后多半会自己消失。</p>
+<figure class="term term-diagnostic" data-id="ch01-semicolon-diag" data-lang="compile-error"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-errorFile" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 2.6h5.4L12 5.2v8.2H4z"/><path d="M6.6 7.8l2.8 2.8M9.4 7.8l-2.8 2.8"/></svg></span><span class="term-kind">编译诊断</span><span class="term-title">gcc 的真实诊断（原文照抄）</span><span class="term-id">ch01-semicolon-diag</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">semicolon.c: In function 'main':</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">semicolon.c:5:5: error: expected ',' or ';' before 'printf'</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">    5 |     printf("total = %d\n", total);</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">      |     ^~~~~~</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">semicolon.c:4:9: warning: unused variable 'total' [-Wunused-variable]</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">    4 |     int total = 0</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">      |         ^~~~~</span></span></pre></figure>
+<p>注意报的位置：<code>error</code> 在第 <strong>5</strong> 行，但你要改的是第 <strong>4</strong> 行的末尾。这是 C 报错最典型的一种「错位」：编译器只有读到第 5 行的 <code>printf</code> 时，才能确定第 4 行的 <code>int total = 0</code> 后面少了东西。<strong>不要盯着报错的行号改，先往前看一行，看语句有没有收尾。</strong></p>
+<p>底下那条 <code>warning: unused variable 'total'</code> 也值得看一眼：编译器发现 <code>total</code> 定义了却没用上——因为第 5 行的 <code>printf</code> 没能成为一条合法语句，这个变量就悬空了。<strong>警告有时是错误的下游产物</strong>，改掉错误之后记得再看一遍：警告还在不在。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">分号与括号：C 里最贵的两个字符</span></header>
+<div class="box-b">
+<p>分号 <code>;</code> 结束一条<strong>语句</strong>，而 <code>if</code>、<code>for</code>、<code>while</code>、函数定义的花括号 <code>{}</code> 不是语句、后面<strong>不加</strong>分号。这两条你会踩的坑：</p>
+<ul>
+<li>在 <code>int main(void) { … }</code> 后面加了分号（<code>};</code>）：很多编译器会<strong>默默接受</strong>，于是你无意中写出了一个「空定义」，紧接着的报错会跑到很远的地方，看起来完全不相干；</li>
+<li>在 <code>for (...) ;</code> 后面误加分号：循环体变成了那个空语句，循环白跑，程序不报错但结果全错——<strong>这一类错误编译器抓不到，只能靠输出对不上来发现</strong>。</li>
+</ul>
+<p>这也是为什么本书要求每个程序都要有「真实输出」：输出是这类静默错误唯一的照妖镜。</p>
+</div>
+</section>
+<section class="box box-compiler" data-box-type="compiler"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-machine" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.2 5.6h9.6v7.2H3.2z"/><path d="M5.6 3.2h4.8v2.4H5.6z"/><circle cx="6" cy="9.2" r="0.85"/><circle cx="10" cy="9.2" r="0.85"/></svg></span><span class="box-kind">编译器视角</span><span class="box-t">编译器视角：诊断的「级别」是它给你的分级信号</span></header>
+<div class="box-b">
+<p>同一条问题，编译器可能用三种口吻说：</p>
+<ul>
+<li><code>error:</code> —— <strong>我拒绝继续翻译</strong>。比如 <code>implicit declaration of function</code>、<code>expected ';' before …</code>；</li>
+<li><code>warning:</code> —— <strong>我照你说的翻译了，但我认为你有地方不对</strong>。比如「变量定义了没用」（<code>-Wunused-variable</code>）、「格式串与参数类型不匹配」（<code>-Wformat</code>）；</li>
+<li><code>note:</code> —— <strong>给上面那条诊断的补充信息</strong>，最常见的是一句 <code>note: include &lt;stdio.h&gt; or provide a declaration of 'printf'</code>。</li>
+</ul>
+<p>本书的编译参数里<strong>不做优化</strong>（<code>-O0</code>）是刻意的：优化会把代码改得面目全非，调试器看到的行号会和你的源码错位（<code>-O2</code> 下 <code>bt</code> 里的行号经常跳到循环外）。等你要看「优化到底改了哪里」时，再单独用 <code>-O2</code> 做对照实验——那时你会用到 <code>-fanalyzer</code> 这类静态分析参数，它们在<strong>编译期</strong>就能报出越界、空指针这类问题（第 4 单元开始）。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h8">1.6 字符串在内存里长什么样</h2>
+<p>上面那些 <code>.i</code>、<code>.s</code>、<code>.o</code>、<code>.exe</code> 都是<strong>文件</strong>。程序跑起来之后，数据住在<strong>内存</strong>里。<code>&quot;hi&quot;</code> 这种字符串在内存里是什么样？这段程序是真的：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/string_memory.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/string_memory.c</span><span class="cb-lines">第 1–10 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="10"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;string.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl is-marked" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">char</span><span class="tk" style="color:#24292E"> word</span><span class="tk" style="color:#D73A49">[]</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">"hi"</span><span class="tk" style="color:#24292E">;</span><span class="tk" style="color:#6A737D">                /* 数组里有几个字节？ */</span><span class="k-note">数组里有几个字节？</span></span></span>
+<span class="cl is-marked" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"sizeof(</span><span class="tk" style="color:#005CC5">\"</span><span class="tk" style="color:#032F62">hi</span><span class="tk" style="color:#005CC5">\"</span><span class="tk" style="color:#032F62">) = </span><span class="tk" style="color:#005CC5">%zu\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">sizeof</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"hi"</span><span class="tk" style="color:#24292E">));</span><span class="k-note">sizeof 看的是「占几个字节」</span></span></span>
+<span class="cl is-marked" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"strlen(</span><span class="tk" style="color:#005CC5">\"</span><span class="tk" style="color:#032F62">hi</span><span class="tk" style="color:#005CC5">\"</span><span class="tk" style="color:#032F62">) = </span><span class="tk" style="color:#005CC5">%zu\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">strlen</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"hi"</span><span class="tk" style="color:#24292E">));</span><span class="k-note">strlen 数的是「到 \0 为止有几个字符」</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"word[0]=</span><span class="tk" style="color:#005CC5">%c</span><span class="tk" style="color:#032F62"> word[1]=</span><span class="tk" style="color:#005CC5">%c</span><span class="tk" style="color:#032F62"> word[2]=</span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#E36209">word</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">], </span><span class="tk" style="color:#E36209">word</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">], </span><span class="tk" style="color:#E36209">word</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">5</span>数组里有几个字节？</li><li><span class="cb-note-ln">6</span>sizeof 看的是「占几个字节」</li><li><span class="cb-note-ln">7</span>strlen 数的是「到 \0 为止有几个字符」</li></ol></figure>
+<figure class="term term-output" data-id="strings-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">strings-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">sizeof("hi") = 3</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">strlen("hi") = 2</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">word[0]=h word[1]=i word[2]=0</span></span></pre></figure>
+<p>三个数字要连起来读：<code>sizeof(&quot;hi&quot;)</code> 是 <strong>3</strong>，<code>strlen(&quot;hi&quot;)</code> 是 <strong>2</strong>，<code>word[2]</code> 是 <strong>0</strong>。</p>
+<figure class="viz" data-kind="memory" data-frames="3" data-viz-id="vz-64cb19a0">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> hi</figcaption>
+<div class="viz-screen" role="group" aria-label="hi：逐步演示">
+<input class="vs-radio" type="radio" name="vz-64cb19a0" id="vz-64cb19a0-1" checked>
+<input class="vs-radio" type="radio" name="vz-64cb19a0" id="vz-64cb19a0-2">
+<input class="vs-radio" type="radio" name="vz-64cb19a0" id="vz-64cb19a0-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-64cb19a0-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-64cb19a0-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-64cb19a0-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[0] = 'h'</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[1] = 'i'</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[2] = 0 （字符串结束标记 '\0'）</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">sizeof("hi") = 3 个字节</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">strlen("hi") = 2 个字符</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[2] = 0 ：数到它为止，它自己不算</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">char *p ：变量里只有一个地址</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">char *p</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">"hi"</span><span class="ve-lbl">字母仍然在原来那块只读内存里</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>字面量 "hi" 不是一个字符，是三个字节</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[0] = 'h'</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[1] = 'i'</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[2] = 0 （字符串结束标记 '\0'）</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>sizeof 与 strlen 数的是不同的东西</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">sizeof("hi") = 3 个字节</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">strlen("hi") = 2 个字符</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">word[2] = 0 ：数到它为止，它自己不算</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>换成指针，盒子里装的就不是字母了</p><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">char *p ：变量里只有一个地址</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">char *p</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">"hi"</span><span class="ve-lbl">字母仍然在原来那块只读内存里</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是本节最要紧的一张图：<code>&quot;hi&quot;</code> 占<strong>三个</strong>字节——<code>h</code>、<code>i</code>、还有一个值为 0 的字节。C 用这个 0 来标记「字符串到这里结束」，写出来是 <code>'\0'</code>（注意是反斜杠加零，不是数字 0 那个字符 <code>'0'</code>）。第 2 帧解释了为什么两个函数给出不同的数：<code>sizeof</code> 报的是<strong>这块内存有几个字节</strong>，<code>strlen</code> 报的是<strong>数到 <code>\0</code> 之前有几个字符</strong>。第 3 帧是你以后会反复见到的对比：<code>char word[]</code> 是「一整块数组」，<code>char *p</code> 是「一个装着地址的变量」。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用大白话说这三帧</span></header>
+<div class="box-b">
+<p>把内存想成一排信箱，每个信箱装一个字节。</p>
+<ul>
+<li><code>&quot;hi&quot;</code> 不是「两个字母」，而是「两个字母 + 一个写着 0 的信箱」——那个信箱专门告诉函数「到这里就没了」；</li>
+<li><code>sizeof</code> 数「这排一共几个信箱」所以是 3；<code>strlen</code> 数「读到写 0 的信箱为止有几个」所以是 2；</li>
+<li><code>char word[]</code> 是<strong>自己复制了一排三个信箱</strong>，<code>char *p</code> 是<strong>手里只有一张写着「那排在哪」的纸条</strong>。</li>
+</ul>
+<p>所以改 <code>word[0]</code> 影响不到别处，而改 <code>*p</code>（指向只读字面量时）可能当场崩掉：<strong>它们不是同一块内存</strong>。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">本机实测：三个数字都是跑出来的</span></header>
+<div class="box-b">
+<ul>
+<li><code>sizeof(&quot;hi&quot;)</code> = <strong>3</strong>、<code>strlen(&quot;hi&quot;)</code> = <strong>2</strong>、<code>word[2]</code> = <strong>0</strong>（printf 用 <code>%d</code> 打出来的就是这个 0）；</li>
+<li>这三个数来自 <code>examples/ch01/string_memory.c</code> 的真实运行，输出由流水线逐字对账（命令：<code>gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g string_memory.c -o string_memory.exe</code>）；</li>
+<li><code>%zu</code> 是打印 <code>sizeof</code> 结果的正确格式（它的类型是 <code>size_t</code>）；用 <code>%d</code> 打印在某些平台会打出负数。</li>
+</ul>
+<p><strong>别把这些数字当定律背</strong>：<code>sizeof(&quot;hi&quot;)</code> 处处是 3，但 <code>sizeof(int)</code> 在本机是 4、别的机器可能是 2。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-01-from-source-to-program-md-h9">1.7 这一节新增了什么，以及接下来</h2>
+<p>回到 1.1 的那棵目录树：现在你可以对着<strong>第 3 帧</strong>逐个点名了。</p>
+<ul>
+<li><code>examples/ch01/hello.c</code> —— 第一个程序，10 行，<code>printf</code> 打出一行字；</li>
+<li><code>examples/ch01/hello.json</code> —— 清单：声明「怎么编译、跑完的退出码是多少、正文里哪个输出块负责对账」；</li>
+<li><code>examples/ch01/hello.i</code>、<code>hello.s</code> —— 预处理与汇编的<strong>真实产物</strong>，本节就是拿它们讲四阶段的；</li>
+<li><code>examples/ch01/noinclude.c</code>、<code>semicolon.c</code> —— 两个故意写错的程序，用来展示真实的编译错误；</li>
+<li><code>examples/ch01/string_memory.c</code> —— 用三个数字讲清 <code>sizeof</code>、<code>strlen</code> 与 <code>\0</code>；</li>
+<li><code>examples/ch01/trace.c</code> —— 两层嵌套调用，用来演示 gdb 的 <code>bt</code> 与调用树。</li>
+</ul>
+<p>从下一单元开始，我们把这份「单文件草稿」变成一个真正的工程：源文件进 <code>src/</code>，头文件进 <code>include/</code>，还会加一个把编译命令固定下来的脚本。<strong>记住本书的硬规定：从第二个项目起，不允许出现单文件工程。</strong></p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：为什么第二个项目起必须分文件</span></header>
+<div class="box-b">
+<p>标准只要求「一个程序有一个 <code>main</code>」，它对你分几个文件<strong>没有任何规定</strong>。分文件是主流做法，理由有三条：</p>
+<ul>
+<li><strong>编译速度</strong>：改一个 <code>.c</code> 只需要重新编译它自己，链接一下就好；单文件工程每次都是全量重编；</li>
+<li><strong>接缝可见</strong>：<code>#include</code> 把文件之间的依赖写在明面上。头文件里放<strong>声明</strong>，<code>.c</code> 里放<strong>定义</strong>，谁依赖谁一目了然；</li>
+<li><strong>能被别人接手</strong>：一个 3000 行的 <code>main.c</code> 是没人愿意接的。</li>
+</ul>
+<p>代价是你要多学一件事：头文件里写什么、不写什么（写重了会撞符号，写漏了会 <code>implicit declaration</code>）。这件事在第 3 单元讲透，现在只要记住方向：<strong>声明放头文件，定义放源文件，编译单元各管各的</strong>。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>从 <code>hello.c</code> 到 <code>hello.exe</code> 有<strong>四步</strong>：预处理（<code>.i</code>）→ 编译（<code>.s</code>）→ 汇编（<code>.o</code>）→ 链接（<code>.exe</code>）；<code>--save-temps</code> 能把前三个留下来看；</li>
+<li><code>#include</code> 就是「把那个文件的全部内容就地替换进来」，所以 <code>.i</code> 比你写的大几十倍；报错里的行号靠预处理阶段写下的行号标记才能对回你的源文件；</li>
+<li><code>printf</code> 靠<strong>声明</strong>（从 <code>stdio.h</code> 搬进来）通过编译，靠<strong>实现体</strong>（在运行库里）通过链接；调试器能证明这一点；</li>
+<li>编译错误读法：<code>文件:行:列: 级别: 说明</code>，<code>error</code> 中断、<code>warning</code> 继续、<code>note</code> 是补充；报错的行号经常要比实际错误<strong>晚一行</strong>；</li>
+<li>字符串 <code>&quot;hi&quot;</code> 占 <strong>3</strong> 个字节，多出来的那个是 <code>'\0'</code>；<code>sizeof</code> 数字节，<code>strlen</code> 数到 <code>\0</code> 为止；</li>
+<li>本节的每个数字、每段诊断、每次运行，都来自真实文件与真实运行，由流水线逐字对账——正文里的版本号由构建期从工具链事实文件注入，不手写。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li><code>hello.i</code> 有 1525 行，而 <code>hello.c</code> 只有 10 行。多出来的 1515 行是什么？它们是从哪一步来的？</li>
+<li>如果把 <code>#include &lt;stdio.h&gt;</code> 那一行删掉，程序在<strong>哪一步</strong>失败？报错里的关键词是什么？</li>
+<li><code>sizeof(&quot;hi&quot;)</code> 和 <code>strlen(&quot;hi&quot;)</code> 分别是多少？为什么不一样？</li>
+<li>gdb 里 <code>bt</code> 打出来的 <code>#0</code> 与 <code>#1</code> 分别代表什么？为什么说「<code>#1 … in main ()</code> 就是调用链的下一层」？</li>
+<li>正文里的代码块与输出块，为什么不允许手抄？如果输出块与真实 stdout 差一个字符，哪条命令会失败、失败码是什么？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>多出来的是 <code>stdio.h</code>（以及它自己包含的头文件）的全部内容——<code>#include</code> 就地展开的结果，发生在<strong>预处理</strong>这一步。</li>
+<li>失败在<strong>编译</strong>这一步（源码没变化，不会走到链接）。关键词是 <code>implicit declaration of function 'printf'</code>；如果编译器把它降级成警告，就会走到链接期再报 <code>undefined reference</code>。</li>
+<li>分别是 <strong>3</strong> 和 <strong>2</strong>。<code>sizeof</code> 数的是这块内存有几个字节（含结尾的 <code>'\0'</code>），<code>strlen</code> 数的是到 <code>'\0'</code> 为止有几个字符（不含 <code>'\0'</code>）。</li>
+<li><code>#0</code> 是当前停住的函数（最内层），<code>#1</code> 是它的调用者。<code>#1 … in main () at trace.c:8</code> 说明这个函数是被 <code>main</code> 第 8 行调用进来的，所以调用链的下一层（外面一层）就是 <code>main</code>。</li>
+<li>因为手抄的东西没人对账，读者无法判断它是真跑出来的还是编的。差一个字符时，<code>node build/run.js --all</code> 会以失败码 <code>stale_output</code>（输出块）或 <code>stale_diagnostic</code>（编译诊断块）报错，并给出第一处不同的行号。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

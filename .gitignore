@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env / local
+*.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NOTE: package-lock.json 故意不忽略——CI 必须用锁定的依赖版本（npm ci）。

@@ -1,0 +1,1375 @@
+@charset "UTF-8";
+/* ==========================================================================
+ * theme.css — 《高等数学笔记（同济大学第八版·上册）》版式系统
+ *
+ * 结构：
+ *   0. 设计令牌（颜色 / 字体 / 尺度）
+ *   1. 复位与页面骨架（封面、目录、站内导航、正文栏）
+ *   2. 标题层级
+ *   3. 正文元素（段落、列表、表格、公式、强调、代码）
+ *   4. 语义块（10 种：学习目标/定义/定理/证明/例题/大白话/易错/注/小结/自测题）
+ *   5. 目录与导航细节
+ *   6. 打印（A4、页码、页眉、分页控制）
+ *   7. 屏幕适配（宽屏、窄屏、深色偏好）
+ *
+ * 设计原则：
+ *   - 颜色克制：正文近乎黑，只有语义块用彩色；语义块的彩色只做「标记」，
+ *     不做「装饰」——底色一律很浅，正文对比度始终 ≥ 7:1。
+ *   - 打印成灰度也要分得清层次：不靠颜色深浅，而靠**结构**区分——
+ *     实心标签带 / 左侧粗条 / 左侧双线 / 上方虚线 / 上下双线 / 全框圆角 …
+ *     每种语义块在灰度下都有独一无二的「形状指纹」。
+ *   - 分页优先于美感：块不被割断、标题不落在页尾、无孤行寡行。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 0. 设计令牌
+ * ========================================================================== */
+
+:root {
+  /* --- 墨色与纸色 --- */
+  --ink: #16181d;          /* 正文 */
+  --ink-soft: #333a46;     /* 次级正文（引用、说明） */
+  --ink-mute: #6b7280;     /* 辅助信息（页码、单位、提示） */
+  --rule: #d8dce3;         /* 细线 */
+  --rule-soft: #e8ebf0;    /* 更浅的线（表格内部） */
+  --rule-strong: #aeb6c2;  /* 粗线（表格外框、分隔） */
+  --paper: #ffffff;
+  --paper-soft: #f7f8fa;   /* 面板底 */
+  --paper-tint: #f2f5f9;   /* 目录/封面底 */
+
+  /* --- 全书强调色（墨蓝）：链接、行内强调、章节装饰 --- */
+  --accent: #1b4b8f;
+  --accent-deep: #143a6e;
+  --accent-soft: #eaf0f8;
+
+  /* --- 字体：正文衬线（中文宋体族 + 西文 Times），标题黑体族 --- */
+  --font-serif: "Times New Roman", "Nimbus Roman", "Songti SC", "SimSun", "Source Han Serif SC",
+    "Noto Serif CJK SC", "Noto Serif SC", serif;
+  --font-sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+    "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  /* --- 尺度 --- */
+  --fs-body: 11pt;         /* 中文正文 11pt（打印） */
+  --lh-body: 1.75;         /* 行高 1.75 */
+  --fs-h1: 1.75em;
+  --fs-h2: 1.32em;
+  --fs-h3: 1.12em;
+  --measure: 45em;         /* 屏幕正文最佳阅读宽度 */
+  --radius: 4px;
+  --radius-lg: 6px;
+
+  /* --- 语义块色板：主色 --c-* / 浅底 --bg-* / 边线 --br-* --- */
+  --c-goal: #3f4b5b;      --bg-goal: #f2f5f8;   --br-goal: #d3dae3;   /* 学习目标：石板灰蓝 */
+  --c-def: #1b4b8f;       --bg-def: #eaf1fa;    --br-def: #bfd2ea;    /* 定义：墨蓝 */
+  --c-thm: #63218f;       --bg-thm: #f4ecfa;    --br-thm: #d9c6ec;    /* 定理：紫 */
+  --c-proof: #57534e;     --bg-proof: #f7f6f4;  --br-proof: #cfc9c2;  /* 证明：暖灰 */
+  --c-ex: #0f6f63;        --bg-ex: #e8f5f2;     --br-ex: #b3ddd5;     /* 例题：青绿 */
+  --c-plain: #96570a;     --bg-plain: #fdf4e2;  --br-plain: #ecd3a5;  /* 大白话：琥珀 */
+  --c-warn: #a5241d;      --bg-warn: #fdecea;   --br-warn: #f0bdb7;   /* 易错提醒：砖红 */
+  --c-note: #45566b;      --bg-note: #f1f4f8;   --br-note: #ced7e2;   /* 注：蓝灰 */
+  --c-summary: #146c3a;   --bg-summary: #ecf6ee;--br-summary: #bfe0c8;/* 小结：绿 */
+  --c-quiz: #8f2049;      --bg-quiz: #fbeef3;   --br-quiz: #eec4d5;   /* 自测题：玫红 */
+}
+
+/* ==========================================================================
+ * 1. 复位与页面骨架
+ * ========================================================================== */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  /* 打印时保留底色与字的颜色（Chrome 的 print-color-adjust 可继承） */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-size: var(--fs-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: var(--lh-body);
+  text-rendering: optimizeLegibility;
+  font-variant-numeric: lining-nums;
+}
+
+/* 正文栏：屏幕上居中限宽，打印时占满版心 */
+.doc {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.1rem 3rem;
+}
+
+@media screen {
+  body { font-size: 17px; background: #fff; }
+  .doc { padding-top: 1.4rem; }
+}
+
+/* --- 站内导航（屏幕可见，打印隐藏）--- */
+.sitenav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.05rem;
+  align-items: center;
+  padding: 0.5rem 1.1rem;
+  border-bottom: 1px solid var(--rule);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: saturate(1.4) blur(6px);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.sitenav .nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: auto;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.sitenav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 0.15rem 0.1rem;
+  border-bottom: 1px solid transparent;
+}
+
+.sitenav a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.sitenav .ico-svg { flex: none; width: 0.95em; height: 0.95em; }
+
+/* --- 页首标题区（封面块）--- */
+.doc-head {
+  padding: 1.6rem 0 1.1rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 1.3rem;
+}
+
+.doc-kicker {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+
+.doc-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.doc-sub {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.doc-meta {
+  margin: 0.75rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.doc-meta span + span::before {
+  content: "·";
+  margin: 0 0.5em;
+  color: var(--rule-strong);
+}
+
+/* --- 目录面板 --- */
+.toc {
+  margin: 0 0 1.6rem;
+  padding: 0.95rem 1.1rem 1.05rem;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  break-inside: avoid;
+}
+
+.toc-h {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.toc-ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.toc .toc-ch {
+  margin: 0.5rem 0 0.15rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.toc .toc-ch:first-child { margin-top: 0; }
+
+.toc li { margin: 0.1rem 0; }
+
+/* 目录条目不要正文列表的项目符号 */
+.toc ul > li::before,
+.toc-cols ul > li::before { content: none; display: none; }
+
+.toc a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--rule-strong);
+}
+
+.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+.toc .toc-unit { padding-left: 1.15em; font-weight: 600; }
+.toc .toc-sec { padding-left: 2.35em; }
+.toc .toc-sub { padding-left: 3.55em; font-size: 0.97em; color: var(--ink-mute); }
+
+/*
+ * 三级编号条目（7.5.1、7.6.2……）比两段编号的小节（7.1、7.5）再低一级
+ * （2026-10-17 第 7 章视觉验收后补，class 由 render.js 的 tocEntryClass 给出）。
+ * 第 7 章第 2/3 单元的 H2 本身就是三级编号，原来与「7.1 微分方程的基本概念」
+ * 画在同一缩进上，读者看不出 7.5.1 属于 7.5；插在 toc-sec（2.35em）与
+ * toc-sub（3.55em，正文小标题）之间用 3.0em，目录的「越编号越深」这条规则就统一了。
+ */
+.toc .toc-sec.toc-deep { padding-left: 3.0em; }
+.toc .toc-sec a { color: var(--ink-soft); }
+.toc .toc-sub a { color: var(--ink-mute); }
+
+/* --- 页脚 --- */
+.doc-foot {
+  margin-top: 2.4rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  color: var(--ink-mute);
+}
+
+.doc-foot a { color: var(--ink-mute); }
+
+/* --- 章（整册打印时每章另起一页，见 @media print）--- */
+
+.chapter-title {
+  margin: 0 0 1.15rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+  /* 另起一页只在整册里做（见 @media print 的 body.type-book）；单章页的章标题在封面里 */
+  break-after: avoid;
+}
+
+.chapter-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.62em;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+
+/* ==========================================================================
+ * 2. 标题层级
+ * ========================================================================== */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--ink);
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+h2 {
+  margin: 1.9em 0 0.7em;
+  padding-left: 0.62em;
+  border-left: 4px solid var(--accent);
+  font-size: var(--fs-h2);
+  line-height: 1.4;
+}
+
+h2 .h-num { color: var(--accent); margin-right: 0.35em; }
+
+h3 {
+  margin: 1.5em 0 0.5em;
+  font-size: var(--fs-h3);
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+h3::before {
+  content: "";
+  display: inline-block;
+  width: 0.42em;
+  height: 0.42em;
+  margin-right: 0.42em;
+  vertical-align: 0.06em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+h4 {
+  margin: 1.2em 0 0.4em;
+  font-size: 1em;
+  color: var(--ink-soft);
+}
+
+/* 封面里的章标题：与封面同页，避免多出一条分隔线 */
+.doc-head > .chapter-title {
+  border-bottom: 0;
+  padding-bottom: 0;
+  margin-bottom: 0.35rem;
+}
+
+/* 单元标题（整章/整册拼装时由构建工具注入） */
+.unit-title {
+  margin: 2.3em 0 0.8em;
+  padding: 0.32em 0 0.32em 0.7em;
+  border-left: 4px solid var(--rule-strong);
+  font-family: var(--font-sans);
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--ink);
+  break-after: avoid;
+}
+
+.unit-title:first-of-type { margin-top: 1.2em; }
+
+/* 章内小节的首个标题不要顶到边 */
+.chapter > h2:first-of-type { margin-top: 1.1em; }
+
+/* ==========================================================================
+ * 3. 正文元素
+ * ========================================================================== */
+
+p {
+  margin: 0 0 0.62em;
+  orphans: 2;
+  widows: 2;
+}
+
+strong { font-weight: 700; color: #0d0f13; }
+
+/*
+ * 中文着重号：用 <em> 标术语，底面加点（比斜体更符合中文排版习惯）。
+ *
+ * display: inline-block 不是装饰，是修 bug（2026-10-16 第 1 章视觉验收）：
+ * 着重号的「下加点」会把所在行盒向下扩张，而 Chrome 对它的扩张量是按整行的
+ * **最大下探量**再叠着重号高度算的。只要同一行里还有下探的行内盒子——最典型
+ * 就是 KaTeX 的叠式分式（\frac{\infty}{\infty}）与 \lim 的下标——两者会互相
+ * 放大：ch01 例 1.30「思路」段实测行距由 19.5pt 被撑到 52.9pt，句中「…「未定」
+ * 的意 / 思是答案还没有定…」之间凭空裂出约 60px 空档，看起来像段落断开。
+ * 把 <em> 变成行内块，着重号就只在它自己的行盒里结算，不再参与整行的下探竞争；
+ * 实测同一段行距回到 19.6pt（正常值）。
+ * max-width 兜住长术语（全书最长的一条 28 字，宽约 308pt < 版心 498pt），
+ * 万一放不下仍会在块内折行，不会撑破版心。
+ */
+em {
+  font-style: normal;
+  text-emphasis: filled dot var(--accent);
+  -webkit-text-emphasis: filled dot var(--accent);
+  text-emphasis-position: under right;
+  display: inline-block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-soft);
+}
+
+a:hover { border-bottom-color: var(--accent); }
+
+mark {
+  background: #fdf0b8;
+  padding: 0 0.15em;
+  border-radius: 2px;
+}
+
+code,
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  padding: 0.02em 0.28em;
+}
+
+pre {
+  margin: 0.8em 0;
+  padding: 0.7em 0.9em;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+
+pre code { background: none; border: 0; padding: 0; }
+
+blockquote {
+  margin: 0.8em 0;
+  padding: 0.1em 0 0.1em 0.9em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+/* --- 列表 --- */
+ul, ol { margin: 0.35em 0 0.75em; padding-left: 1.5em; }
+
+li { margin: 0.18em 0; }
+
+li > ul, li > ol { margin: 0.2em 0 0.25em; }
+
+ul { list-style: none; }
+ul > li { position: relative; }
+ul > li::before {
+  content: "";
+  position: absolute;
+  left: -0.92em;
+  top: 0.62em;
+  width: 0.28em;
+  height: 0.28em;
+  background: var(--accent);
+  border-radius: 50%;
+}
+ul > li > ul > li::before { background: none; border: 1px solid var(--accent); }
+ol { list-style: decimal; }
+ol > li::marker { color: var(--accent); font-weight: 600; }
+ol.alpha { list-style: lower-alpha; }
+
+/* --- 表格 --- */
+table {
+  width: 100%;
+  margin: 0.9em 0 1.05em;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  break-inside: auto;
+}
+
+caption {
+  caption-side: top;
+  margin-bottom: 0.35em;
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  color: var(--ink-mute);
+  text-align: left;
+}
+
+thead { display: table-header-group; }
+
+th, td {
+  padding: 0.34em 0.6em;
+  border: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--paper-tint);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  border-bottom: 1.5px solid var(--rule-strong);
+}
+
+tbody tr { break-inside: avoid; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.center td, table.center th { text-align: center; }
+
+/* --- 公式 --- */
+.math-block {
+  margin: 0.85em 0;
+  text-align: center;
+  break-inside: avoid;
+}
+
+/*
+ * 行内公式整体不可断（2026-10-17 第 5 章视觉验收）
+ *
+ * KaTeX 把一道公式切成若干个 `.base` 原子内联块（实测 $f(x)=\sgn x$ 就有两个：
+ * 「f(x)=」与「sgn x」），Chrome 在原子内联元素之间无条件给断行点，于是公式会在
+ * 等号后断开——第 5 章 p10 的易错提醒框里「f(x) = / sgn x 在 [−1,1] 上…」即此。
+ * 把 `.katex` 自己变成一个原子内联元素，公式内部就没有断点了：断点只会落在
+ * 公式之前或之后（与 .nb-group 是同一个道理，见 theme.css:527 的说明）。
+ * 行间公式不受影响：`.katex-display > .katex` 在 KaTeX 自己的 CSS 里是 display:block。
+ */
+.katex { display: inline-block; }
+
+.katex { font-size: 1.03em; }
+.katex-display { margin: 0.85em 0; }
+.katex-display > .katex { font-size: 1.06em; }
+
+/*
+ * 行内叠式分式（\frac）缩一号（2026-10-17 第 7 章视觉验收后修订）。
+ * 现象：正文里的 \frac 比整行还高 —— 实测 ch07 p25「T(0)=20+80e⁰=100；T(10)=20+80·½=60」
+ * 里的 ½ 高 20.2pt，而 line-height 1.75 × 10.34pt 的行盒只有 18.1pt，那一行的基线被
+ * 顶开 1.4pt（p38「比值 y₂/y₁ = 2 只在 x ≠ 0 处有意义」同因，下一行多出可见空隙）。
+ * 处理：只把**正文里**的分式缩一号（分子分母与分数线随 .mfrac 的 font-size 等比缩小，
+ * 回到行盒内，行距恢复一致）；行间公式（.katex-display 里）的分式一个都不动。
+ */
+:not(.katex-display) > .katex .mfrac { font-size: 0.85em; }
+
+/*
+ * 行内公式 + 紧跟的一小段内容（收尾标点、或「数值 + 单位」里的单位）：
+ * 整组换行，标点不掉到下一行行首（避头尾），数值与单位不被拆开。
+ * Chrome 在「原子内联元素」（KaTeX 的 .base 是 inline-block）之后无条件给一个
+ * 断行点，中文避头尾规则在这个断点上不生效，于是行尾停在公式处时，
+ * 「。，、；：？！」会掉到行首，「9800 N」会被断成「9800」+「N」。
+ * 解法是把这一小段与公式包成同一个不可断行的内联块，让断点落到公式之前——
+ * 生成逻辑见 render.js 的 glueMathPunctuation()。
+ */
+.nb-group { display: inline-block; white-space: nowrap; }
+
+/*
+ * 段尾「追い出し」：把段末那一小截字连成一个不可断行的组。
+ *
+ * 由构建期生成（render.js 的 glueShortTails()，2026-10-17 第 2 章视觉验收后补），
+ * 作者不用写、也**不许**在正文里写这个类（正文里的裸 HTML 会被 raw_html_in_body 拦）。
+ * 效果：断点被迫落到这一组之前，末行至少有组里这几个字，
+ * 不会再出现「换行后只剩一两个字」这种近乎空白的末行（定义 2.3 段末的「作」即此）。
+ * 只连到词组边界为止：连得越长，上一行的行尾缺口越大（阈值见 render.js 的 TAIL_MIN_CHARS）。
+ */
+.nb-tail { white-space: nowrap; }
+
+/* 长公式在屏幕上可横向滚动，不撑破版面 */
+@media screen {
+  .math-block { overflow-x: auto; overflow-y: hidden; padding-bottom: 0.15em; }
+}
+
+/* 分段函数与矩阵：给 cases/array 留出左侧呼吸位，避免贴着块边 */
+.katex-display .katex .mtable { margin: 0.1em 0; }
+.katex .delimsizing.mult .delim-size1 > span { font-weight: 400; }
+
+/* 公式紧跟的文字段落，上边距收一点 */
+.math-block + p { margin-top: 0.1em; }
+p + .math-block { margin-top: 0.55em; }
+
+hr {
+  height: 0;
+  margin: 1.6em 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+img, svg { max-width: 100%; }
+
+/* ==========================================================================
+ * 4. 语义块
+ *
+ * 灰度可辨识的「形状指纹」（打印不靠颜色也认得出）：
+ *   goal    无底色 · 无左条 · 顶部一条细点线
+ *   def     左侧 3px 实色条 + 浅底 + 实心标签
+ *   thm     四周细框 + 浅底 + 实心标签（比 def 多一圈框）
+ *   proof   无底色 · 左侧双线 · 整体缩进 · 字号略小 · 末尾自动 ∎
+ *   ex      整条实心标题带（深底白字）+ 浅底 → 全书最显眼的块
+ *   plain   浅底 + 顶部虚线
+ *   warn    左侧 6px 最粗条 + 浅底
+ *   note    无底色 · 左侧 1px 细线 · 字号略小
+ *   summary 上下各一条 2px 线 + 浅底
+ *   quiz    全框圆角 + 浅底 + 玫红标签
+ * ========================================================================== */
+
+.box {
+  position: relative;
+  margin: 1.05em 0 1.2em;
+  padding: 0;
+  border-radius: var(--radius);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.box > .box-h {
+  display: flex;
+  align-items: center;
+  gap: 0.42em;
+  margin: 0;
+  padding: 0.34em 0.7em 0.32em;
+  font-family: var(--font-sans);
+  font-size: 0.86em;
+  line-height: 1.5;
+  font-weight: 700;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.box > .box-b { padding: 0.55em 0.85em 0.5em; }
+.box > .box-b > :first-child { margin-top: 0; }
+.box > .box-b > :last-child { margin-bottom: 0; }
+
+/* 图标：固定 1em 见方，跟随主色 */
+.ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.08em;
+  height: 1.08em;
+  color: currentColor;
+}
+
+.ico .ico-svg { display: block; width: 100%; height: 100%; }
+
+/* 标签（类型名 + 编号）与标题 */
+.box-kind { flex: none; letter-spacing: 0.02em; }
+
+.box-num {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.box-t {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 1.06em;
+}
+
+/* 标签与标题之间的分隔点 */
+.box-h > .box-t::before {
+  content: "·";
+  margin: 0 0.42em 0 0.1em;
+  color: var(--ink-mute);
+  font-weight: 400;
+}
+
+/* --- 学习目标：无底色，靠一条上方点线 --- */
+.box-goal {
+  margin-top: 1.2em;
+  padding: 0.5em 0 0.2em;
+  border-top: 1px dotted var(--br-goal);
+}
+
+.box-goal > .box-h { color: var(--c-goal); padding: 0 0.15em 0.15em; }
+.box-goal > .box-b { padding: 0 0.15em; }
+.box-goal ol, .box-goal ul { font-size: 0.98em; }
+.box-goal li { margin: 0.12em 0; }
+
+/* --- 定义：左实色条 + 浅底 --- */
+.box-def {
+  background: var(--bg-def);
+  border-left: 3px solid var(--c-def);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.box-def > .box-h {
+  color: #fff;
+  background: var(--c-def);
+  border-radius: 0 var(--radius) 0 0;
+}
+
+.box-def > .box-h .ico { color: #fff; }
+.box-def > .box-h > .box-t { color: #fff; }
+.box-def > .box-h > .box-t::before { color: rgba(255, 255, 255, 0.7); }
+.box-def > .box-b { padding: 0.6em 0.9em 0.55em; }
+
+/* --- 定理：四周细框 + 实色标签带 --- */
+.box-thm {
+  background: var(--bg-thm);
+  border: 1px solid var(--br-thm);
+}
+
+.box-thm > .box-h {
+  color: #fff;
+  background: var(--c-thm);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+
+.box-thm > .box-h .ico { color: #fff; }
+.box-thm > .box-h > .box-t { color: #fff; }
+.box-thm > .box-h > .box-t::before { color: rgba(255, 255, 255, 0.7); }
+.box-thm > .box-b { padding: 0.6em 0.9em 0.55em; }
+
+/* --- 证明：左双线、缩进、小一号字，末尾自动补 ∎ --- */
+.box-proof {
+  margin-left: 1.1em;
+  padding-left: 0.9em;
+  border-left: 4px double var(--c-proof);
+  background: none;
+  border-radius: 0;
+  font-size: 0.97em;
+}
+
+.box-proof > .box-h {
+  padding: 0 0 0.2em;
+  color: var(--c-proof);
+  font-size: 0.94em;
+  letter-spacing: 0.04em;
+}
+
+.box-proof > .box-b { padding: 0 0 0.1em; }
+.box-proof > .box-b > p:last-child::after {
+  content: "∎";
+  margin-left: 0.35em;
+  color: var(--c-proof);
+  font-size: 0.9em;
+}
+
+/* --- 例题：整条实心标题带，最显眼 --- */
+.box-ex {
+  background: var(--bg-ex);
+  border: 1px solid var(--br-ex);
+  border-radius: var(--radius);
+}
+
+.box-ex > .box-h {
+  padding: 0.4em 0.85em 0.38em;
+  color: #fff;
+  background: var(--c-ex);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+  font-size: 0.9em;
+}
+
+.box-ex > .box-h .ico { color: #fff; }
+.box-ex > .box-h > .box-t { color: #fff; font-size: 1.04em; }
+.box-ex > .box-h > .box-t::before { color: rgba(255, 255, 255, 0.7); }
+.box-ex > .box-b { padding: 0.65em 0.95em 0.6em; }
+
+/* 例题里的「解」「思路」「答案」这类小标签：段首加粗词自动弱化处理 */
+.box-ex > .box-b > p > strong:first-child { color: var(--c-ex); }
+
+/* --- 大白话：浅底 + 顶部虚线 --- */
+.box-plain {
+  background: var(--bg-plain);
+  border-top: 2px dashed var(--br-plain);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.box-plain > .box-h { color: var(--c-plain); padding: 0.42em 0.85em 0.25em; }
+.box-plain > .box-b { padding: 0 0.85em 0.55em; }
+.box-plain > .box-b > p { font-size: 1.02em; }
+
+/* --- 易错提醒：最粗左条 --- */
+.box-warn {
+  background: var(--bg-warn);
+  border-left: 6px solid var(--c-warn);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.box-warn > .box-h { color: var(--c-warn); padding: 0.42em 0.85em 0.25em; }
+.box-warn > .box-b { padding: 0 0.85em 0.55em; }
+
+/* --- 注：细线左栏、无底色、小一号 --- */
+.box-note {
+  border-left: 1px solid var(--br-note);
+  border-radius: 0;
+  font-size: 0.96em;
+}
+
+.box-note > .box-h { color: var(--c-note); padding: 0.15em 0.8em 0.1em; font-size: 0.82em; }
+.box-note > .box-b { padding: 0 0.8em 0.2em; color: var(--ink-soft); }
+
+/* --- 小结：上下双线夹住的浅底 --- */
+.box-summary {
+  background: var(--bg-summary);
+  border-top: 2px solid var(--c-summary);
+  border-bottom: 2px solid var(--c-summary);
+  border-radius: 0;
+}
+
+.box-summary > .box-h { color: var(--c-summary); padding: 0.42em 0.85em 0.25em; }
+.box-summary > .box-b { padding: 0 0.85em 0.55em; }
+.box-summary > .box-b > ul { margin-top: 0.2em; }
+.box-summary > .box-b ul > li::before { background: var(--c-summary); }
+
+/* --- 自测题：全框圆角 --- */
+.box-quiz {
+  background: var(--bg-quiz);
+  border: 1px solid var(--br-quiz);
+  border-radius: var(--radius-lg);
+}
+
+.box-quiz > .box-h {
+  color: var(--c-quiz);
+  padding: 0.42em 0.9em 0.25em;
+}
+
+.box-quiz > .box-b { padding: 0 0.95em 0.6em; }
+.box-quiz > .box-b ol { padding-left: 1.7em; }
+.box-quiz > .box-b ol > li::marker { color: var(--c-quiz); font-weight: 700; }
+.box-quiz > .box-b > ol > li { margin: 0.3em 0; }
+
+/* 语义块之间紧挨着时不要叠出双倍间距 */
+.box + .box { margin-top: 0.85em; }
+.box + h2, .box + h3 { margin-top: 1.5em; }
+
+/* 语义块内的公式与表格收一收边距 */
+.box .math-block { margin: 0.6em 0; }
+.box table { margin: 0.6em 0 0.7em; }
+.box table th { background: rgba(255, 255, 255, 0.6); }
+.box pre { margin: 0.5em 0; }
+
+/*
+ * 块内的「段间留白」由**后一个元素**的 padding-top 承担，不再是前一个元素的 margin-bottom。
+ *
+ * 为什么（2026-10-17 第 7 章视觉验收后修订，finding：续接框首行贴边）：
+ * 分页把块切开时，margin 会被整段丢弃，padding 不会。语义块跨页时，续页第一行
+ * 原本一点上方留白都没有，直接顶住切分处的边框——实测 ch07 p39（例 7.21 续页）：
+ * 分片的上边框 y=54.4pt、首行字形顶 57.8pt，只剩半个行距 3.4pt；
+ * 而同一块在第一页里「标题带 → 首行」的距离是 10.8pt。
+ *
+ * 探针实测（.probe/layout/fragpad3.html，四种写法各印一遍再量续页）：
+ *   - 段距留在 margin-bottom（现行做法）→ 续页首行距上边框 3.3pt；
+ *   - 改成 margin-top                → 3.3pt（margin 在分片处一样被丢）；
+ *   - 改成 padding-top               → 10.1pt ✓（探针 G 组，padding 在分片处保住了）；
+ *   - padding-top + 负 margin 抵消     → 10.1pt 但正常段距被抵消掉，整段粘成一块，不可用。
+ *
+ * 数值一一对应原来的间隙（原来是「前一个的 margin-bottom 与后一个的 margin-top
+ * 折叠」，现在整份挪到后一个的 padding-top 上），所以**正常排布分毫不动、分页位置不变**，
+ * 只有分片续页的首行终于自带留白。列表项同理：分页落在两项之间时，续页首项也不贴边。
+ */
+.box > .box-b > :not(h2, h3, h4) { margin-top: 0; margin-bottom: 0; }
+.box > .box-b > :not(h2, h3, h4) + :not(h2, h3, h4) { padding-top: 0.62em; }
+.box > .box-b > .math-block + :not(h2, h3, h4) { padding-top: 0.6em; }
+.box > .box-b > ul + :not(h2, h3, h4),
+.box > .box-b > ol + :not(h2, h3, h4) { padding-top: 0.75em; }
+.box > .box-b > table + :not(h2, h3, h4) { padding-top: 0.7em; }
+.box > .box-b > pre + :not(h2, h3, h4) { padding-top: 0.5em; }
+.box > .box-b > blockquote + :not(h2, h3, h4) { padding-top: 0.8em; }
+/* 块内标题（极少见）保留自己的上下间距，不参与上面这套 */
+.box > .box-b > h2, .box > .box-b > h3, .box > .box-b > h4 { padding-top: 0; }
+.box > .box-b li { margin-top: 0; margin-bottom: 0; }
+.box > .box-b li + li { padding-top: 0.18em; }
+/* 目标 / 自测题的列表项原本间距就不同，按原值挪到 padding 上 */
+.box.box-goal > .box-b li + li { padding-top: 0.12em; }
+.box.box-quiz > .box-b > ol > li { margin-top: 0; margin-bottom: 0; }
+.box.box-quiz > .box-b > ol > li + li { padding-top: 0.3em; }
+
+/* ==========================================================================
+ * 5. 目录与导航细节
+ * ========================================================================== */
+
+@media screen {
+  /* 屏幕：目录分两栏，长目录不至于占满首屏 */
+  .toc-cols {
+    columns: 2;
+    column-gap: 1.6rem;
+  }
+  .toc-cols > .toc-ch { break-after: avoid; }
+  .doc-head { padding-top: 2rem; }
+  h2 { scroll-margin-top: 3.4rem; }
+  h3 { scroll-margin-top: 3.4rem; }
+  .box { scroll-margin-top: 3.4rem; }
+  body { hyphens: none; }
+}
+
+/* 跳到正文的锚点不显示下划线 */
+.toc a.plain { border-bottom: 0; }
+
+/*
+ * 目录条目末行不留孤字（2026-10-17 第 7 章视觉验收后补）。
+ * ch07 p01 双栏目录左栏最后一条是单元标题「可降阶的高阶微分方程、高阶线性方程与
+ * 常系数齐次方程」，折行后末行只剩一个「程」字独占一行。text-wrap: pretty 专门
+ * 处理这一档（本机实测它只把上一行的末尾一个字挪下来，**不改变行数**，因此不会
+ * 影响目录面板的高度与分页）；正文的 p、li 那一档在本文件 @media print 里有独立的
+ * A/B 开关，目录这条走 .toc 作用域，不受它影响。
+ */
+.toc li,
+.toc .toc-ch { text-wrap: pretty; }
+
+/*
+ * 目录的单元标题不与它的条目分家（同一次验收后补）。
+ * 目录在屏幕与分章首页都是双栏，栏断曾经正好落在单元标题之后：ch07 p01 左栏最后
+ * 一条是单元标题「可降阶的高阶微分方程、高阶线性方程与常系数齐次方程」，而它的
+ * 7.5.1–7.7.4 全被栏断切到右栏，读者看不出这些条目属于哪个单元。
+ * break-after: avoid 把栏断退到标题之前（软约束，真放不下时浏览器仍会断）。
+ */
+.toc .toc-unit { break-after: avoid; }
+
+/* 单元导航（上一单元 / 下一单元）：屏幕显示，打印隐藏 */
+.unit-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.8rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+}
+
+/* ==========================================================================
+ * 6. 打印
+ * ========================================================================== */
+
+/* 页码：所有页都有 */
+@page {
+  size: A4;
+  margin: 19mm 17mm 20mm 17mm;
+  @bottom-center { content: "第 " counter(page) " 页 / 共 " counter(pages) " 页"; }
+}
+
+/*
+ * 页眉：默认留空（封面、目录、封面页不重复标题）。
+ * 正文页的页眉由构建工具为每一章生成一条命名页规则，例如：
+ *   @page p-ch01 { @top-right { content: "第 1 章 函数与极限"; } }
+ *   #chapter-ch01 { page: p-ch01; }
+ * 这里必须用「命名页 + 字面量字符串」的写法：本机 Chrome 155 实测
+ * @top-right{content:string(chaptitle)} 与 string-set 都不生效（见 TOOLCHAIN 的坑记录）。
+ *
+ * 章首页（分章打印时的第 1 页、整册里的封面页）既不重复章名也不印页码：
+ * 页脚与页眉一样要在这里显式清空，否则章首页会孤零零挂一条「第 1 页 / 共 N 页」。
+ */
+@page :first {
+  @top-right { content: ""; }
+  @bottom-center { content: ""; }
+}
+
+@media print {
+  html { font-size: var(--fs-body); }
+
+  body {
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .doc {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .sitenav,
+  .unit-nav,
+  .doc-foot { display: none; }
+
+  /* 章标题：整册里每个章标题另起一页 */
+  .chapter { break-before: auto; }
+  .chapter-title { margin-top: 0; }
+  body.type-book .chapter-title { break-before: page; }
+
+  /* 目录之后另起一页进入正文（只跳一次；整册页由各章标题的 break-before 负责） */
+  .doc-head { break-after: auto; }
+  body.type-chapter .toc,
+  body.type-unit .toc { break-after: page; }
+  /*
+   * 章首页封面块顶部那行书名（.doc-kicker）在打印里去掉（2026-10-17 第 5 章视觉验收）：
+   * 正文页的页眉是 @page 外边距框里的「第 N 章 …」，章首页按设计既无页眉也无页码
+   * （@page :first），可封面块里的书名恰好落在页顶同一位置、样式又不同款，
+   * 读起来像一条没对齐的页眉。章标题、副标题、统计与目录都还在，封面信息不缺。
+   */
+  body.type-chapter .doc-head > .doc-kicker { display: none; }
+
+  /* 分页控制：标题不落在页尾；公式、目录、封面块整体不拆 */
+  .math-block,
+  .toc,
+  .doc-head { break-inside: avoid; }
+
+  /*
+  /*
+   * 长块跨页策略（2026-10-17 第 5 章视觉验收后第三次修订）
+   *
+   * 这个策略翻过三版，实测代价都记在这里，改之前先读完：
+   *
+   *   第一版：.box 整块 break-inside: avoid。长块动辄占半页以上，塞不下就整块后移，
+   *          上一页留下 40%–80% 的空白（第 2/4 章实测：p23 空 61%、p46 空 74%、
+   *          p23 空 82%……），比「块从段落间断开」难看得多。
+   *   第二版：.box 一律 auto，只把 avoid 下移到块内的排版单元（段落/公式/列表项）。
+   *          空白问题解决了，但分片没有标题，clone 又会在页尾把下边框画出来：
+   *          第 5 章实测 5 处「断头」——p10→p11 定理 5.4、p36→p37 例 5.16、
+   *          p28 证明、p53→p54 大白话与小结。读者看到的是一段「已经收口」的块，
+   *          翻页后顶头一段没有标签的底色，不知道这是哪一条。
+   *   第三版（本版）：块仍然 auto（不制造空白），另外补两道：
+   *
+   *          a) 整块后移只留给「本页只剩下一条」的块。CSS 判不出块的位置与高度
+   *             （没有 height / 位置条件查询），所以由构建期量：print.js 打印前
+   *             （buildMeasureVariant + measureScript）量每个 .box 的高度与它在当页的
+   *             起始位置，只有「本页留不下整块、而剩下那一条 ≤ --keep-limit（默认 150px）」
+   *             才打 data-keep 整体后移。默认预算取小值是有实测依据的：拿 260 / 380 / 470px
+   *             当预算试过，中长块（400–500px 的例、定义）也跟着后移，第 5 章页数 57→59、
+   *             页尾空白最大 356→737px，代价远大于收益；小预算只兜住「页尾只剩两行」
+   *             那种下限（验收里 p10 那个 117px 的碎分片），第 5 章实测没有块落进这一档，
+   *             所以版式与第二版逐页一致。脚本没跑成时没人打 data-keep，自动退回第二版。
+   *          b) 分片的下边框不再画（box-decoration-break: slice，见下面那条注释）。
+   */
+  .box { break-inside: auto; page-break-inside: auto; }
+  .box[data-keep] { break-inside: avoid; page-break-inside: avoid; }
+  /*
+   * 跨页的块：分片**不**收口，让「被切开」这件事自己看得见。
+   *
+   * 这里原来是 box-decoration-break: clone（第 7 章视觉验收后改的，探针 clone-test.html）：
+   * 割断处上一页收在下边框 + 内边距上，下一页从上边框起，分片看起来像一个完整的块。
+   * 坏处正是第 5 章视觉验收点出来的：页尾那条闭合的底边让读者以为「这一条已经讲完」，
+   * 翻页才发现还有半条在下面（p10 定理 5.4、p36 例 5.16 都这么被误读）。
+   *
+   * 改成 slice：底色与左侧色条照旧画到断口（断口处不收口、不留内边距），
+   * 续页顶头直接接同一块底色。两边一对照就知道是一件事的两半，
+   * 比「上一页收口、下一页秃头」更接近事实。
+   */
+  .box {
+    box-decoration-break: slice;
+    -webkit-box-decoration-break: slice;
+  }
+  .box > .box-h { break-after: avoid; page-break-after: avoid; }
+  .box > .box-b > :first-child { break-after: avoid; }
+  .box > .box-b > ul,
+  .box > .box-b > ol { break-inside: auto; }
+  .box > .box-b > ul > li,
+  .box > .box-b > ol > li { break-inside: avoid; page-break-inside: avoid; }
+  /*
+   * 列表「尾项」的分片下限（2026-10-17 第 7 章视觉验收后补）：续页顶上不许只剩最后一项。
+   * 只保尾不保头——块的头由 .box-quiz{break-inside:avoid}（自测题整块不拆，见下）
+   * 与 .box[data-keep] 负责；若把第一项也钉住，长列表会被整条推到下一页，
+   * 反而在页尾留下更大的空白（与本次验收里「空白 60%」那条要求相冲突）。
+   */
+  .box > .box-b > ul > li:last-child,
+  .box > .box-b > ol > li:last-child { break-before: avoid; page-break-before: avoid; }
+  .box > .box-b > p,
+  .box > .box-b > blockquote,
+  .box > .box-b > pre { break-inside: avoid; page-break-inside: avoid; }
+  /*
+   * 块内的表格照样可以跨页（第 4 章 p07 空 49% 就是「注 · 基本积分表」那张
+   * 15 行的表整块后移造成的）：块内的表格若也 avoid，等于把块重新粘成整块。
+   * 表头由 thead{display:table-header-group} 每页重复，行由 tr{break-inside:avoid} 兜住，
+   * 所以断点只会落在行之间 —— 这里不能再给 table > tbody 加 avoid。
+   */
+  .box > .box-b > table { break-inside: auto; page-break-inside: auto; }
+
+  /*
+   * 自测题：整块不拆（2026-10-17 第 1 章视觉验收后修订）
+   *
+   * finding：ch01 p94→p95。第 94 页尾部排的是「自测题」框的标题带 + 第 1–2 题，
+   * 第 95 页从版心顶起又是一个粉色框，却没有标题，直接以「3.」开头——读者看到的是
+   * 一个来路不明的框：分片不带标题，而 clone 又在页尾给上一片画了下边框，
+   * 于是续页那一片看起来是「另外一整块」，而不是「上一页接着写」。
+   *
+   * 为什么自测题可以开特例：它与其他语义块不同，是**定长**单元（每章固定五道小题，
+   * 每题一两行，整块实测 ~340px ≈ 版心高的 30%），既不会长到一页装不下，
+   * 也不像例题那样拆开仍有意义（例题拆开是为了不留下大片空白）。
+   * 把 avoid 从块下移到排版单元之后，它就随页面剩余空间被任意切开——
+   * p94 恰好只放得下两题，另外三题掉到下一页。
+   *
+   * 代价可控：整体后移时上一页最多空出「块自身的长度」（实测 ch01 p94 空 160px ≈ 13%），
+   * 远小于「无标题框」造成的误读。本规则只作用于 .box-quiz；例题/证明/定理这些
+   * 真正需要跨页的长块不受影响（它们仍走 .box{break-inside:auto}）。
+   */
+  .box-quiz { break-inside: avoid; page-break-inside: avoid; }
+
+  h1, h2, h3, h4 { break-after: avoid; }
+  .unit-title { break-after: avoid; }
+
+  p, li { orphans: 2; widows: 2; }
+
+  /*
+   * 段末避孤字（2026-10-17 第 2 章视觉验收后补）
+   *
+   * 现象：定义 2.3（ch02 p10）段末只剩一个「作」字独占一行，其下才是居中公式，
+   * 框内凭空多出一整行近空白；同类还有 p20 末行「字。」、p57 末行「长速率。」。
+   * 注意这跟 orphans/widows 是两回事：那两个属性只管**分页处**的行数，
+   * 段中自然换行留下的短尾行它一律不管，所以必须另找机制。
+   *
+   * text-wrap: pretty 就是为此而设的（Chrome 117+，本机 Chrome 155 实测生效）：
+   * 它把「上一行的末尾一小截」挪到末行，让末行不再只剩一个孤零零的字。
+   * 本机实测（build/.probe 探针，11pt 宋体、版心 477pt）：
+   *   - 末行 2 字（如「再检」22pt）：pretty 不动 —— 阈值就在「一个字」；
+   *   - 末行 1 字（如「再」11pt）：pretty 把上一行末尾的 1 个字挪下来，末行变 2 字；
+   *   - 末行已经够长时完全不动 —— 不改变行数，因此不会引起重新分页。
+   * 它只管到「一个字」这一档；2–4 字的短尾 CSS 里没有属性可管
+   * （Chrome 不支持 text-justify、也不支持行末压缩追い込み），
+   * 那一档由构建期的 .nb-tail 组兜住（render.js 的 glueShortTails()，见本文件 .nb-group 下方）。
+   */
+  p, li { text-wrap: pretty; }
+
+  /* 页面上避免出现只剩一两行的块尾 */
+  .box-b > p:last-child { orphans: 2; }
+  /*
+   * 收尾那段不与前面的内容分开：否则块会在页尾断出一段，下一页顶头只剩一行
+   * （第 4 章 p41 顶头就是「注 · 万能代换」的最后一行）。orphans/widows 管不到
+   * 「整段被推走」这一种，得用 break-before: avoid；它是软约束，真放不下时浏览器仍会断。
+   */
+  .box > .box-b > :last-child { break-before: avoid; page-break-before: avoid; }
+
+  a { color: var(--ink); border-bottom: 0; }
+  .toc a { border-bottom: 0; }
+
+  /* 打印时表格允许跨页，但表头每页重复；行不拆 */
+  table { break-inside: auto; }
+  tr { break-inside: avoid; }
+
+  /* 屏幕分栏在打印时取消（整册目录、单元预览目录维持单栏，见下） */
+  .toc-cols { columns: 1; }
+
+  /*
+   * 分章首页的「本章目录」改排双栏（2026-10-16 第 7 章视觉验收后修订）
+   *
+   * 单栏时「本章目录」太长——第 7 章的目录实测高约 1076px，而封面块先占掉约 200px，
+   * 正文区只有 1117px，于是整块目录被 .toc{break-inside:avoid} 推到第 2 页，
+   * 第 1 页只剩标题块（尾部空白 82%），第 2 页又没有页眉。
+   *
+   * 页眉不能在目录页上单独补：目录不在命名页 p-ch0N 里，而本机 Chrome 实测
+   * @page :first 的优先级**低于**命名页 —— 把 .toc 塞进 p-ch0N 会让页眉连同
+   * 章首页一起印出来（探针见 .probe/layout/clone-test.html，第 1 页出现了 HEADER-X）。
+   * 所以改成让目录排得下：双栏后高约 540px，与封面块同处第 1 页，
+   * 既填满封面页，也不再产生「缺页眉的目录页」。整册与单元预览的目录不动。
+   *
+   * 但双栏只对「长目录」划算：目录短（条目少）时双栏把封面页掏空一半
+   * （第 4 章实测：条目 20 条、估算高约 360pt，单栏时封面页充到 73%，
+   *  双栏后只剩 50%）。所以按条目数分流：≥24 条才排双栏，
+   *  短目录退回 .toc-cols{columns:1}。阈值取得很保守——单栏放得下的目录才走单栏
+   *  （20 条约 360pt、14 条约 260pt，而封面页留给目录的高度约 580pt），
+   *  长目录（第 1 章 52 条、第 2 章 33 条、第 3 章 32 条、第 5 章 28 条、第 7 章 42 条）仍是双栏。
+   * 用 :has() 判条目数，是为了不把「目录有多长」这件事塞进 render.js 的 class 里
+   * （Chrome 105+ 支持 :has()，本机 Chrome 155 实测生效）。
+   */
+  body.type-chapter .toc-cols:has(> .toc-ul > li:nth-child(24)) { columns: 2; }
+}
+
+/* ==========================================================================
+ * 7. 屏幕适配
+ * ========================================================================== */
+
+@media screen and (max-width: 46rem) {
+  body { font-size: 16.5px; }
+  .doc { padding-left: 0.95rem; padding-right: 0.95rem; }
+  .toc-cols { columns: 1; }
+  .doc-title { font-size: 1.5em; }
+  .box > .box-b { padding-left: 0.7em; padding-right: 0.7em; }
+  .box-def > .box-b,
+  .box-thm > .box-b,
+  .box-ex > .box-b { padding-left: 0.75em; padding-right: 0.75em; }
+  .box-proof { margin-left: 0.4em; padding-left: 0.6em; }
+  .sitenav { gap: 0.3rem 0.75rem; font-size: 0.76rem; }
+}
+
+@media screen and (min-width: 75rem) {
+  /* 宽屏：正文两侧留白多一点，视线更容易停在中间 */
+  .doc { max-width: 47em; }
+}
+
+/* 屏幕深色偏好：只调低纸色，语义块仍是浅底（保证与 PDF 观感一致） */
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e9ecf1;
+    --ink-soft: #c7cdd7;
+    --ink-mute: #9aa3b2;
+    --rule: #3a4150;
+    --rule-soft: #2f3540;
+    --rule-strong: #4d566a;
+    --paper: #14161a;
+    --paper-soft: #1b1f26;
+    --paper-tint: #1f242c;
+  }
+  body { background: var(--paper); }
+  .sitenav { background: rgba(20, 22, 26, 0.94); }
+  strong { color: #fff; }
+  code, kbd { background: #1e232b; }
+  .toc a { border-bottom-color: var(--rule-strong); }
+}
+
+
+/* ==========================================================================
+ * 第 6 章的打印分页策略（2026-10-17 版面修复 · ch06 · 第 2 轮）
+ *
+ * 起因（视觉验收 finding，ch06-p05 / p10 / p23）：例题块被分页从中间割断，
+ * 块内最后一行停在半句引导语上、其下的底色一直淌到页脚上沿，块内留下大片
+ * 空白（实测 p05 例 6.2 的绿色分片高 303pt、正文只占 176pt，空洞 127pt）。
+ *
+ * 机制（本机 Chrome 155 实测，探针 .probe/layout/boxbreak.html、boxbreak5.html）：
+ * 块被分片时，**上半片的底色一定画到版心底**——与底色挂在 .box 还是内层、
+ * 与 box-decoration-break 取 clone 还是 slice 都无关。于是只要块的最后一个
+ * 「排版单元」（一道行间公式约 40–50pt、一段正文最多 80pt）塞不进当页剩余
+ * 空间，那点剩余空间就变成彩底里的一块空白。要根除它，只能不让块在中间断开。
+ *
+ * 所以本章的语义块采用「装不下就整块移到下一页」：
+ *   实测 27 页、页底留白合计 1546pt，与基座 28 页 / 1516pt 基本持平；
+ *   换来的全章 0 处「彩底空洞」、0 处被割断的例题块 —— 而「语义块被分页从
+ *   中间割断」正是本轮三条 finding（p05 / p10 / p23）的共同症结。
+ *
+ * 同时**只对本章**抵消基座里两条会把空洞放大的规则：
+ *   - .box > .box-b > :nth-child(-n+3){break-after:avoid}（分片尺寸下限）把断点
+ *     往前推，同一页的空洞实测由 45pt 涨到 127pt；
+ *   - .box > .box-b > :last-child{break-before:avoid} 把「公式 + 收尾一段」粘成
+ *     一个 120pt 级的大单元，也把空洞推大。
+ * 这两条对别的章有用，本章不吃。
+ *
+ * 比一页还高的块浏览器会忽略 avoid 强行断开（本章没有这种块）；真断开时
+ * 允许段内换行，让断点尽量落低、把空洞压到最小。
+ * ========================================================================== */
+@media print {
+  #chapter-ch06 .box > .box-b > :nth-child(-n+3) { break-after: auto; page-break-after: auto; }
+  #chapter-ch06 .box > .box-b > :last-child { break-before: auto; page-break-before: auto; }
+  #chapter-ch06 .box { break-inside: avoid; page-break-inside: avoid; }
+  #chapter-ch06 .box > .box-b > p { break-inside: auto; page-break-inside: auto; }
+}
+
+/* ==========================================================================
+ * 8. 函数图像（```plot → 构建期内联 SVG，生成逻辑见 build/plots.js）
+ *
+ * 图像是「矢量 + 内联」的，因此打印时不会掉字形、不需要联网、灰度也清楚：
+ * 多条曲线靠**实线 / 虚线 / 点线**区分（不是只靠颜色），网格与坐标轴用最浅的线，
+ * 曲线用全书强调色。图与题注整体不跨页。
+ * ========================================================================== */
+
+.plot {
+  margin: 1.1em 0 1.2em;
+  text-align: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.plot-svg {
+  display: block;
+  width: 100%;
+  max-width: 30em;
+  height: auto;
+  margin: 0 auto;
+  overflow: hidden;         /* 贴边的曲线由视框裁掉，不外溢 */
+}
+
+.plot-cap {
+  margin: 0.42em 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  color: var(--ink-mute);
+}
+
+.plot-num { font-weight: 700; color: var(--ink-soft); margin-right: 0.45em; }
+
+.plot-svg .plot-panel { fill: #fff; stroke: var(--rule); stroke-width: 1; }
+.plot-svg .plot-grid line { stroke: var(--rule-soft); stroke-width: 1; stroke-dasharray: 3 3; }
+.plot-svg .plot-axis line { stroke: var(--ink-soft); stroke-width: 1.1; }
+.plot-svg .plot-ticks line { stroke: var(--rule-strong); stroke-width: 1; }
+.plot-svg .plot-ticks text { fill: var(--ink-mute); font-family: var(--font-sans); font-size: 11px; }
+.plot-svg .plot-guides line { stroke: var(--rule-strong); stroke-width: 1; stroke-dasharray: 5 4; }
+.plot-svg .plot-legend text { fill: var(--ink-soft); font-family: var(--font-sans); font-size: 11px; }
+.plot-svg .plot-marks text { fill: var(--ink); font-family: var(--font-sans); font-size: 11px; }
+.plot-svg .plot-mark { fill: var(--c-warn); }
+
+/* 曲线 1 实线、曲线 2 虚线、曲线 3 点线——灰度打印也能分开 */
+.plot-svg .plot-curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.9;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.plot-svg .plot-curve-2 { stroke: var(--c-warn); stroke-dasharray: 7 4; }
+.plot-svg .plot-curve-3 { stroke: var(--c-ex); stroke-dasharray: 2 3; }
+
+/* 辅助线段（直角边/半径/弦）与方向场短线 */
+.plot-svg .plot-seg line { stroke: var(--c-warn); stroke-width: 1.2; }
+.plot-svg .plot-field line { stroke: var(--ink-mute); stroke-width: 0.9; }
+
+/* 块内的图不要撑破块 */
+.box .plot-svg { max-width: 100%; }
+
+@media print {
+  /* 图占版心约 2/3 宽：既看得清，又不至于一张图吃掉半页纸 */
+  .plot-svg { max-width: 68%; }
+}
+
+/* ==========================================================================
+ * 9. 机器验算小结 / 构建占位错误
+ * ========================================================================== */
+
+/* 单元末尾的「已由 sympy 逐条机械验算」小结（render.js 的 verifyNoteHtml） */
+.machine-check {
+  margin: 1.15em 0 0.3em;
+  padding: 0.5em 0.85em;
+  border-left: 3px solid var(--c-summary);
+  background: var(--bg-summary);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  color: var(--c-summary);
+  break-inside: avoid;
+}
+.machine-check .mc-ico { font-weight: 700; margin-right: 0.4em; }
+.machine-check code { background: rgba(255, 255, 255, 0.75); }
+
+/* 图像/渲染失败时的占位（构建期错误，正式交付里不该出现） */
+.build-error {
+  padding: 0.6em 0.85em;
+  border: 1px dashed var(--c-warn);
+  background: var(--bg-warn);
+  color: var(--c-warn);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 0.85em;
+}
+
+/* ==========================================================================
+ * 10. 无障碍（读屏与键盘）
+ * ========================================================================== */
+
+/*
+ * 「跳到正文」：键盘用户按下的第一个 Tab 会聚焦它，读屏用户也能直接跳过导航。
+ * 平时移到视口外，聚焦时才出现（-9999px 而不是 display:none，否则无法聚焦）。
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  padding: 0.55em 1em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0 0 var(--radius) 0;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.skip-link:focus { left: 0; outline: 3px solid var(--accent-deep); }
+
+/* 键盘焦点始终可见（鼠标点击不触发，避免视觉噪音） */
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/*
+ * KaTeX 会把公式排两遍：.katex-html 给人看（aria-hidden），.katex-mathml 给读屏念。
+ * MathML 这一份必须「看得见地藏起来」（clip），**不能** display:none ——
+ * 否则整本书的公式在屏幕阅读器里会变成空白。这条规则与 KaTeX 自带的一致，
+ * 写在这里是为了别被后来的改版顺手盖掉。
+ */
+.katex .katex-mathml {
+  position: absolute;
+  clip: rect(1px, 1px, 1px, 1px);
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+@media print {
+  /* 跳转链接对纸面没有意义 */
+  .skip-link { display: none; }
+}
+

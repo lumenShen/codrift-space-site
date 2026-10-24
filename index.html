@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- theme-color 单条（无 media 属性）：content 是权威值，由下面的内联脚本与
+         useTheme（src/composables/useTheme.ts）随站点主题用 JS 改写（DESIGN-V2 §0.3/§3.1）。 -->
+    <meta name="theme-color" content="#070c18" />
+    <script>
+      /* 首屏防闪（FOUC）：body 解析前把主题挂到 html[data-theme]。
+         存储 key = 'codrift.theme'（DESIGN-V2 §3.1）；无有效存储时跟系统偏好，兜底 dark。 */
+      (function () {
+        try {
+          var t = localStorage.getItem('codrift.theme');
+          if (t !== 'light' && t !== 'dark')
+            t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          document.documentElement.dataset.theme = t;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute('content', t === 'light' ? '#f4f7fc' : '#070c18');
+        } catch (e) {}
+      })();
+    </script>
+    <meta
+      name="description"
+      content="Codrift——lumenShen 的个人品牌站：主页/作品集/博客，域名 codrift.space"
+    />
+    <title>Codrift · lumenShen</title>
+  </head>
+  <body>
+    <!--
+    DIRECTION CONTRACT · codrift-space-site · seed: pinned-brief-kexie-2026-10-24
+    THESIS: 夜间极光下的深色玻璃工作台——一个人的代码漂流站；拒绝同尺寸卡片栅格、渐变字与模板 hero。
+    OWN-WORLD: 海军蓝黑底 + 斜向极光光带（蓝/青/绿长曝）+ 1px 冷描边玻璃面板（Rein 超高·暗色光学层全开）；暖橙只作点题；Archivo 变量字 + 中文黑体，靠字重与字号说话。
+    STORY: 三秒认出 lumenShen 的个人站 → 展开折叠板块读关于/作品/博客 → 行动：看看博客、联系我。
+    FIRST VIEWPORT: 满屏极光，居中巨型 Codrift（3.4–6rem、800 重、冷白），下接橙色点题口号与四枚玻璃胶囊（看看博客/GitHub/作品集/联系我）；右上深色玻璃导航条带实底蓝 CTA。
+    FORM: 站长两张截图钉死的方向（kexie.space 视觉语言），未抽签；seed key pinned-brief-kexie-2026-10-24。
+    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+    V2: 双主题——暗色为默认（衰减为 Kimi 式扁平薄描边），新增亮色（Rein 高光学亮色重标）；页头/rail 结构学 Kimi，皮肤仍是极光玻璃。
+    -->
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

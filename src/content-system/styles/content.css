@@ -1,0 +1,707 @@
+/*
+ * 内容系统样式：markdown 排版（.ce-markdown）+ 扩展语法组件（.ce-callout / .ce-badge /
+ * .ce-tag / .ce-linkcard / .ce-extend-missing / .ce-timeline / .ce-stat-grid / .ce-faq /
+ * .ce-steps / .ce-feature-grid / .ce-gallery / .ce-kbd）+ html 条目的 iframe 外框
+ * （.ce-html-frame）。全部取值引用 src/styles/tokens.css 令牌（契约 §0）；少量派生色用
+ * color-mix 基于令牌生成。两种主题（暗/亮）都只经令牌换值，本文件不含主题字面量——
+ * 组件里「主色作文字」的场合用 var(--accent-text, var(--accent))：令牌在场（亮色组）取
+ * 专用的文字安全档，缺席（现状暗色）退回 --accent。
+ * 新组件的元素选择器统一挂在 .ce-content 下（render.ts 的根容器），以盖过
+ * .ce-markdown 对 ul/ol/p 等元素选择器的默认排版。
+ * 本文件由 src/content-system/index.ts 引入。
+ */
+
+/* ============ markdown 排版 ============ */
+
+.ce-markdown {
+  color: var(--fg-0);
+  font-family: var(--font-sans);
+  font-size: 0.975rem;
+  line-height: 1.75;
+  word-break: break-word;
+}
+
+.ce-markdown > :first-child {
+  margin-top: 0;
+}
+
+.ce-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.ce-markdown h1,
+.ce-markdown h2,
+.ce-markdown h3,
+.ce-markdown h4,
+.ce-markdown h5,
+.ce-markdown h6 {
+  color: var(--fg-0);
+  font-weight: 700;
+  line-height: 1.35;
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+.ce-markdown h1 {
+  font-size: 1.6rem;
+}
+
+.ce-markdown h2 {
+  font-size: 1.3rem;
+}
+
+.ce-markdown h3 {
+  font-size: 1.12rem;
+}
+
+.ce-markdown h4,
+.ce-markdown h5,
+.ce-markdown h6 {
+  font-size: 1rem;
+}
+
+.ce-markdown p {
+  margin: var(--space-3) 0;
+}
+
+.ce-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.ce-markdown a:hover {
+  color: var(--accent-strong);
+  text-decoration-color: currentColor;
+}
+
+.ce-markdown ul,
+.ce-markdown ol {
+  margin: var(--space-3) 0;
+  padding-left: 1.4em;
+}
+
+.ce-markdown li {
+  margin: var(--space-1) 0;
+}
+
+.ce-markdown li::marker {
+  color: var(--fg-2);
+}
+
+.ce-markdown blockquote {
+  margin: var(--space-4) 0;
+  padding: var(--space-2) var(--space-4);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  color: var(--fg-1);
+}
+
+.ce-markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.ce-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.ce-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.45em;
+  color: var(--accent-strong);
+}
+
+.ce-markdown pre {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.ce-markdown pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--fg-0);
+  font-size: 0.875rem;
+}
+
+.ce-markdown table {
+  width: 100%;
+  margin: var(--space-4) 0;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.ce-markdown th {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-weight: 600;
+}
+
+.ce-markdown td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.ce-markdown img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
+
+.ce-markdown hr {
+  margin: var(--space-6) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.ce-markdown input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+/* ============ :::note / :::warn / :::tip 容器 ============ */
+
+.ce-callout {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+}
+
+.ce-callout--note {
+  border-left-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.ce-callout--tip {
+  border-left-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
+}
+
+.ce-callout--warn {
+  border-left-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+}
+
+.ce-callout__title {
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+  font-size: 0.95em;
+  color: var(--fg-0);
+}
+
+.ce-callout--note .ce-callout__title::before {
+  content: 'ⓘ ';
+  color: var(--accent);
+}
+
+.ce-callout--tip .ce-callout__title::before {
+  content: '✦ ';
+  color: var(--accent-strong);
+}
+
+.ce-callout--warn .ce-callout__title::before {
+  content: '⚠ ';
+  color: var(--accent-2);
+}
+
+.ce-callout__body > :first-child {
+  margin-top: 0;
+}
+
+.ce-callout__body > :last-child {
+  margin-bottom: 0;
+}
+
+.ce-callout__body .ce-markdown {
+  font-size: inherit;
+}
+
+/* ============ 徽章 ============ */
+
+.ce-badge {
+  display: inline-block;
+  padding: 0.1em 0.65em;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  font-size: 0.82em;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: 0.12em;
+  white-space: nowrap;
+}
+
+.ce-badge--accent {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.ce-badge--tip {
+  border-color: color-mix(in srgb, var(--accent-strong) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-strong) 10%, transparent);
+  color: var(--accent-strong);
+}
+
+.ce-badge--warn {
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+  color: var(--accent-2);
+}
+
+/* ============ 标签跳转徽章（{{tag:xxx}}） ============ */
+
+.ce-tag {
+  display: inline-block;
+  padding: 0.08em 0.65em;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--accent);
+  font-size: 0.85em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ce-tag:hover {
+  color: var(--accent-strong);
+  border-color: var(--line-strong);
+}
+
+/* ============ 链接卡（{{link:...}}） ============ */
+
+.ce-linkcard {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-1), var(--glass-insets); /* §5.3 翻新：补齐光学内层 */
+  backdrop-filter: blur(var(--glass-blur));
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.ce-linkcard:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.ce-linkcard__body {
+  min-width: 0;
+}
+
+.ce-linkcard__title {
+  display: block;
+  color: var(--fg-0);
+  font-weight: 600;
+}
+
+.ce-linkcard__desc {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--fg-1);
+  font-size: 0.88em;
+}
+
+.ce-linkcard__host {
+  flex-shrink: 0;
+  padding-top: 0.2em;
+  color: var(--fg-2);
+  font-size: 0.8em;
+}
+
+/* ============ extend 组件占位（未注册时） ============ */
+
+.ce-extend-missing {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--fg-2);
+  font-size: 0.85em;
+}
+
+/* ============ html 条目：iframe 外框 ============ */
+
+.ce-html-frame {
+  margin: var(--space-4) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-1);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.ce-html-frame__doc {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+  background: transparent;
+}
+
+/* ============ 扩展组件公共（::: 轨道 B 组件的组标题） ============ */
+
+.ce-content .ce-block__heading {
+  margin: var(--space-4) 0 var(--space-3);
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--fg-0);
+}
+
+/* ============ :::timeline（开放式时间线，不盒装） ============ */
+
+.ce-content .ce-timeline {
+  margin: var(--space-4) 0;
+  border-left: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ce-content .ce-timeline__item {
+  position: relative;
+  padding-left: var(--space-5);
+}
+
+/* 节点：骑在左轨上（轨在条目左缘外 2px，圆点中心对齐轨中线） */
+.ce-content .ce-timeline__item::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 0.45em;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 2px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-1);
+}
+
+/* 关键/最新节点：实心主色 + outline 外环（描边不在阴影禁令内，同 focus ring 机制） */
+.ce-content .ce-timeline__item--hot::before {
+  border-color: var(--accent);
+  background: var(--accent);
+  outline: 4px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  outline-offset: 2px;
+}
+
+.ce-content .ce-timeline__time {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+}
+
+.ce-content .ce-timeline__title {
+  margin-top: 2px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--fg-0);
+}
+
+.ce-content .ce-timeline__desc {
+  margin-top: var(--space-1);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--fg-1);
+}
+
+/* ============ :::stat-grid（纯排版数值网格） ============ */
+
+.ce-content .ce-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-5);
+  margin: var(--space-4) 0;
+}
+
+.ce-content .ce-stat__value {
+  font-family: var(--font-display);
+  font-weight: 750;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-0);
+}
+
+.ce-content .ce-stat--hot .ce-stat__value {
+  color: var(--accent-text, var(--accent));
+}
+
+.ce-content .ce-stat__label {
+  margin-top: var(--space-1);
+  font-size: 0.8rem;
+  color: var(--fg-2);
+}
+
+/* ============ :::faq（开放式 details 列表） ============ */
+
+.ce-content .ce-faq {
+  margin: var(--space-4) 0;
+}
+
+.ce-content .ce-faq__item {
+  border-top: 1px solid var(--line);
+}
+
+.ce-content .ce-faq__item:first-child {
+  border-top: 0;
+}
+
+.ce-content .ce-faq__q {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--fg-0);
+  cursor: pointer;
+  list-style: none;
+}
+
+.ce-content .ce-faq__q::-webkit-details-marker {
+  display: none;
+}
+
+.ce-content .ce-faq__q-text {
+  flex: 1 1 auto;
+}
+
+.ce-content .ce-faq__chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--fg-2);
+  transition: transform var(--dur-fast, 160ms) ease;
+}
+
+.ce-content details[open] > .ce-faq__q .ce-faq__chevron {
+  transform: rotate(180deg);
+}
+
+.ce-content .ce-faq__a {
+  padding: 0 0 var(--space-4);
+  font-size: 0.9rem;
+  color: var(--fg-1);
+}
+
+/* ============ :::steps（编号圆片 + 虚线连接） ============ */
+
+.ce-content .ce-steps {
+  margin: var(--space-4) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ce-content .ce-steps__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  column-gap: var(--space-3);
+  padding-bottom: var(--space-5);
+}
+
+.ce-content .ce-steps__item:last-child {
+  padding-bottom: 0;
+}
+
+.ce-content .ce-steps__item::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 30px;
+  bottom: var(--space-2);
+  border-left: 2px dashed var(--line);
+}
+
+.ce-content .ce-steps__item:last-child::before {
+  content: none;
+}
+
+.ce-content .ce-steps__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  background: var(--bg-1);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-text, var(--accent));
+}
+
+.ce-content .ce-steps__title {
+  margin-top: 2px;
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.5;
+  color: var(--fg-0);
+}
+
+.ce-content .ce-steps__desc {
+  margin-top: var(--space-1);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--fg-1);
+}
+
+/* ============ :::feature-grid（图标卡网格） ============ */
+
+.ce-content .ce-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+}
+
+.ce-content .ce-feature {
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-1), var(--glass-insets);
+  transition: border-color var(--dur-fast, 160ms) ease;
+}
+
+.ce-content .ce-feature:hover {
+  border-color: var(--accent-line);
+}
+
+.ce-content .ce-feature__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+
+.ce-content .ce-feature__icon-svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ce-content .ce-feature__icon-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+}
+
+.ce-content .ce-feature__title {
+  margin-top: var(--space-3);
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--fg-0);
+}
+
+.ce-content .ce-feature__desc {
+  margin-top: var(--space-1);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--fg-1);
+}
+
+/* ============ :::gallery（图片网格；点击新窗看原图，不做 lightbox） ============ */
+
+.ce-content .ce-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+}
+
+.ce-content .ce-gallery[data-cols='3'] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ce-content .ce-gallery__link {
+  display: block;
+}
+
+.ce-content .ce-gallery__item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+}
+
+.ce-content .ce-gallery__caption {
+  margin-top: var(--space-2);
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--fg-2);
+}
+
+/* ============ {{kbd:A|B}}（行内按键） ============ */
+
+.ce-content .ce-kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  color: var(--fg-0);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  line-height: 1.5;
+  box-shadow: var(--shadow-1);
+  vertical-align: 0.08em;
+  white-space: nowrap;
+}
+
+.ce-content .ce-kbd-plus {
+  margin: 0 2px;
+  font-size: 0.82em;
+  color: var(--fg-2);
+}
+
+/* ============ 动效降级 ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  .ce-markdown a,
+  .ce-tag,
+  .ce-linkcard,
+  .ce-content .ce-faq__chevron,
+  .ce-content .ce-feature {
+    transition: none;
+  }
+
+  .ce-linkcard:hover {
+    transform: none;
+  }
+}

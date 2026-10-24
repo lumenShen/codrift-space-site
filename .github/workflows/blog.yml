@@ -1,0 +1,55 @@
+# blog.yml — 博客自动提交管线：issue 打上 blog 标签 → 生成 markdown 文章 → commit & push 回 main
+#
+# 用法：开一个 issue，标题 = 文章标题，正文 = markdown 正文，打上 "blog" 标签；
+#       之后编辑 issue（改标题/正文/标签）会再次触发，覆盖同一篇文章（幂等，见脚本）。
+#       除 blog 外的其它标签会原样进入文章 frontmatter 的 tags（约定见 docs/BLOG.md）。
+#
+# ⚠️ 已知限制：本 job 用仓库 GITHUB_TOKEN 推送的 commit 不会触发 deploy.yml 的
+#    on: push（GitHub 规则：GITHUB_TOKEN 产生的事件不新建 workflow run）。
+#    文章进仓库后需手动在 Actions 页 Run workflow 触发 deploy.yml；
+#    自动化改造方案见 scripts/issue-to-post.mjs 文件头「扩展点」。
+#
+# 扩展点：
+#   - 定时拉 RSS → 加 schedule 触发，新开一个不依赖 issue 事件的 job；
+#   - issue comment 追加正文 → 加 issue_comment: [created, edited] 触发 + 脚本 append 分支；
+#   - 多标签分流（如 future: draft 只生成不发布）→ 扩 job if 与脚本的 EXCLUDED_LABELS。
+
+name: Blog — issue to post
+
+on:
+  issues:
+    types: [opened, labeled, edited]
+
+permissions:
+  contents: write # commit + push 回 main
+  issues: read # 脚本经 API 读 issue（含正文与标签）
+
+# 同一 issue 连续编辑时只跑最新一次，取消排队中的旧 run
+concurrency:
+  group: blog-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # 统一用 issue 的标签集合判断，覆盖三种事件：
+    #   opened  —— 创建时就带了 blog 标签（此时 github.event.label 不存在，
+    #              若写 github.event.label.name == 'blog' 会静默漏跑）；
+    #   labeled —— 事后补打 blog 标签；
+    #   edited  —— 带 blog 标签的 issue 编辑标题/正文（重新生成文章）。
+    if: contains(github.event.issue.labels.*.name, 'blog')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4 # 默认检出触发事件的分支（issues 事件 = main）
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # 不配 cache: npm —— 本管线不执行 npm install，脚本零依赖
+
+      - name: Generate post from issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: node scripts/issue-to-post.mjs # 取 issue → 写 md → git identity → commit → push

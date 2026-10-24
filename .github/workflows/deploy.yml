@@ -1,0 +1,70 @@
+# deploy.yml — Vite 构建并部署到 GitHub Pages（替代原 Jekyll 模板 gh-pages.yml）
+#
+# 前置条件（一次性，在仓库 Settings 里配置，工作流本身无法代劳）：
+#   1. Settings → Pages → Source 选 "GitHub Actions"（否则 deploy-pages 会报错）。
+#   2. 自定义域名 codrift.space：由 public/CNAME 随构建产物提供（Vite 会把 public/**
+#      原样拷进 dist/），每次部署都自带 CNAME，域名不会因重新部署而丢失；
+#      DNS 侧需有指向 <user>.github.io 的 A/ALIAS 记录（在域名服务商配置，本仓库外）。
+#   3. npm ci 依赖 package-lock.json 已提交进仓库（lockfile 与 package.json 同步）。
+#
+# 扩展点：
+#   - 换 Node 版本 → 改 setup-node 的 node-version。
+#   - 需要构建前预处理（如生成内容索引）→ 在 npm run build 之前插一步。
+#   - 需要预览部署（PR 预览）→ 另加 pull_request 触发 + 独立 environment，
+#     注意 Pages 每仓库只有一个生产环境，预览需走第三方或 artifact 方案。
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # 允许在 Actions 页手动触发（例如 blog 管线提交后手动补一次部署）
+
+# deploy-pages@v4 需要 pages:write 与 id-token:write（OIDC 换取部署凭据）
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只允许一个部署在跑；不取消进行中的部署（避免半截发布）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm # 依赖 package-lock.json 存在于仓库
+
+      - name: Install dependencies
+        run: npm ci # 严格按 lockfile 安装，保证构建可复现
+
+      - name: Build
+        run: npm run build # vue-tsc --noEmit && vite build（见 package.json）
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist # Vite 产物目录；public/CNAME 已被拷入其中
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

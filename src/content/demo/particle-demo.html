@@ -1,0 +1,26 @@
+---
+title: 粒子指针 · 迷你演示
+tags: [demo]
+date: 2026-10-24
+summary: 一个自带 css 与 js 的迷你页面，验证 html 条目类型的隔离渲染管线。
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Particle Pointer · Codrift</title>
+  <link rel="stylesheet" href="./particle-demo.css">
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <img class="mark" src="./codrift-mark.svg" alt="Codrift mark" width="32" height="32">
+  <div class="hud">
+    <h1>Particle Pointer</h1>
+    <p>在画布里移动指针，会拖出一条粒子轨迹。</p>
+    <p id="counter">particles: 0</p>
+  </div>
+  <script src="./particle-demo.js"></script>
+</body>
+</html>

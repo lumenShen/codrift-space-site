@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>编译器的脾气：诊断、警告与构建命令</title>
+<meta name="description" content="零基础 · 第 2 单元 · 建议 70 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-c-chapters-ch01-02-diagnostics-and-warnings-md { @top-right { content: "编译器的脾气：诊断、警告与构建命令"; } }
+#content { page: p-u-c-chapters-ch01-02-diagnostics-and-warnings-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/c.html">《c》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">编译器的脾气：诊断、警告与构建命令</h1><p class="doc-sub">零基础 · 第 2 单元 · 建议 70 分钟</p><p class="doc-meta">源文件 books/c/chapters/ch01/02-diagnostics-and-warnings.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h1">2.1 工程长什么样：这一单元往 examples/ch01/ 里加了什么</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h2">2.2 一条诊断的四段读法</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h3">2.3 三道开关：-Wall、-Wextra、-Wpedantic 各管什么</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h4">2.4 六类高频警告：你会撞上的是这六种</a></li><li class="toc-l3"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h5">2.4.1 一个 double 用 %d 打出来，为什么会是这个数</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h6">2.5 一串诊断先改第一条</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h7">2.6 编译期、链接期、运行期：三份输出归谁管</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h8">2.7 -c 与一条命令：本机没有 make</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h9">2.8 -O0 与 -g：为什么本书默认不做优化</a></li><li class="toc-l3"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h10">2.8.1 有些警告只在开优化时才出现</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h11">2.9 -Werror：让警告拦住你，以及它的代价</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h12">2.10 -fanalyzer 与「本机没有的那些检测手段」</a></li><li class="toc-l2"><a href="#c-chapters-ch01-02-diagnostics-and-warnings-md-h13">2.11 这一单元新增了什么，以及接下来</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>把一条诊断按「文件、位置、级别、说明」四段拆开读，并说清方括号里那个开关名是干什么的；</li>
+<li>说清 <code>-Wall</code>、<code>-Wextra</code>、<code>-Wpedantic</code> 各打开了什么、<strong>不含</strong>什么，知道 <code>-Wconversion</code>、<code>-Wshadow</code>、<code>-Wfloat-equal</code>、<code>-Wformat=2</code> 要自己加；</li>
+<li>认出六类高频警告，并说出每一类在真实代码里会变成什么事故；</li>
+<li>分清编译期、链接期、运行期三件事各由谁负责，失败时该去看哪一份输出；</li>
+<li>用 <code>gcc -c</code> 与「一条命令」两种方式构建，并说出 <code>-O0</code> 与 <code>-g</code> 为什么是本书的默认；</li>
+<li>把退出码当判据用（<code>gcc … &amp;&amp; ./app</code>），并说出 <code>-Werror</code>、<code>-fanalyzer</code> 各自给你什么、代价是什么。</li>
+</ul>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h1">2.1 工程长什么样：这一单元往 examples/ch01/ 里加了什么</h2>
+<p>上一单元我们在 <code>hello.c</code> 上看见了四个阶段，也看见了两条故意写错的诊断。这一单元要把「编译器说的话」当成一门手艺来学：它说什么、按什么规矩说、哪些话只在特定开关下才说、它不说话的时候你该怎么办。</p>
+<p>新增的东西全是<strong>实验文件</strong>：八个小程序（多数各自只考一件事），每个配一份清单（清单负责声明「怎么编译、跑完退出码是多少、正文里哪个块负责对账」），再加一份把几十条真实命令抓下来的会话文件。为什么不拿现成的 <code>hello.c</code> 来学？因为它太干净——诊断这门手艺得在<strong>脏</strong>代码上学。</p>
+<figure class="viz" data-kind="tree" data-frames="3" data-viz-id="vz-05ae96f8">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> examples/ch01/：这一单元里它长成了什么样</figcaption>
+<div class="viz-screen" role="group" aria-label="examples/ch01/：这一单元里它长成了什么样：逐步演示">
+<input class="vs-radio" type="radio" name="vz-05ae96f8" id="vz-05ae96f8-1" checked>
+<input class="vs-radio" type="radio" name="vz-05ae96f8" id="vz-05ae96f8-2">
+<input class="vs-radio" type="radio" name="vz-05ae96f8" id="vz-05ae96f8-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-05ae96f8-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-05ae96f8-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-05ae96f8-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c / trace.c / noinclude.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">semicolon.c / string_memory.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">gallery_long.c / analyzer_demo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello.i / hello.s、清单、四份会话</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">（上一帧的家底都还在）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">warn_zoo.c / extra_warnings.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">format_mismatch.c / format_security.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">werror_blocks.c / diag_chain.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">undef_ref.c / stages_c.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">每个都配一份同名 .json 清单</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">session-diagnostics.txt</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">（所有 .c 与清单都平铺在这一层，没有子目录）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/ ：本章不建</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">include/ ：本章不建</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>上一单元结束时，这一层里已经有这些</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">hello.c / trace.c / noinclude.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">semicolon.c / string_memory.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">gallery_long.c / analyzer_demo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hello.i / hello.s、清单、四份会话</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>这一单元新增八个小程序、八份清单、一份会话</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">（上一帧的家底都还在）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">warn_zoo.c / extra_warnings.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">format_mismatch.c / format_security.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">werror_blocks.c / diag_chain.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">undef_ref.c / stages_c.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">每个都配一份同名 .json 清单</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">session-diagnostics.txt</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>这一章还是单文件项目</p><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">（所有 .c 与清单都平铺在这一层，没有子目录）</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/ ：本章不建</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">include/ ：本章不建</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是上一单元留下的家底；第 2 帧是这一单元加进来的——八个小程序、八份清单，加一份抓下来的会话（前四个偏「诊断」，后四个偏「构建」，正好对应本单元的两半）；第 3 帧说的是<strong>没加什么</strong>：这一章仍然是单文件项目，源文件与清单平铺在 <code>examples/ch01/</code> 这一层，不建 <code>src/</code> 与 <code>include/</code>。这不是偷懒：单文件阶段要先把「一条命令怎么编、诊断怎么读」学会，再谈目录怎么分；从下一个项目（<code>examples/ch02/</code>）起，本书不再允许单文件工程（1.1 的惯例块里说过它的代价）。</p>
+<p>下面这一整单元的所有命令，都是在这台机器上真跑出来的，命令与输出原样抓在 <code>examples/ch01/session-diagnostics.txt</code> 里；正文里的每一段会话都从那个文件按行号注入，一个字都没有手打。</p>
+<section class="box box-standard" data-box-type="standard"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-openBook" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4.2C7 3.3 5.6 3 4 3v9.2c1.6 0 3 .3 4 1.2 1-.9 2.4-1.2 4-1.2V3c-1.6 0-3 .3-4 1.2z"/><path d="M8 4.2v9.2"/></svg></span><span class="box-kind">标准原文</span><span class="box-t">标准原文：诊断是「至少一条」，不是「说清楚」</span></header>
+<div class="box-b">
+<p>C 标准对诊断只规定了底线：</p>
+<blockquote>
+<p>A conforming implementation shall produce at least one diagnostic message (identified in an implementation-defined manner) if a preprocessing translation unit or translation unit contains a violation of any syntax rule or constraint …</p>
+</blockquote>
+<p>大意：只要代码<strong>违反了一条语法规则或约束</strong>，编译器就至少得吐出一条诊断——<strong>说什么、叫什么名字、怎么排版，全是实现自己的事</strong>。标准甚至没说它必须是 <code>error</code>，也没规定「一条报错只许报一处」。</p>
+<p>所以下面这些规矩都不是标准定的，是 gcc 自己定的：诊断长成 <code>文件:行:列: 级别: 说明</code>、方括号里挂一个 <code>-W…</code> 开关名、<code>error</code> 就停下、<code>warning</code> 就接着编。换一个编译器，同一份代码可能给你完全不同的文字。</p>
+<p>出处：ISO/IEC 9899:2018（C17）§5.1.1.3 第 1 段。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h2">2.2 一条诊断的四段读法</h2>
+<p>先把一条最短的诊断摆出来。这是我们马上要拆的那份 <code>warn_zoo.c</code> 的编译结果，命令在会话里（<code>grep</code> 只是把警告行挑出来，不改变内容）：</p>
+<figure class="term term-session" data-id="ch02-diag-four-parts" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">挑出一条警告来读</span><span class="term-id">ch02-diag-four-parts</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ grep 'warning:' /tmp/w.txt</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">warn_zoo.c:9:9: warning: unused variable 'scratch' [-Wunused-variable]</span></span></pre></figure>
+<p>这一行里塞了四段信息，按顺序是：</p>
+<ol>
+<li><strong><code>warn_zoo.c</code></strong>：哪个文件。如果编译命令里写的是相对路径，这里就是相对路径；这就是为什么本书要求「在源文件所在的目录里编译」——报错里的文件名短、能直接对回你的文件。</li>
+<li><strong><code>9:9</code></strong>：<strong>行:列</strong>，都是从 1 数起。行是你在编辑器里按 <code>Ctrl+G</code> 能跳过去的地方；列是那一行的第几个字符。上面这条说的是「第 9 行的第 9 列」——去 <code>warn_zoo.c</code> 第 9 行看，那一列正好是 <code>scratch</code> 的第一个字母。</li>
+<li><strong><code>warning:</code></strong>：<strong>级别</strong>。三种口吻（1.5 见过前两种）：<code>error</code> 是「我拒绝继续翻译」，<code>warning</code> 是「我照做了，但我认为你有地方不对」，<code>note</code> 是「给上面那条的补充」。级别写在说明之前，是判断「编不编得下去」的唯一依据。</li>
+<li><strong><code>unused variable 'scratch'</code></strong>：说明。它是人话，但<strong>它不是稳定的接口</strong>：换一个编译器版本，同一句可能被改写、被拆成两句、或者消失。</li>
+</ol>
+<p>说明的末尾还挂着一对方括号，<strong>这一对方括号是全书最值得你留意的一处细节</strong>：</p>
+<section class="box box-syntax" data-box-type="syntax"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-braces" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.3 2.6c-1.5 0-1.7.8-1.7 1.7v2c0 .9-.4 1.5-1.4 1.7 1 .2 1.4.8 1.4 1.7v2c0 .9.2 1.7 1.7 1.7"/><path d="M9.7 2.6c1.5 0 1.7.8 1.7 1.7v2c0 .9.4 1.5 1.4 1.7-1 .2-1.4.8-1.4 1.7v2c0 .9-.2 1.7-1.7 1.7"/></svg></span><span class="box-kind">语法规则</span><span class="box-t">方括号里是「控制这条诊断的开关名」</span></header>
+<div class="box-b">
+<p><code>[-Wunused-variable]</code> 的意思是：这条警告由 <code>-Wunused-variable</code> 打开，也能用 <code>-Wno-unused-variable</code> 关掉。末尾带着 <code>=</code> 的（比如 <code>[-Wformat=]</code>）表示它属于一族开关，<code>-Wformat=2</code> 这种写法就是在给这一族指定档位。</p>
+</div>
+</section>
+<p>有了这个名字，你能做三件事：查手册（<code>gcc</code> 的手册里搜 <code>-Wunused-variable</code>，能读到它到底在什么条件下触发）；单独关掉它（<code>-Wno-unused-variable</code>）；以及在团队里精确地讨论「这条要不要开」。<strong>没有这对方括号，你只能对着一句英文猜。</strong></p>
+<p>书里有一条纪律要说在前面：<strong>本书的清单里不允许出现 <code>-Wno-*</code></strong>（构建脚本会直接拒掉，报 <code>flag_not_allowed</code>）。理由是：关掉一条警告不等于问题解决了，只是把眼睛闭上了；如果一条警告真的在某个场景下没意义，正确的做法是改写代码让它不再触发，或者用局部标注说明这一处是有意的——这两种做法都会在正文里留下痕迹，<code>-Wno-</code> 不会。</p>
+<p>还有一处容易看漏：诊断下面常常跟着<strong>出错那一行的源码</strong>，再下一行用 <code>^~~~~~</code> 把出错的位置指出来。行号、源码、插入符三样一起看，你就不会数错行、不会改错列。<code>note:</code> 那一行更贴心，gcc 经常把「该补的那行代码」都替你写好了（1.5 的 <code>noinclude.c</code> 就是这样）。</p>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h3">2.3 三道开关：-Wall、-Wextra、-Wpedantic 各管什么</h2>
+<p>新手的第一个误解是「<code>-Wall</code> 就是打开全部警告」。<strong>不是。</strong> <code>-Wall</code> 是一张手挑的名单，挑的是「几乎总是真问题」的那一类。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">「-Wall」里的 W 是 warnings，不是 war on all</span></header>
+<div class="box-b">
+<p><strong>你会看到什么</strong>：加了 <code>-Wall</code>，编译器还是对你代码里的隐式转换、变量遮蔽一言不发；于是你以为「编译器没意见 = 代码没问题」。</p>
+<p><strong>你会怎么误判</strong>：把「编译通过」当成「代码是对的」。</p>
+<p><strong>真相是</strong>：<code>-Wall</code> 只打开一份固定名单；<code>-Wextra</code> 再打开一份；还有一批开关（<code>-Wconversion</code>、<code>-Wshadow</code>、<code>-Wfloat-equal</code>、<code>-Wformat=2</code>…）<strong>要你自己加，两个都不含</strong>。而本书的基础参数里也<strong>没有</strong>它们——所以「在本书的参数下编译干净」不等于「这段代码没有隐患」。</p>
+</div>
+</section>
+<p>空口说「多」没用，我们让 gcc 自己报数。它会带一张自己的开关表，可以用 <code>-Q --help=warnings</code> 打出来；我们数一下每个档位下<strong>处于开启状态</strong>的开关有多少条：</p>
+<figure class="term term-session" data-id="ch02-switch-count" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">让 gcc 自己数：几个档位各开着多少条警告开关</span><span class="term-id">ch02-switch-count</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -Q --help=warnings 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">113</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ gcc -Q --help=warnings -Wall 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">171</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ gcc -Q --help=warnings -Wall -Wextra 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">191</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ gcc -Q --help=warnings -Wall -Wextra -Wconversion -Wshadow -Wfloat-equal -Wformat=2 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">201</span></span></pre></figure>
+<p>四个数字连起来读：<strong>什么都不加，就有 113 条开关是开着的</strong>（默认档不是「什么都不报」）；<code>-Wall</code> 把它抬到 171；<code>-Wextra</code> 到 191；再加三个加严开关才到 201。要留神的是，这张表只在「开关是怎么被设的」这一层说话，它<strong>不</strong>告诉你某条开关在你的代码上会不会报——那是代码的事（下面马上有例子）。所以查表只能当参考，<strong>最终判据永远是真跑一遍</strong>。</p>
+<p>那么这些开关落到具体代码上是几条诊断？拿这一单元的 <code>warn_zoo.c</code> 做同一件事的四步加严，每一步都真跑：</p>
+<figure class="viz" data-kind="graph" data-frames="4" data-viz-id="vz-2eb6121c">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 四步加严：同一份 warn_zoo.c 上被点亮的诊断条数</figcaption>
+<div class="viz-screen" role="group" aria-label="四步加严：同一份 warn_zoo.c 上被点亮的诊断条数：逐步演示">
+<input class="vs-radio" type="radio" name="vz-2eb6121c" id="vz-2eb6121c-1" checked>
+<input class="vs-radio" type="radio" name="vz-2eb6121c" id="vz-2eb6121c-2">
+<input class="vs-radio" type="radio" name="vz-2eb6121c" id="vz-2eb6121c-3">
+<input class="vs-radio" type="radio" name="vz-2eb6121c" id="vz-2eb6121c-4">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-2eb6121c-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-2eb6121c-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-2eb6121c-3">第 3 步</label>
+<label class="vs-tab" data-step="4" for="vz-2eb6121c-4">第 4 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：gcc -std=c17 -Wall -O0 -g warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 3</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">unused-variable / parentheses / format ：这一档能看见的三类</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">新冒出来两类 ：unused-parameter / sign-compare</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：… -Wconversion -Wshadow -Wformat=2 warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 7</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">新冒出来两类 ：shadow / float-conversion</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="4"><div class="viz-canvas" data-kind="graph" data-step="4"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：… 加严开关 -Werror warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">编译结果 ＝ 失败 ：同一份代码，退出码从 0 变成 1</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>只加 -Wall</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：gcc -std=c17 -Wall -O0 -g warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 3</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">unused-variable / parentheses / format ：这一档能看见的三类</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>补上 -Wextra 与 -Wpedantic</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">新冒出来两类 ：unused-parameter / sign-compare</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>再加三个加严开关</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：… -Wconversion -Wshadow -Wformat=2 warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">诊断条数 ＝ 7</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">新冒出来两类 ：shadow / float-conversion</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="4"><p class="viz-step"><span class="viz-step-no">第 4 步</span>最后追加 -Werror</p><div class="viz-canvas" data-kind="graph" data-step="4"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">命令行 ：… 加严开关 -Werror warn_zoo.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">编译结果 ＝ 失败 ：同一份代码，退出码从 0 变成 1</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>四个数字（3 → 5 → 7 → 编不过）都来自这一份文件，命令与输出在会话里：</p>
+<figure class="term term-session" data-id="ch02-ladder" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">同一份 warn_zoo.c：3 条 → 5 条 → 7 条</span><span class="term-id">ch02-ladder</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -O0 -g -fdiagnostics-color=never warn_zoo.c -o /tmp/x.exe 2&gt; /tmp/w.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ grep -c 'warning:' /tmp/w.txt</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">3</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never warn_zoo.c -o /tmp/x.exe 2&gt; /tmp/w.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ grep -c 'warning:' /tmp/w.txt</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">5</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Wconversion -Wshadow -Wformat=2 warn_zoo.c -o /tmp/x.exe 2&gt; /tmp/w.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="8"><span class="code">$ grep -c 'warning:' /tmp/w.txt</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">7</span></span></pre></figure>
+<p>按第 1 帧到第 4 帧的顺序读：第 2 帧的两条增量（<code>unused-parameter</code>、<code>sign-compare</code>）来自 <code>-Wextra</code>；第 3 帧的两条（<code>shadow</code>、<code>float-conversion</code>）来自我们自己加的加严开关；第 4 帧的 <code>-Werror</code> 不新增诊断，它只是让编译器<strong>把警告当成错误</strong>——所以同一份代码从「编过、运行、退出码 0」变成「编译失败、退出码 1」。</p>
+<p>现在把「干净」这件事摆到台面上。<code>extra_warnings.c</code> 这份文件在基础参数下一声不吭，加上三个加严开关才现原形：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/extra_warnings.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">extra_warnings.c：基础参数下 0 条警告</span><span class="cb-file">examples/ch01/extra_warnings.c</span><span class="cb-lines">第 1–22 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="22"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* extra_warnings.c：基础参数下一声不吭，加上加严开关才现原形。</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">   这份文件存在的意义就是那句话：「-O0 + -Wall 干净」不等于没问题。 */</span></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">unsigned</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">char</span><span class="tk" style="color:#24292E"> small </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">250</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> wide </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">300</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> d </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.5</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-empty" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    small </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> wide;</span><span class="tk" style="color:#6A737D">                    /* 隐式转换：int → unsigned char，值会变 */</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> d;</span><span class="tk" style="color:#6A737D">                           /* 隐式转换：double → int，小数被丢掉 */</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    {</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">;</span><span class="tk" style="color:#6A737D">                   /* 变量遮蔽：内层 x 挡住外层 x */</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"内层 x = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, x);</span></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (d </span><span class="tk" style="color:#D73A49">==</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.5</span><span class="tk" style="color:#24292E">) {</span><span class="tk" style="color:#6A737D">                  /* 浮点相等比较：-Wfloat-equal */</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"d 正好等于 2.5</span><span class="tk" style="color:#005CC5">\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"small=</span><span class="tk" style="color:#005CC5">%d</span><span class="tk" style="color:#032F62"> x=</span><span class="tk" style="color:#005CC5">%d</span><span class="tk" style="color:#032F62"> d=</span><span class="tk" style="color:#005CC5">%.1f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, small, x, d);</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<figure class="term term-session" data-id="ch02-strict-diff" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">同一份 extra_warnings.c：0 条 → 4 条</span><span class="term-id">ch02-strict-diff</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never extra_warnings.c -o /tmp/x.exe 2&gt; /tmp/base.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ grep -c 'warning:' /tmp/base.txt</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="6"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Wconversion -Wshadow -Wfloat-equal extra_warnings.c -o /tmp/x.exe 2&gt; /tmp/strict.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="9"><span class="code">$ grep -c 'warning:' /tmp/strict.txt</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">4</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="11"><span class="code">$ wc -l &lt; /tmp/strict.txt</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">16</span></span></pre></figure>
+<p>上面那段会话要连起来读：<strong>第一次编译退出码 0、stderr 里 0 条警告</strong>（<code>grep -c</code> 的输出就是 0）；第二次多了三个开关，<strong>退出码仍然是 0</strong>，但 stderr 里有 <strong>4 条 warning、16 行</strong>。这 4 条不会拦住你，却每一条都对应一个能真出事的行为：</p>
+<figure class="term term-output" data-id="extra-warnings-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">extra-warnings-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">内层 x = 2</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">d 正好等于 2.5</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">small=44 x=2 d=2.5</span></span></pre></figure>
+<p>程序自己跑了，输出看着挺正常——<code>small</code> 从 250 变成 44（300 截成 8 位），<code>x</code> 从 1 变成 2（<code>2.5</code> 的小数被丢掉），<code>d</code> 真的等于 2.5 所以那行也打印了。<strong>编译器的四条警告指的就是这几处</strong>，而程序一个错都没报。这就是那句要记住的话：<strong>警告在说「你写的代码在语义上滑了一下」，运行结果往往照样「正常」</strong>，正常到你看不出来。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：加严开关怎么加、加在哪</span></header>
+<div class="box-b">
+<p><code>-Wconversion</code>、<code>-Wshadow</code>、<code>-Wfloat-equal</code>、<code>-Wformat=2</code> 这一类，属于「打开会更啰嗦、但能挡住真问题」的开关。惯例做法是：</p>
+<ul>
+<li><strong>开发时全开</strong>：本地和持续集成里把它们一起加上，让问题在提交前就冒出来；</li>
+<li><strong>一次只加一个</strong>：老代码上一次性全开，你会得到几百条警告，然后就会习惯性忽略——那等于没开；一次加一个、修完再加下一个，才修得动；</li>
+<li><strong>别用 <code>-Wno-*</code> 换安静</strong>：关掉一条警告不等于问题解决了，只是把眼睛闭上了；真觉得某条警告没意义，正确做法是改代码让它不再触发，或者就地标注说明这一处是有意的——两种做法都会在正文里留下痕迹，<code>-Wno-</code> 不会（本书的清单也直接拒收这类参数）。</li>
+</ul>
+<p>代价是真实的：<code>-Wconversion</code> 在大量做整数运算、位操作的老代码上会非常吵，而大部分结果其实是安全的。<strong>这是惯例，不是标准</strong>——标准里没有「警告」的第二层，只有 2.1 里那句「至少给一条诊断」。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h4">2.4 六类高频警告：你会撞上的是这六种</h2>
+<p><code>warn_zoo.c</code> 是一份「故意的脏代码」：六类高频警告一次收齐，而且每一处的错都写在注释里。加严档下它一共 7 条 warning（<code>unused-parameter</code> 和 <code>unused-variable</code> 算同一类）：</p>
+<figure class="term term-session" data-id="ch02-zoo-list" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">warn_zoo.c 的七条警告（加严档，原文照抄）</span><span class="term-id">ch02-zoo-list</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ grep 'warning:' /tmp/w.txt</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">warn_zoo.c:9:9: warning: unused variable 'scratch' [-Wunused-variable]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">warn_zoo.c:7:28: warning: unused parameter 'unused_flag' [-Wunused-parameter]</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">warn_zoo.c:24:11: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">warn_zoo.c:29:9: warning: suggest parentheses around assignment used as truth value [-Wparentheses]</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">warn_zoo.c:35:13: warning: declaration of 'x' shadows a previous local [-Wshadow]</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">warn_zoo.c:40:32: warning: format '%d' expects argument of type 'int', but argument 2 has type 'double' [-Wformat=]</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">warn_zoo.c:43:9: warning: conversion from 'double' to 'int' may change value [-Wfloat-conversion]</span></span></pre></figure>
+<p>七条行号都在真源文件里，你可以逐条对回去。先看前两条的源码——它们在同一段里：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/warn_zoo.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/warn_zoo.c</span><span class="cb-lines">第 6–15 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="6" data-to="15"><span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* ① 参数没用上：-Wunused-parameter */</span></span></span>
+<span class="cl is-marked" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">sum_all</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">limit</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">unused_flag</span><span class="tk" style="color:#24292E">) {</span><span class="k-note">参数声明了没用</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-marked" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> scratch </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">99</span><span class="tk" style="color:#24292E">;</span><span class="tk" style="color:#6A737D">                /* ① 变量没用上：-Wunused-variable */</span><span class="k-note">变量定义了没用</span></span></span>
+<span class="cl is-empty" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> limit; i</span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        total </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> i;</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> total;</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">7</span>参数声明了没用</li><li><span class="cb-note-ln">9</span>变量定义了没用</li></ol></figure>
+<p><strong>① 未用变量与未用参数</strong>（<code>-Wunused-variable</code> / <code>-Wunused-parameter</code>）。它是六类里最像「唠叨」的一条，也是最不该忽略的一条。第 7 行的 <code>unused_flag</code> 是「函数签名留着、实现里没用」——常见于「为了和别处保持一致先占个位」；第 9 行的 <code>scratch</code> 更值得警惕：写它的人本来想拿它做点什么，后来忘了——<strong>一个定义了却没用的变量，往往是「本该写的那几行还没写」</strong>。1.5 里漏分号那个例子就是它的变体：因为语句没收尾，<code>total</code> 悬空了，于是多出一条「变量没用」。</p>
+<p>再看中段的两处，它们的共同点是「代码能跑，但意思不是你以为的那个意思」：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/warn_zoo.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/warn_zoo.c</span><span class="cb-lines">第 17–31 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="17" data-to="31"><span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">unsigned</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> len </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> n </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> ratio </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3.14</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">10</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-empty" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* ② 有符号与无符号比较：-Wsign-compare */</span></span></span>
+<span class="cl is-marked" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (n </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> len) {</span><span class="k-note">拿 int 和 unsigned 比大小</span></span></span>
+<span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"n &lt; len 成立</span><span class="tk" style="color:#005CC5">\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl is-empty" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* ③ 赋值与比较混淆：-Wparentheses */</span></span></span>
+<span class="cl is-marked" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">) {</span><span class="k-note">这是赋值，不是判断相等</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"x 现在是 </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, x);</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">24</span>拿 int 和 unsigned 比大小</li><li><span class="cb-note-ln">29</span>这是赋值，不是判断相等</li></ol></figure>
+<p><strong>② 有符号与无符号比较</strong>（<code>-Wsign-compare</code>）。第 24 行的 <code>n</code> 是 <code>-1</code>，<code>len</code> 是 <code>3u</code>。你可能觉得 <code>-1 &lt; 3</code> 当然成立——但比较之前，C 会把 <code>n</code> 转成 <code>unsigned int</code>，<code>-1</code> 于是变成一个非常大的正数，<code>n &lt; len</code> <strong>不成立</strong>。编译器的说法是 <code>comparison of integer expressions of different signedness</code>：两种符号性的整数放在一起比，出事的概率高到它决定提醒你。注意这一条要 <code>-Wextra</code> 才有：2.3 那张图的第 1 帧里就没有它。</p>
+<p><strong>③ 赋值与比较混淆</strong>（<code>-Wparentheses</code>）。第 29 行写的是 <code>if (x = 5)</code>，一个等号。它是<strong>合法</strong>的：先把 5 赋给 <code>x</code>，再判断 5 是不是非零——因为 5 非零，所以条件永远成立，里面的 <code>printf</code> 每次都执行。写这段的人本来想写 <code>x == 5</code>（判断 <code>x</code> 是不是 5）。编译器不拦你，因为它不能确定你是不是故意这么写的，它只说 <code>suggest parentheses around assignment used as truth value</code>：如果你想用赋值的结果当条件，那就加一层括号把意图写清楚。</p>
+<p>下一处更隐蔽——它在同一段代码里又声明了一个同名的变量：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/warn_zoo.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/warn_zoo.c</span><span class="cb-lines">第 33–37 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="33" data-to="37"><span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* ④ 变量遮蔽：-Wshadow，要自己加这个开关 */</span></span></span>
+<span class="cl" data-ln="34"><span class="ln" data-ln="34" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    {</span></span></span>
+<span class="cl is-marked" data-ln="35"><span class="ln" data-ln="35" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">;</span><span class="k-note">内层 x 挡住了外层</span></span></span>
+<span class="cl" data-ln="36"><span class="ln" data-ln="36" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"内层 x = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, x);</span></span></span>
+<span class="cl" data-ln="37"><span class="ln" data-ln="37" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">35</span>内层 x 挡住了外层</li></ol></figure>
+<p><strong>④ 变量遮蔽</strong>（<code>-Wshadow</code>）。第 35 行在内层花括号里又声明了一个 <code>x</code>。从这一行到那个花括号结束，内层的 <code>x</code> 把外层的 <code>x</code>（第 21 行）遮住了：你在这个块里写 <code>x = 7</code>，改的是内层那个，出了块就没了。这个坑最阴的地方是<strong>它不报错、行为也「合理」</strong>——只是你改的不是你以为的那个变量。它要自己加 <code>-Wshadow</code>，<code>-Wall</code>、<code>-Wextra</code> 都没有。</p>
+<p>最后两条在这段里：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/warn_zoo.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/warn_zoo.c</span><span class="cb-lines">第 39–44 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="39" data-to="44"><span class="cl" data-ln="39"><span class="ln" data-ln="39" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* ⑤ 格式串与参数类型不匹配：-Wformat */</span></span></span>
+<span class="cl is-marked" data-ln="40"><span class="ln" data-ln="40" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"ratio 当成整数打：</span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, ratio);</span><span class="k-note">用 %d 打 double</span></span></span>
+<span class="cl is-empty" data-ln="41"><span class="ln" data-ln="41" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="42"><span class="ln" data-ln="42" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* ⑥ 隐式转换：-Wconversion，要自己加这个开关 */</span></span></span>
+<span class="cl is-marked" data-ln="43"><span class="ln" data-ln="43" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> ratio;</span><span class="k-note">double 赋给 int</span></span></span>
+<span class="cl" data-ln="44"><span class="ln" data-ln="44" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"x = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, x);</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">40</span>用 %d 打 double</li><li><span class="cb-note-ln">43</span>double 赋给 int</li></ol></figure>
+<p><strong>⑤ 格式串与参数类型不匹配</strong>（<code>-Wformat</code>）。这一条<strong>不需要加严开关</strong>，<code>-Wall</code> 就管——因为 <code>printf</code> 的格式串是编译期能看懂的：第 40 行给了它 <code>%d</code>，而参数是个 <code>double</code>。这类错误的后果值得单独用一节看（2.4.1）。</p>
+<p><strong>⑥ 隐式转换</strong>（<code>-Wconversion</code> 及其子开关 <code>-Wfloat-conversion</code>）。第 43 行把一个 <code>double</code> 赋给 <code>int</code>，编译器按规则把小数部分丢掉（不是四舍五入）。<code>-Wconversion</code> 要自己加；这一条也被列进了加严名单的原因很简单：C 里到处都是隐式转换，而其中一小部分会悄悄改变值。</p>
+<p>这七条警告拦住了吗？没有。程序照样编过、照样跑，输出是这样的：</p>
+<figure class="term term-output" data-id="warn-zoo-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">warn-zoo-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">x 现在是 5</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">内层 x = 1</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">ratio 当成整数打：1374389535</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">x = 3</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">sum_all(4, 1) = 6</span></span></pre></figure>
+<p>请对着上面那三段源码读这五行：</p>
+<ul>
+<li>第一行 <code>x 现在是 5</code> 是<strong>第 ③ 类</strong>的现场——<code>if (x = 5)</code> 真的进了分支；</li>
+<li>第二行 <code>内层 x = 1</code> 是<strong>第 ④ 类</strong>的现场——打印的是内层那个 <code>x</code>；</li>
+<li>第三行 <code>ratio 当成整数打：1374389535</code> 是<strong>第 ⑤ 类</strong>的现场，也是本书正文里第一个「看着像乱码、其实有来历」的数字，下面单独说。</li>
+</ul>
+<h3 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h5">2.4.1 一个 double 用 %d 打出来，为什么会是这个数</h3>
+<p>先把这行单独请出来看（<code>warn_zoo.c</code> 与 <code>format_mismatch.c</code> 里各写了一处，数字一样）：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/format_mismatch.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/format_mismatch.c</span><span class="cb-lines">第 1–11 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="11"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* format_mismatch.c：格式串与参数类型不匹配。</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">   编译器警告会告诉你哪里错，程序照样跑——跑出来的数字看着像乱码。 */</span></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> price </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3.14</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-empty" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-marked" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"用 </span><span class="tk" style="color:#005CC5">%%</span><span class="tk" style="color:#032F62">f 打 price：</span><span class="tk" style="color:#005CC5">%f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, price);</span><span class="k-note">正确：double 配 %f</span></span></span>
+<span class="cl is-marked" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"用 </span><span class="tk" style="color:#005CC5">%%</span><span class="tk" style="color:#032F62">d 打 price：</span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, price);</span><span class="k-note">故意错：double 配 %d</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">8</span>正确：double 配 %f</li><li><span class="cb-note-ln">9</span>故意错：double 配 %d</li></ol></figure>
+<figure class="term term-output" data-id="format-mismatch-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">format-mismatch-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">用 %f 打 price：3.140000</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">用 %d 打 price：1374389535</span></span></pre></figure>
+<p><code>1374389535</code> 不是随机数，它<strong>每一次运行都是这个值</strong>（这两行输出由流水线逐字对账，对不上就报 <code>stale_output</code>）。它是什么？把 <code>3.14</code> 按双精度浮点放进内存，八个字节是 <code>1f 85 eb 51 b8 1e 09 40</code>；取低四位字节 <code>51 eb 85 1f</code>，按小端读出来就是十进制的 <strong>1374389535</strong>。换句话说，<code>%d</code> 读到的不是「那个数」，而是<strong>那个 double 机器码的低 32 位</strong>。</p>
+<section class="box box-standard" data-box-type="standard"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-openBook" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4.2C7 3.3 5.6 3 4 3v9.2c1.6 0 3 .3 4 1.2 1-.9 2.4-1.2 4-1.2V3c-1.6 0-3 .3-4 1.2z"/><path d="M8 4.2v9.2"/></svg></span><span class="box-kind">标准原文</span><span class="box-t">标准原文：格式串对不上，行为是未定义的</span></header>
+<div class="box-b">
+<p>C 标准在 <code>fprintf</code> 那一节里写得很干脆：</p>
+<blockquote>
+<p>If any argument is not the correct type for the corresponding conversion specification, the behavior is undefined.</p>
+</blockquote>
+<p>大意：<strong>只要某个参数的类型和它对应的转换说明对不上，行为就是未定义的</strong>。注意它没有说「会打印垃圾」——未定义的意思是<strong>标准对此不作任何承诺</strong>：换一台机器、换一个编译器，打印什么都有可能。</p>
+<p>出处：ISO/IEC 9899:2018（C17）§7.21.6.1 第 9 段。</p>
+</div>
+</section>
+<p>那为什么本机每次都打到同一个值？因为<strong>这台机器的调用约定</strong>替我们定死了这件事：在 Windows x86-64 上，可变参数函数里的浮点参数会被<strong>同时抄一份</strong>到对应的整数寄存器里；<code>%d</code> 按整数去找，正好找到了那份副本的低 32 位。这个解释只对<strong>这个平台</strong>成立——它不是语言保证，是实现的巧合。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">「这次打出来是 1374389535，那我改代码时它还会是这个数吧」</span></header>
+<div class="box-b">
+<p><strong>你会看到什么</strong>：改一改上面的代码，数字跟着变；不改代码，数字稳定复现。</p>
+<p><strong>你会怎么误判</strong>：把它当成一个「有定义的行为」，甚至拿它去写测试、去推断程序逻辑。</p>
+<p><strong>真相是</strong>：标准说这是未定义行为。今天你看到 1374389535，是因为寄存器里恰好躺着那个 double 的副本；把 <code>-O2</code> 打开、把参数顺序换一下、把 <code>printf</code> 换成 <code>fprintf</code>，它就可能变成另一个数甚至直接崩掉。<strong>见到这类「稳定复现的怪值」，要做的不是记下它，而是回到格式串去改它。</strong></p>
+</div>
+</section>
+<p>（<code>warn_zoo.c</code> 那份文件里还有第 ⑥ 类的现场：<code>x = ratio;</code> 之后 <code>x</code> 是 3，小数没有四舍五入——这一条留给你自己去看。）</p>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h6">2.5 一串诊断先改第一条</h2>
+<p>到这里你大概已经发现：一次编译往往不止给你一条诊断。那就得有个读法。<code>diag_chain.c</code> 只错了一个字符——第 6 行末尾少了一个分号：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/diag_chain.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/diag_chain.c</span><span class="cb-lines">第 3–11 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="3" data-to="11"><span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl is-marked" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="k-note">这一行末尾少了一个分号</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> count </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> average </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> (total </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> count) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"average = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, average);</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">6</span>这一行末尾少了一个分号</li></ol></figure>
+<p>一个字符的错，编译器给了三条诊断：</p>
+<figure class="term term-diagnostic" data-id="diag-chain-diag" data-lang="compile-error"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-errorFile" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 2.6h5.4L12 5.2v8.2H4z"/><path d="M6.6 7.8l2.8 2.8M9.4 7.8l-2.8 2.8"/></svg></span><span class="term-kind">编译诊断</span><span class="term-title">gcc 的真实诊断（原文照抄）</span><span class="term-id">diag-chain-diag</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">diag_chain.c: In function 'main':</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">diag_chain.c:7:5: error: expected ',' or ';' before 'int'</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">    7 |     int count = 3;</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">      |     ^~~</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">diag_chain.c:8:28: error: 'count' undeclared (first use in this function)</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">    8 |     int average = (total + count) / 2;</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">      |                            ^~~~~</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">diag_chain.c:8:28: note: each undeclared identifier is reported only once for each function it appears in</span></span></pre></figure>
+<p>按 2.2 的四段读法拆开：</p>
+<ul>
+<li><strong>第 1 条</strong> <code>error</code> 报在 <code>diag_chain.c:7:5</code>，说的是 <code>expected ',' or ';' before 'int'</code>——「在第 7 行这个 <code>int</code> 前面，我期待一个逗号或分号」。注意：<strong>要改的是第 6 行的末尾</strong>。为什么报在第 7 行？因为编译器只有读到第 7 行的 <code>int</code>，才能确定第 6 行那条语句还没收尾。这个「报错行号比真正的错误晚一行」的现象，1.5 的 <code>semicolon.c</code> 里见过一次，这里是它的第二次出现。</li>
+<li><strong>第 2 条</strong> <code>error</code> 报在 <code>diag_chain.c:8:28</code>，<code>'count' undeclared (first use in this function)</code>——「<code>count</code> 没有声明」。可是第 7 行明明写了 <code>int count = 3;</code>。原因是第 7 行自己也没被解析成一条完整语句，于是 <code>count</code> 这个名字<strong>没有被承认</strong>，第 8 行用它的地方就报「没声明」。</li>
+<li><strong>第 3 条</strong> <code>note</code> 是给第 2 条的补充：<code>each undeclared identifier is reported only once for each function it appears in</code>——「同一个没声明的名字，在一个函数里我只报一次」。这是编译器在告诉你<strong>别指望后面的重复错误</strong>，也是它劝你「先修上面那条」。</li>
+</ul>
+<p>三条诊断里只有第一条是真错误，第二、三条都是它的<strong>下游</strong>。所以有一条读法要背下来：<strong>先只改第一条，重编，再看剩下的还在不在。</strong> 一次全改会让你分不清哪条诊断是哪个改动带来的；而很多时候，改完第一条，后面几条自己就消失了。这条规则在 1.5 里已经用过一次（漏分号时那条「变量没用」的警告），这一节是它更清楚的版本。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">「一屏二十条错误，我从第一条一口气改到底」</span></header>
+<div class="box-b">
+<p><strong>你会看到什么</strong>：几十条 <code>error</code> 刷满屏幕，第一条和第二条看起来毫无关系。</p>
+<p><strong>你会怎么误判</strong>：以为代码有几十个毛病，一边改一边怀疑自己的水平。</p>
+<p><strong>真相是</strong>：绝大多数情况下，<strong>真错误只有一两条</strong>，剩下的全是它们的下游——一个漏掉的分号可以让编译器整段看不懂，于是「每一样东西都不认识」。做法永远是：改第一条 → 重新编译 → 看条数掉到几条 → 再改新的第一条。上面那个例子里，补上第 6 行末尾的分号，三条诊断一起消失。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h7">2.6 编译期、链接期、运行期：三份输出归谁管</h2>
+<p>1.3 里我们把「四步」讲了一遍（预处理、编译、汇编、链接）。诊断层面只需要记住一条更粗的分界线：<strong>编译期一件事、链接期一件事、运行期又一件事</strong>，而且它们的失败长得完全不一样。</p>
+<p>先看一个只有声明、没有实现体的函数。<code>undef_ref.c</code> 故意调用了一个「住在别处」的函数，而那个别处——我们<strong>没有把它列进命令</strong>：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/undef_ref.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/undef_ref.c</span><span class="cb-lines">第 4–11 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="4" data-to="11"><span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-marked" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">extern</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">helper_add</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">a</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">b</span><span class="tk" style="color:#24292E">);</span><span class="tk" style="color:#6A737D">   /* 声明在，实现体不在 */</span><span class="k-note">声明在，实现体不在</span></span></span>
+<span class="cl is-empty" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"sum = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">helper_add</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">));</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">6</span>声明在，实现体不在</li></ol></figure>
+<p>先只编译、不链接（<code>-c</code> 的含义 2.7 讲）：</p>
+<figure class="term term-session" data-id="ch02-undef-compile-ok" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">-c 只做编译：退出码 0，还产出了目标文件</span><span class="term-id">ch02-undef-compile-ok</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -c undef_ref.c -o /tmp/undef_ref.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ ls -l /tmp/undef_ref.o</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">-rw-r--r-- 1 Administrator 197121 2632 Oct 19 16:50 /tmp/undef_ref.o</span></span></pre></figure>
+<p><strong>编译期一次错都没报，退出码 0。</strong> 为什么？因为编译期只对<strong>一个源文件</strong>负责：它看见了 <code>extern int helper_add(int a, int b);</code> 这行声明，于是知道「这个名字存在，参数是两个 int，返回值是 int」，调用它合法。至于这个名字后面到底有没有人实现——编译期不管，那是链接期的事。</p>
+<p>现在把链接也做了，也就是不给 <code>-c</code>、直接出可执行文件。这一次编译器交给你三行：</p>
+<figure class="term term-diagnostic" data-id="undef-ref-diag" data-lang="compile-error"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-errorFile" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 2.6h5.4L12 5.2v8.2H4z"/><path d="M6.6 7.8l2.8 2.8M9.4 7.8l-2.8 2.8"/></svg></span><span class="term-kind">编译诊断</span><span class="term-title">gcc 的真实诊断（原文照抄）</span><span class="term-id">undef-ref-diag</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">C:/msys64/ucrt64/bin/../lib/gcc/x86_64-w64-mingw32/16.1.0/../../../../x86_64-w64-mingw32/bin/ld.exe: C:\Users\Administrator\Documents\Study\dev-notes\dist\work\ch01-undef-ref\ch01-undef-ref-undef_ref.o: in function `main':</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">C:/Users/Administrator/Documents/Study/dev-notes/books/c/examples/ch01/undef_ref.c:9:(.text+0x18): undefined reference to `helper_add'</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">collect2.exe: error: ld returned 1 exit status</span></span></pre></figure>
+<p>三行各说一件事：</p>
+<ol>
+<li><strong>第一行</strong>：<code>ld.exe</code> 是链接器，它说问题出在某个目标文件里。留意那个 <code>.o</code> 的名字 <code>ch01-undef-ref-undef_ref.o</code>——<strong>它不是随机临时名</strong>，这是目标文件被钉在产物目录里的结果（下面那个惯例块解释为什么）。</li>
+<li><strong>第二行</strong>：真正有用的一句。<code>undef_ref.c:9:</code> 指出源文件第 9 行，<code>undefined reference to 'helper_add'</code> 指出缺的名字是 <code>helper_add</code>。<strong><code>undefined reference to</code> 是链接期错误的招牌。</strong></li>
+<li><strong>第三行</strong>：<code>collect2.exe</code> 是 gcc 用来调链接器的那层壳，它只转述「链接器失败了，退出码 1」。</li>
+</ol>
+<p>跟编译期的诊断比一比：链接期<strong>没有列号、没有插入符、也没有把源码那行抄给你</strong>——因为它手里只有名字，没有源码（也就是下面那张表的分工）。但它给了编译期给不了的东西：<strong>名字</strong>。所以排查有一条快路：<strong>先看 <code>undefined reference to</code> 后面那个名字，再回到命令看哪个源文件没被列进去。</strong></p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：为了让诊断可复现，把临时文件名钉住</span></header>
+<div class="box-b">
+<p>默认情况下，gcc 把编译出的目标文件放进临时目录，名字是随机的（<code>ccKC1gS4.o</code> 这种）。链接失败时 ld 会把这个名字写进第一行——于是同一条错误，每次跑出来的<strong>字节都不一样</strong>。本书正文的诊断要逐字对账，所以这个例子的清单里加了 <code>-save-temps</code>：它让中间产物落到<strong>由产物名推出来的固定名字</strong>上（这里是 <code>ch01-undef-ref-undef_ref.o</code>），诊断才稳定。</p>
+<p>代价有两个：产物目录里会多出 <code>.i</code> / <code>.s</code> / <code>.o</code> 几个文件；诊断里会出现一长串绝对路径（上面第一行那个长度就是）。这是「可复现」换来的，<strong>不是标准的规矩</strong>——标准压根不管诊断怎么排版。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">同一个链接错误，可能是三行，也可能只剩一行</span></header>
+<div class="box-b">
+<p><strong>你会看到什么</strong>：在某些终端里，同一份代码、同一条命令，只得到一行 <code>collect2.exe: error: ld returned 5 exit status</code>——没有 <code>undefined reference</code>、没有文件名，连个列号都没有。</p>
+<p><strong>你会怎么误判</strong>：以为「本机的链接错误就这么短、这么没用」，于是放弃从诊断里找线索，直接开始瞎改代码。</p>
+<p><strong>真相是</strong>：那<strong>不是链接器想说的话，是它的话被环境吞了</strong>。我在同一台机器上实测过两种环境：默认 PATH 下只剩一行、<code>ld returned 5</code>；把 PATH 清成只剩 MSYS2 的几个目录（<code>/c/msys64/ucrt64/bin:/c/msys64/usr/bin:/c/Windows/System32</code>）再跑，就变成上面那三行、<code>ld returned 1</code>。同一个 gcc、同一个 <code>ld.exe</code>——连单独跑一句 <code>ld --version</code>，默认 PATH 下也会丢掉第一行（4 行 vs 5 行）。差别只在环境变量；具体是哪个 DLL 在捣乱我没有继续追，但<strong>现象是可复现的</strong>。</p>
+<p><strong>怎么办</strong>：看到只有 collect2 那一行时，换一个干净终端再编一次，别把「诊断短」当成「没有线索」。</p>
+</div>
+</section>
+<p>那次对照的原文在这里，三件事实一眼就能对上（先记下默认 PATH 的样子，再把 PATH 清掉重跑）：</p>
+<figure class="term term-session" data-id="ch02-link-shape" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">同一个链接错误：一行 vs 三行，同一个 ld</span><span class="term-id">ch02-link-shape</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ echo $PATH | cut -d: -f1-3</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">/c/Users/Administrator/bin:/mingw64/bin:/usr/local/bin</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ /c/msys64/ucrt64/x86_64-w64-mingw32/bin/ld.exe --version | wc -l</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">4</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never undef_ref.c -o /tmp/shape1.exe 2&gt;&amp;1 | tail -1</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">collect2.exe: error: ld returned 5 exit status</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ export PATH=/c/msys64/ucrt64/bin:/c/msys64/usr/bin:/c/Windows/System32</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="8"><span class="code">$ /c/msys64/ucrt64/x86_64-w64-mingw32/bin/ld.exe --version | wc -l</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">5</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="10"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never undef_ref.c -o /tmp/shape2.exe 2&gt;&amp;1 | tail -1</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">collect2.exe: error: ld returned 1 exit status</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="12"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never undef_ref.c -o /tmp/shape3.exe 2&gt;&amp;1 | grep -c "undefined reference"</span></span>
+<span class="cl is-text is-term" data-ln="13"><span class="code">1</span></span></pre></figure>
+<p>补上缺的那个源文件，一条命令编两个文件就通过了：</p>
+<figure class="term term-session" data-id="ch02-two-files" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">补上缺的那个源文件：一条命令编两个 .c</span><span class="term-id">ch02-two-files</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ printf 'int helper_add(int a, int b) { return a + b; }\n' &gt; /tmp/helper_add.c</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ cat /tmp/helper_add.c</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">int helper_add(int a, int b) { return a + b; }</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never undef_ref.c /tmp/helper_add.c -o /tmp/undef_ok.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ /tmp/undef_ok.exe</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">sum = 5</span></span></pre></figure>
+<p>（那个 <code>helper_add.c</code> 是拿来补位的——它不属于这本书的任何例子，所以只放在临时目录里演一遍；<strong>命令的形状才是重点</strong>：<code>gcc … 源文件1.c 源文件2.c -o 程序</code>。）</p>
+<p>把三个期摆在一起，你就能回答「报错了该看哪份输出」：</p>
+<table>
+<thead>
+<tr>
+<th>期</th>
+<th>谁在干活</th>
+<th>它看得见什么</th>
+<th>失败时长什么样</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>编译期</td>
+<td>编译器，一次一个源文件</td>
+<td>这份文件 + 它 <code>#include</code> 进来的声明</td>
+<td><code>文件:行:列: error: …</code>，有插入符、有源文件那行</td>
+</tr>
+<tr>
+<td>链接期</td>
+<td>链接器，看所有 <code>.o</code> 加库</td>
+<td>只有<strong>名字</strong>，没有源码</td>
+<td><code>undefined reference to 'xxx'</code> + <code>collect2.exe: error: ld returned 1 exit status</code>；没有列号与插入符</td>
+</tr>
+<tr>
+<td>运行期</td>
+<td>程序自己</td>
+<td>真数据</td>
+<td>打印出离谱的值、或者进程突然结束、或者退出码不是 0</td>
+</tr>
+</tbody>
+</table>
+<p>运行期的样子，这一单元已经出现过一次：<code>format_security.c</code> 把用户给的字符串当格式串用，<strong>同一个输入跑两次，给出两组不同的数字</strong>——</p>
+<figure class="term term-session" data-id="ch02-run-phase" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">运行期：同一个命令跑两次，结果不一样</span><span class="term-id">ch02-run-phase</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ /tmp/fs.exe "%d %d %d"</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">6953296 6969872 6931280</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ /tmp/fs.exe "%d %d %d"</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">7805648 7821840 7783248</span></span></pre></figure>
+<p>这段会话就是「运行期」这一课的核心：<strong>编译器没为这个缺陷说一句话</strong>（它唯一的提醒是「参数没用上」，跟这个漏洞无关），程序退出码 0，而输出的数字每次都不一样。谁该为它负责？标准说这是未定义行为（§7.21.6.1 第 9 段，2.4.1 引过）：<strong>格式串配上不合适的参数，行为没有任何保证</strong>。运行期的错误不需要编译器批准，它只看你喂进去什么。</p>
+<p><code>format_security.c</code> 的源码值得看一眼——它就长在你的命令行输入和 <code>printf</code> 之间：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/format_security.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/format_security.c</span><span class="cb-lines">第 6–15 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="6" data-to="15"><span class="cl is-marked" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">argc</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">char</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">argv</span><span class="tk" style="color:#D73A49">[]</span><span class="tk" style="color:#24292E">) {</span><span class="k-note">argc 没用上，加严档会报</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#E36209">argv</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">==</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">NULL</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"用法：format_security.exe &lt;要打印的文字&gt;</span><span class="tk" style="color:#005CC5">\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl is-empty" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-marked" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#E36209">argv</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">]);</span><span class="tk" style="color:#6A737D">                 /* 危险：格式串来自命令行 */</span><span class="k-note">用户给的字符串直接当格式串</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#005CC5">\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">6</span>argc 没用上，加严档会报</li><li><span class="cb-note-ln">12</span>用户给的字符串直接当格式串</li></ol></figure>
+<figure class="term term-output" data-id="format-security-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">format-security-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">hello from argv[1]</span></span></pre></figure>
+<p>按清单里的约定，这个例子跑的时候带了一个参数（<code>hello from argv[1]</code>），输出就是它。而上面的危险输入是我在终端里手工喂给它的——<strong>同一份程序，正常输入看着人畜无害，一个 <code>%</code> 就把它变成了未定义行为</strong>。这就是「格式串漏洞」这个说法的来历：你以为是数据的东西，被当成了指令。</p>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h8">2.7 <code>-c</code> 与一条命令：本机没有 make</h2>
+<p><code>stages_c.c</code> 是一个再普通不过的小程序：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/stages_c.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">stages_c.c：用来对照两种编法</span><span class="cb-file">examples/ch01/stages_c.c</span><span class="cb-lines">第 1–11 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="11"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* stages_c.c：用来对照「-c 两步走」与「一条命令」两种编法。 */</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">add</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">a</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">b</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> a </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> b;</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span>
+<span class="cl is-empty" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"add(2, 3) = </span><span class="tk" style="color:#005CC5">%d\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">add</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">));</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<figure class="term term-output" data-id="stages-c-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">stages-c-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">add(2, 3) = 5</span></span></pre></figure>
+<p>它有两种编法，产物不一样：</p>
+<figure class="term term-session" data-id="ch02-c-vs-link" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">-c 只出 .o，链接以后才出 .exe</span><span class="term-id">ch02-c-vs-link</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -c stages_c.c -o /tmp/stages_c.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ ls -l /tmp/stages_c.o</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">-rw-r--r-- 1 Administrator 197121 2813 Oct 19 16:50 /tmp/stages_c.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ gcc /tmp/stages_c.o -o /tmp/stages_c.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ ls -l /tmp/stages_c.exe</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">-rwxr-xr-x 1 Administrator 197121 135094 Oct 19 16:50 /tmp/stages_c.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="7"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never stages_c.c -o /tmp/stages_c-one.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="8"><span class="code">$ ls -l /tmp/stages_c-one.exe</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">-rwxr-xr-x 1 Administrator 197121 135094 Oct 19 16:50 /tmp/stages_c-one.exe</span></span></pre></figure>
+<p>三个数字要连起来读：目标文件 <code>stages_c.o</code> 是 <strong>2813 字节</strong>，链接之后的可执行文件是 <strong>135094 字节</strong>——<strong>是它的约 48 倍</strong>（135094 ÷ 2813 = 48.02），多出来的全是从运行库里接进来的东西（<code>printf</code> 的实现体就在里面，1.4 讲过这件事）。而最后一条命令不带 <code>-c</code>、直接出可执行文件，产物大小是 <strong>135094 字节</strong>，和「先 <code>-c</code> 再链接」的结果<strong>一模一样</strong>。所以：</p>
+<ul>
+<li><code>-c</code> = <strong>只编译不链接</strong>，产出 <code>.o</code>；<code>-o</code> 决定产物叫什么、放哪（不写 <code>-o</code>，默认在当前目录产出 <code>a.exe</code>，很容易找不到）；</li>
+<li>不带 <code>-c</code> = 编译 + 汇编 + <strong>链接</strong>一条龙，产出可执行文件；</li>
+<li>两条路殊途同归，<code>-c</code> 只是把中间那一步的产物<strong>留下来了</strong>。什么时候要留？改了一个文件只重编它自己、或者想把别人给的 <code>.o</code> 和你的 <code>.o</code> 拼在一起的时候——就是下面这种：</li>
+</ul>
+<figure class="term term-session" data-id="ch02-two-objects" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">两个 .o 拼成一个程序</span><span class="term-id">ch02-two-objects</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -c /tmp/helper_add.c -o /tmp/helper_add.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ gcc /tmp/undef_ref.o /tmp/helper_add.o -o /tmp/undef_ok2.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ /tmp/undef_ok2.exe</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">sum = 5</span></span></pre></figure>
+<p><strong>一条命令可以列多个源文件，也可以列多个目标文件。</strong> 这就是本机（没有 make、没有 cmake）编多文件工程的唯一办法：把源文件全列在命令里。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：为什么本机给「一条命令」而不是构建脚本</span></header>
+<div class="box-b">
+<p>主流工程会用 <code>make</code> / <code>cmake</code> / <code>ninja</code> 把「哪些文件该重编」这件事算出来，你只敲一句 <code>make</code>。这套书<strong>不用它们</strong>，原因有两个：本机没装（真的没有，不是不想用）；而且在第 1 章就上构建工具，你会先学会敲 <code>make</code>、后知道 <code>make</code> 底下在干什么——顺序反了。</p>
+<p>代价是真实的：项目一大，命令会变得很长，而且<strong>改一个头文件要重编所有包含它的文件</strong>这件事得你自己记得。第 17 单元会补上这一课：多文件工程怎么摆、头文件里写什么、以及为什么「一条命令列全部源文件」很快就撑不住。</p>
+</div>
+</section>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用大白话说这三条命令</span></header>
+<div class="box-b">
+<ul>
+<li><code>-c</code>：把 <code>.c</code> 翻成机器码，<strong>装进一个盒子（<code>.o</code>）就不管了</strong>。盒子上贴着「我引用了这些名字，但它们的地址还不知道」；</li>
+<li>不带 <code>-c</code>：翻完机器码之后，<strong>再找一个叫链接器的搬运工</strong>，把所有盒子里的「不知道的地址」一个个填上，填不上就报错——2.6 里那一行 <code>collect2.exe</code> 就是搬运工在喊；</li>
+<li><code>-o</code>：给产物起名。你不写，它自己起名 <code>a.exe</code>，然后你就得满硬盘找它。</li>
+</ul>
+<p>一句话：<strong><code>-c</code> 管「翻译一个文件」，链接管「把文件凑成一个程序」。</strong> 2.4 里 <code>printf</code> 能从 <code>stdio.h</code> 的声明走到运行库的实现体，走的就是链接这一步。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h9">2.8 <code>-O0</code> 与 <code>-g</code>：为什么本书默认不做优化</h2>
+<p>本书的参数里有两个看起来「无用」的开关：<code>-O0</code>（不做优化）和 <code>-g</code>（带上调试信息）。它们不是可选项，是这门课能不能学下去的前提。我们用调试器看同一份 <code>stages_c.c</code> 的两种编译结果——<code>-O0 -g</code> 和 <code>-O2 -g</code>：</p>
+<figure class="term term-session" data-id="ch02-gdb-o0" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">-O0：断点停住了，参数看得见，调用链完整</span><span class="term-id">ch02-gdb-o0</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never stages_c.c -o /tmp/stages-O0.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -O2 stages_c.c -o /tmp/stages-O2.exe</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ gdb --batch -ex "break add" -ex run -ex "info args" -ex bt /tmp/stages-O0.exe 2&gt;&amp;1</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">Breakpoint 1 at 0x1400014ba: file stages_c.c, line 5.</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">[New Thread 88152.0x141e0]</span></span>
+
+<span class="cl is-text is-term" data-ln="7"><span class="code">Thread 1 hit Breakpoint 1, add (a=2, b=3) at stages_c.c:5</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">5	    return a + b;</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">a = 2</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">b = 3</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">#0  add (a=2, b=3) at stages_c.c:5</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">#1  0x00007ff63e3114e0 in main () at stages_c.c:9</span></span></pre></figure>
+<figure class="term term-session" data-id="ch02-gdb-o2" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">-O2：断点根本没停，栈是空的</span><span class="term-id">ch02-gdb-o2</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gdb --batch -ex "break add" -ex run -ex "info args" -ex bt /tmp/stages-O2.exe 2&gt;&amp;1</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">Breakpoint 1 at 0x1400014b0: file stages_c.c, line 5.</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">[New Thread 67672.0x1542c]</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">add(2, 3) = 5</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">[Thread 67672.0x1542c exited with code 0]</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">[Inferior 1 (process 67672) exited normally]</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">No frame selected.</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">No stack.</span></span></pre></figure>
+<p>（第一块开头那两条 <code>gcc</code> 命令是连着敲的：先出 <code>-O0</code> 那份、再出 <code>-O2</code> 那份；两块 gdb 输出分别对应它们。）</p>
+<p>两块对着读，差别一目了然：</p>
+<ul>
+<li><code>-O0 -g</code>：gdb 停住了，<code>a = 2</code>、<code>b = 3</code> 都看得见，<code>bt</code> 打出 <code>#0 add … line 5</code> 和 <code>#1 … in main () at stages_c.c:9</code>——<strong>行号和你源文件里的行号一一对应</strong>，调用链完整。</li>
+<li><code>-O2 -g</code>：程序自己把 <code>add(2, 3) = 5</code> 打印完就正常退出了，<code>break add</code> <strong>一次都没停</strong>，<code>bt</code> 说 <code>No frame selected. / No stack.</code>。原因是 <code>-O2</code> 把 <code>add</code> 内联进了 <code>main</code>——函数还在，但<strong>不再是一个可以停下来的地方</strong>了。</li>
+</ul>
+<p>「内联」这件事不需要猜，看汇编就知道。同一份 <code>stages_c.c</code> 用 <code>-S</code> 只生成汇编，再数一数有没有 <code>call add</code>：</p>
+<figure class="term term-session" data-id="ch02-inline-proof" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">汇编里数一数：-O0 有一次 call add，-O2 一次都没有</span><span class="term-id">ch02-inline-proof</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -O0 -S stages_c.c -o /tmp/s0.s</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ grep -c 'call.*add' /tmp/s0.s</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">1</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ gcc -std=c17 -O2 -S stages_c.c -o /tmp/s2.s</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="5"><span class="code">$ grep -c 'call.*add' /tmp/s2.s</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">0</span></span></pre></figure>
+<p><code>-O0</code> 的汇编里有 <strong>1</strong> 次 <code>call add</code>，<code>-O2</code> 的是 <strong>0</strong> 次：<code>add</code> 的函数体还在（所以 gdb 还能在它上面下断点），但 <code>main</code> 已经不调用它了——加法的两条指令被直接搬进了 <code>main</code>。断点停不住，不是 gdb 坏了，是<strong>程序里已经没有那次调用了</strong>。</p>
+<p>这就是 <code>-O0</code> 与 <code>-g</code> 的价值，说清楚它们的边界：</p>
+<ul>
+<li><strong><code>-g</code></strong> 让编译器把「哪条机器码对应源文件哪一行、哪个变量住在哪」写进目标文件。没有它，gdb 只能给你一串地址。</li>
+<li><strong><code>-O0</code></strong> 让编译器<strong>照着你的写法生成代码</strong>：不内联、不把变量塞进寄存器、不删掉「显然没用」的语句。所以断点停得住、<code>info args</code> 有值、行号能对上。</li>
+<li>代价是真实的：<code>-O0</code> 跑得慢、汇编长、有些优化相关的分析不做。本书接受这个代价，因为<strong>这一阶段你要看的是「程序在按你写的样子走」</strong>。</li>
+</ul>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：什么时候用什么档</span></header>
+<div class="box-b">
+<p>标准里没有 <code>-O</code> 这个概念，它纯粹是编译器开关。惯例是：<strong>发布</strong>用 <code>-O2</code>、不带 <code>-g</code>（快、体积小）；<strong>要读诊断、要单步调试</strong>时用 <code>-O0 -g</code>。<code>-O2 -g</code> 也能同时存在，只是行号和变量不一定对得上（上面第二块就是活证据）。所以本书把 <code>-O0 -g</code> 定成默认，把 <code>-O2</code> 留作对照实验。</p>
+</div>
+</section>
+<h3 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h10">2.8.1 有些警告只在开优化时才出现</h3>
+<p><code>-O0</code> 有一个不显眼的副作用：<strong>一部分警告根本不会触发</strong>，因为它们要靠优化阶段的数据流分析才看得见。所以「<code>-O0</code> + <code>-Wall</code> 编得干净」这句话<strong>不能</strong>推广成「这段代码没问题」——2.3 讲的是「加严开关」那一半（开关不开，诊断不出现），这一节讲「优化等级」那一半（优化不开，分析看不见）。</p>
+<p>先看一个让人泄气的现象：gcc 那张开关表<strong>看不出</strong>这件事。同一份表，<code>-O0</code> 和 <code>-O2</code> 数出来一样多：</p>
+<figure class="term term-session" data-id="ch02-opt-table" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">开关表在 -O0 与 -O2 下报一样的数</span><span class="term-id">ch02-opt-table</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -Q --help=warnings -O0 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">113</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ gcc -Q --help=warnings -O2 2&gt; /dev/null | grep -c '\[enabled\]'</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">113</span></span></pre></figure>
+<p>两个 113 说明：<strong>优化等级不体现在这张表里</strong>，它改变的是「编译器分析得多深」，不是「哪些开关被打开」。所以这类差异只能靠真跑。跑的结果很直接——同一份 <code>analyzer_demo.c</code>（一个真实的栈越界，样板间里出现过），<code>-O0</code> 和 <code>-O2</code> 给的<strong>不是同一条</strong>诊断：</p>
+<figure class="term term-session" data-id="ch02-opt-diff" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">同一份越界代码：-O0 报一条，-O2 报另一条</span><span class="term-id">ch02-opt-diff</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never analyzer_demo.c -o /tmp/ad0.exe 2&gt;&amp;1 | grep "warning:" | sed "s/.*warning: //"</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">'__builtin_memcpy' writing 11 bytes into a region of size 8 overflows the destination [-Wstringop-overflow=]</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O2 -g -fdiagnostics-color=never analyzer_demo.c -o /tmp/ad2.exe 2&gt;&amp;1 | grep "warning:" | sed "s/.*warning: //"</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">'__builtin_memcpy' forming offset [8, 10] is out of the bounds [0, 8] of object 'buf' with type 'char[8]' [-Warray-bounds=]</span></span></pre></figure>
+<p>（<code>sed</code> 那一小段只是把行首的 <code>文件:行:列: warning: </code> 前缀剪掉，好让两条并排比——输出的正文一个字没改。）</p>
+<p>两条警告说的是同一个越界，但开关名不同：<code>-O0</code> 下是 <code>-Wstringop-overflow=</code>，<code>-O2</code> 下是 <code>-Warray-bounds=</code>。<strong><code>-O2</code> 那一条在 <code>-O0</code> 的报告里根本不存在</strong>——它需要优化阶段把 <code>strcpy</code> 展开、把数组大小推出来，才谈得上「越界」。</p>
+<p>再给一个更纯的例子：<strong>一条在 <code>-O0</code> 下彻底不出现、只在 <code>-O2</code> 下出现的警告</strong>。它太小了，不值得占一个 example（就五行），所以在临时目录里现写现编：</p>
+<figure class="term term-session" data-id="ch02-opt-probe" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">探针：五行代码，现写现编</span><span class="term-id">ch02-opt-probe</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ cd /tmp</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ cat &gt; opt_only.c &lt;&lt;'EOF'</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">int pick(int n) {</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">    int r;</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">    if (n &gt; 0) { r = n; }</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">    return r;</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">}</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">EOF</span></span></pre></figure>
+<figure class="term term-session" data-id="ch02-opt-probe-run" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">探针：-O0 下安静，-O2 下多出一条</span><span class="term-id">ch02-opt-probe-run</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -c opt_only.c -o /tmp/oo.o</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O2 -g -fdiagnostics-color=never -c opt_only.c -o /tmp/oo.o 2&gt;&amp;1</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">opt_only.c: In function 'pick':</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">opt_only.c:4:12: warning: 'r' may be used uninitialized [-Wmaybe-uninitialized]</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">    4 |     return r;</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">      |            ^</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">opt_only.c:2:9: note: 'r' was declared here</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">    2 |     int r;</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">      |         ^</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="12"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="13"><span class="code">0</span></span></pre></figure>
+<p><code>-O0</code>：一行没说，退出码 <strong>0</strong>。<code>-O2</code>：多出一条 <code>'r' may be used uninitialized [-Wmaybe-uninitialized]</code>，而<strong>退出码仍然是 0</strong>（警告不拦你）。这条警告说的是「<code>r</code> 可能没被赋值就被用了」——在这个探针里它其实是<strong>保守的误报</strong>（<code>r</code> 只在 <code>n &gt; 0</code> 的路径上被用，那条路径上确实赋了值），但它精确地证明了一件事：<strong>换一个优化等级，编译器能看见的东西就变了。</strong></p>
+<p>所以本书的参数纪律里，<code>-O0</code> 与「加严开关」是<strong>两把不同的钥匙</strong>：<code>-O0</code> 保证你能调试、行号对得上；加严开关保证更多问题被说出来。两者换来的是「干净」这个词的可靠性。<strong>记住这个顺序：看到「编译干净」，先问「用了什么参数编的」，再决定要不要放心。</strong></p>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h11">2.9 <code>-Werror</code>：让警告拦住你，以及它的代价</h2>
+<p>2.3 的第 4 帧已经看到，加上 <code>-Werror</code> 之后同一份 <code>warn_zoo.c</code> 的退出码从 0 变成 1：</p>
+<figure class="term term-session" data-id="ch02-werror-exit" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">警告升格成错误：退出码 1</span><span class="term-id">ch02-werror-exit</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Wconversion -Wshadow -Wformat=2 -Werror warn_zoo.c -o /tmp/x.exe 2&gt; /tmp/w.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">1</span></span></pre></figure>
+<p><code>-Werror</code> 做的事只有一件：<strong>把所有警告当错误处理</strong>。诊断的说明里会多出两个字（<code>warning:</code> 变成 <code>error:</code>），编译在第一条警告处停住，退出码变 1。为了让「同一份代码、两种结果」看得最清楚，我们把这份代码缩到只有一个警告——<code>werror_blocks.c</code>：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/werror_blocks.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/werror_blocks.c</span><span class="cb-lines">第 1–11 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="11"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* werror_blocks.c：这份代码只有一个「变量定义了没用」的警告，</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">   不加 -Werror 时编译退出码 0、程序照跑；</span></span></span>
+<span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">   加了 -Werror，同一个警告就变成 error，编译直接失败。 */</span></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#include</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">&lt;stdio.h&gt;</span></span></span>
+<span class="cl is-empty" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl is-marked" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> unused_total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">定义了没用，就这一个警告</span></span></span>
+<span class="cl is-empty" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-marked" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"程序本身没问题：</span><span class="tk" style="color:#005CC5">%s\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#032F62">"这两行就是全部输出"</span><span class="tk" style="color:#24292E">);</span><span class="k-note">程序本身没有别的问题</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">7</span>定义了没用，就这一个警告</li><li><span class="cb-note-ln">9</span>程序本身没有别的问题</li></ol></figure>
+<p>先不加 <code>-Werror</code>：</p>
+<figure class="term term-session" data-id="ch02-no-werror" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">不加 -Werror：退出码 0，警告照说，程序照跑</span><span class="term-id">ch02-no-werror</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never werror_blocks.c -o /tmp/werror.exe 2&gt; /tmp/wb.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ cat /tmp/wb.txt</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">werror_blocks.c: In function 'main':</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">werror_blocks.c:7:9: warning: unused variable 'unused_total' [-Wunused-variable]</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">    7 |     int unused_total = 0;</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">      |         ^~~~~~~~~~~~</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="9"><span class="code">$ /tmp/werror.exe &amp;&amp; echo "两件事都成了"</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">程序本身没问题：这两行就是全部输出</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">两件事都成了</span></span></pre></figure>
+<p>最后那条命令值得单独看一眼：<code>gcc … &amp;&amp; ./werror.exe &amp;&amp; echo &quot;两件事都成了&quot;</code>——<strong><code>&amp;&amp;</code> 按前一条命令的退出码决定要不要继续</strong>。编译退出码 0 才轮到运行，运行退出码 0 才轮到 <code>echo</code>，所以最后那行 <code>两件事都成了</code> 是「三件事都成了」的证明。这就是「退出码是判据」的日常用法，也是脚本里最基本的写法。</p>
+<p>现在把 <code>-Werror</code> 加上，同一份文件、同一个警告：</p>
+<figure class="term term-diagnostic" data-id="werror-blocks-diag" data-lang="compile-error"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-errorFile" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 2.6h5.4L12 5.2v8.2H4z"/><path d="M6.6 7.8l2.8 2.8M9.4 7.8l-2.8 2.8"/></svg></span><span class="term-kind">编译诊断</span><span class="term-title">gcc 的真实诊断（原文照抄）</span><span class="term-id">werror-blocks-diag</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">werror_blocks.c: In function 'main':</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">werror_blocks.c:7:9: error: unused variable 'unused_total' [-Werror=unused-variable]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">    7 |     int unused_total = 0;</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">      |         ^~~~~~~~~~~~</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">cc1.exe: all warnings being treated as errors</span></span></pre></figure>
+<p>两个变化：<code>warning:</code> 变成了 <code>error:</code>，开关名也变成了 <code>[-Werror=unused-variable]</code>——方括号里那个 <code>-Werror=</code> 前缀就是「这条原本是警告，我按错误处理了」的记号。最后一行 <code>cc1.exe: all warnings being treated as errors</code> 是编译器把话说白了。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：`-Werror` 什么时候开、什么时候别开</span></header>
+<div class="box-b">
+<p>它是一把双刃剑，所以主流做法是<strong>分场合</strong>：</p>
+<ul>
+<li><strong>该开</strong>：持续集成（CI）、发布前的构建、新写的代码、以及任何「这份代码必须干净」的场合。它的价值在于<strong>不让警告攒下来</strong>——警告一旦攒到几百条，就没人看了；</li>
+<li><strong>不该默认开</strong>：本地开发。你会为了通过编译去写一些没意义的代码（比如把没用上的参数加个 <code>(void)</code> 骗过编译器），而不是去想「这个参数是不是本来就该删掉」；</li>
+<li><strong>它的真实代价</strong>：<code>-Werror</code> 把「警告」这个<strong>可以商量的信号</strong>变成了<strong>硬门槛</strong>，而这个信号是编译器版本相关的。换一个编译器版本、加一个新开关，<strong>原本能编过的代码会突然编不过</strong>——而且失败的原因不是你改了代码，是工具变严了。所以用 <code>-Werror</code> 的工程通常会把「编译器版本」也钉住（或至少知道自己在哪个版本上过）。</li>
+</ul>
+<p>顺带说一句本书的做法：<code>-Werror</code> 只用在<strong>故意编不过</strong>的教学例子上（这份清单写的就是 <code>mode=compile_fail</code>），所以正文里它的任务是演示「警告升格」，不是推荐你默认打开。这是惯例、不是标准——标准里同样没有 <code>-Werror</code> 这个东西。</p>
+</div>
+</section>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h12">2.10 <code>-fanalyzer</code> 与「本机没有的那些检测手段」</h2>
+<p>上面所有警告都是在<strong>翻译你的代码时顺手说一句</strong>。编译器还有另一种模式：<strong>专门去找某类缺陷</strong>——它叫静态分析。gcc 把这一块挂在 <code>-fanalyzer</code> 上：</p>
+<figure class="term term-session" data-id="ch02-fanalyzer" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">-fanalyzer：一类专门的编译器，有检查器也有盲区</span><span class="term-id">ch02-fanalyzer</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -fanalyzer -c analyzer_demo.c -o /tmp/analyzer_demo.o 2&gt; /tmp/an.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="2"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="4"><span class="code">$ grep -c 'warning:' /tmp/an.txt</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">2</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="6"><span class="code">$ grep 'Wanalyzer' /tmp/an.txt</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">analyzer_demo.c:6:5: warning: stack-based buffer overflow [CWE-121] [-Wanalyzer-out-of-bounds]</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="8"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -fanalyzer -c format_security.c -o /tmp/fs.o 2&gt; /tmp/an2.txt</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="9"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="11"><span class="code">$ grep -c 'Wanalyzer' /tmp/an2.txt</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">0</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="13"><span class="code">$ wc -l &lt; /tmp/an2.txt</span></span>
+<span class="cl is-text is-term" data-ln="14"><span class="code">4</span></span></pre></figure>
+<p>这段会话里有四件事要读出来：</p>
+<ol>
+<li><strong>它给的东西和普通警告不一样</strong>：诊断里带 <code>[CWE-121]</code>（一个公开的缺陷分类编号）和 <code>[-Wanalyzer-out-of-bounds]</code> 这个专属标签；完整输出里还会配一张缓冲区示意图（这里用 <code>grep</code> 只挑出了带 <code>Wanalyzer</code> 的那一行）。</li>
+<li><strong>编译退出码仍然是 0</strong>——<code>-fanalyzer</code> 报的是「我认为这里有缺陷」，不是「我拒绝翻译」。所以它不能替代测试，<strong>更不能当成运行结果</strong>。</li>
+<li><strong>它有盲区</strong>：同一个 <code>-fanalyzer</code> 去看 <code>format_security.c</code>，一条分析器诊断都没有（<code>grep -c</code> 数出来 0）；那 4 行 stderr 是 <code>-Wextra</code> 给的「参数没用上」，跟缺陷无关。它<strong>没看见</strong>那个格式串漏洞。</li>
+<li>所以它的定位是：<strong>锦上添花的第三只眼</strong>，覆盖范围是一批特定缺陷（堆/栈越界、空指针之类），不是「全面体检」。</li>
+</ol>
+<section class="box box-compiler" data-box-type="compiler"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-machine" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.2 5.6h9.6v7.2H3.2z"/><path d="M5.6 3.2h4.8v2.4H5.6z"/><circle cx="6" cy="9.2" r="0.85"/><circle cx="10" cy="9.2" r="0.85"/></svg></span><span class="box-kind">编译器视角</span><span class="box-t">编译器视角：为什么「静态分析」不等于「运行结果」</span></header>
+<div class="box-b">
+<p><code>-fanalyzer</code> 干的事是<strong>在你的代码上跑一遍模拟</strong>：假设程序会怎么走、内存会怎么变，然后看有没有一条路径上出界了。它的两个特点是：</p>
+<ul>
+<li><strong>可以报到你没执行过的路径</strong>——这很有用，因为<strong>测试覆盖不到的分支正是 bug 最容易藏的地方</strong>；</li>
+<li><strong>会误报</strong>（false positive）——它的模型不可能和真实机器一样，宁可疑心重一点也不放过。</li>
+</ul>
+<p>对照着看：<code>-fanalyzer</code> 是<strong>编译期</strong>的话（它可能报一个永远走不到的路径，也可能漏掉一个真缺陷）；2.4.1 里的 <code>1374389535</code> 是<strong>运行期</strong>的话（它只在真跑的时候才存在）。<strong>这两类证据不能互相替代</strong>，本书会一直把它们分开写。</p>
+</div>
+</section>
+<p>那么「一台机器上到底有哪些检测手段」这件事，得如实交代。本机的实测结论是：<strong>没有 ASan / UBSan</strong>。</p>
+<figure class="term term-session" data-id="ch02-no-asan" data-lang="term"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端会话</span><span class="term-title">ASan / UBSan：链接失败，本机没有</span><span class="term-id">ch02-no-asan</span></figcaption><pre class="term-body"><span class="cl is-text is-term is-cmd" data-ln="1"><span class="code">$ gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -fsanitize=address,undefined stages_c.c -o /tmp/san.exe 2&gt;&amp;1</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">collect2.exe: error: ld returned 5 exit status</span></span>
+<span class="cl is-text is-term is-cmd" data-ln="3"><span class="code">$ echo $?</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">1</span></span></pre></figure>
+<p><code>-fsanitize=address,undefined</code> 是 GCC 提供的运行期检测器（ASan 抓内存越界，UBSan 抓未定义行为）。在这台机器上它<strong>编译能过、链接失败</strong>——那一行 <code>collect2.exe</code> 说明链接器找不到它要的那两个运行库；按本机工具链事实文件的记录，这个 MSYS2 安装里没有 libasan / libubsan，软件仓库里也没有对应的包（这一条我没有再去仓库里核实，但<strong>链接失败本身</strong>是上面刚跑出来的）。标准里没有这两个工具的位置，它们是<strong>工具链提供的</strong>，有就有、没有就没有。</p>
+<p>那本机剩下什么？把可用的手段和它们的边界列全（下面这张表里的结论来自本机的工具链事实文件，其中 <code>-fanalyzer</code> 与 ASan 这两条我在这一单元亲手跑过，输出就在上面）：</p>
+<table>
+<thead>
+<tr>
+<th>手段</th>
+<th>什么时候说话</th>
+<th>打开方式</th>
+<th>抓住时你会看到</th>
+<th>边界（它管不到什么）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-fanalyzer</code></td>
+<td>编译期</td>
+<td><code>-fanalyzer</code></td>
+<td><code>… [-Wanalyzer-out-of-bounds]</code>，编译退出码仍 0</td>
+<td>只覆盖一批缺陷，会误报；不是运行结果</td>
+</tr>
+<tr>
+<td><code>-fstack-protector-all</code></td>
+<td>运行期</td>
+<td><code>-fstack-protector-all</code></td>
+<td>stderr 打出 <code>*** stack smashing detected ***: terminated</code>，退出码 <strong>3221226505</strong></td>
+<td>只保护<strong>有局部数组的函数</strong>里的栈溢出；堆越界抓不到</td>
+</tr>
+<tr>
+<td><code>-ftrapv</code></td>
+<td>运行期</td>
+<td><code>-ftrapv</code></td>
+<td>进程被终止，退出码 <strong>3221226505</strong>；缓冲区里没来得及打印的内容会丢</td>
+<td>只管<strong>有符号整数溢出</strong>；无符号回绕、浮点都不算</td>
+</tr>
+<tr>
+<td><code>-D_GLIBCXX_ASSERTIONS</code></td>
+<td>运行期</td>
+<td><code>-D_GLIBCXX_ASSERTIONS</code></td>
+<td>打印 <code>Assertion '__n &lt; this-&gt;size()' failed.</code>，退出码 <strong>3</strong></td>
+<td>只保护 <strong>C++ 标准库容器/迭代器/<code>string</code></strong>；裸指针不保护（C 代码用不上它）</td>
+</tr>
+<tr>
+<td>优化对照</td>
+<td>对比两个构建</td>
+<td>同一程序分别用 <code>-O0</code> 和 <code>-O2</code> 编译运行</td>
+<td>行为不同即算抓到（可能表现为输出不同，也可能表现为一个变成死循环）</td>
+<td>只能证明「这里存在优化敏感的未定义行为」，<strong>不能断定是哪种</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>这张表里没有「运行期精确的越界位置」这一项</strong>——没有 ASan 就没有它。本书写到内存错误时，证据只能是上表里的那几类：编译器的分析（<code>-fanalyzer</code>）、运行期真崩时的退出码与 stderr、或者 gdb 的栈回溯。<strong>「应该会崩」这种话本书不写。</strong></p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：为什么这些开关要写进清单的 `detect` 字段</span></header>
+<div class="box-b">
+<p>每个例子的清单里有一项 <code>detect</code>，声明「靠哪个检测手段、证据是什么」。理由和 2.2 那对方括号一样：<strong>把「谁抓到的」写下来，别人才能复核</strong>。规矩三条：只能用本机真能用的手段；必须声明证据（编译期诊断文本、运行期非零退出码）；证据还得<strong>归属于这个手段</strong>——脚本会去掉检测参数再算一遍，同样的证据还在就判不通过。「程序自己打印一行 <code>stack smashing detected</code> 假装被抓住」这种例子在这里过不了。</p>
+</div>
+</section>
+<p>最后说一个不起眼但贯穿全书的参数：<code>-fdiagnostics-color=never</code>。它的唯一作用是<strong>让 gcc 不要把 ANSI 颜色码写进诊断文本</strong>。这不是教学内容，是本书的流水线要求：正文里的每一段诊断都要和真实输出逐字一致，颜色码会随终端环境变化、在纸上也没意义，关掉它诊断文本才稳定可对账。你自己在终端里看时<strong>不用</strong>加它——彩色诊断更好读。</p>
+<h2 id="c-chapters-ch01-02-diagnostics-and-warnings-md-h13">2.11 这一单元新增了什么，以及接下来</h2>
+<p>回到 2.1 的第 2 帧，现在可以逐个点名了：</p>
+<ul>
+<li><code>warn_zoo.c</code> —— 六类高频警告一次收齐，每一处错都标了原因（2.3、2.4）；</li>
+<li><code>extra_warnings.c</code> —— 基础参数下 0 条警告、加严开关下 4 条（2.3），用来证明「干净」这个词取决于参数；</li>
+<li><code>format_mismatch.c</code> —— <code>printf(&quot;%d&quot;, 3.14)</code> 的警告，以及跑出来的 <code>1374389535</code>（2.4.1）；</li>
+<li><code>format_security.c</code> —— <code>printf(argv[1])</code> 的格式串漏洞；基础参数下只报一条未用参数，加 <code>-Wformat=2</code> 才多出 <code>-Wformat-security</code>（2.4、2.6）；</li>
+<li><code>werror_blocks.c</code> —— 同一份代码：不加 <code>-Werror</code> 退出码 0，加了退出码 1（2.9）；</li>
+<li><code>diag_chain.c</code> —— 一个漏分号引出三条诊断，训练「先改第一条」（2.5）；</li>
+<li><code>undef_ref.c</code> —— 编译能过、链接失败，诊断里给出 <code>undefined reference to 'helper_add'</code>（2.6）；</li>
+<li><code>stages_c.c</code> —— <code>-c</code> 两步走与一条命令的对照，以及 <code>-O0</code> / <code>-O2</code> 的调试差异（2.7、2.8）；</li>
+<li><code>session-diagnostics.txt</code> —— 上面所有命令与输出的抓取，正文里的每一段会话都从它注入；</li>
+<li>另外这一单元还借用了已有的 <code>analyzer_demo.c</code>（越界那一段）和一份五行探针，用来讲「警告与优化等级的关系」（2.8.1）。</li>
+</ul>
+<p>这一章仍然是单文件项目（第 3 帧）：<code>.c</code> 与清单平铺在 <code>examples/ch01/</code>，没有 <code>src/</code> 和 <code>include/</code>。为什么可以这样？因为这一章的任务是「<strong>把一条命令和它的输出读懂</strong>」——诊断、警告、退出码、产物，全都发生在一个源文件上。等这些看熟了，下一章开始换题目：<strong>数据本身</strong>。下一单元我们从 <code>int</code> 到底能装多大的数讲起，你会第一次遇到「<code>0.1 + 0.2</code> 不等于 <code>0.3</code>」这种看起来像编译器坏了的事——那时候你会很需要这一单元学的东西：<strong>先问「用了什么参数」，再看「真实的输出是什么」。</strong></p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一单元的要点</span></header>
+<div class="box-b">
+<ul>
+<li>一条诊断按 <code>文件:行:列: 级别: 说明</code> 四段读，<strong>方括号里的开关名</strong>告诉你这条由谁控制（<code>-Wno-…</code> 能关，但本书不许关）；级别只有三种口吻：<code>error</code> 停、<code>warning</code> 继续、<code>note</code> 补充；</li>
+<li>标准对诊断只要求「至少一条」（§5.1.1.3），文字的格式、名字、分级全是实现的事；</li>
+<li><code>-Wall</code> <strong>不是全部</strong>：基础档在 <code>warn_zoo.c</code> 上报 5 条，加严开关才到 7 条；同一份 <code>extra_warnings.c</code> 是 0 条 → 4 条；</li>
+<li>六类高频警告各有真实的代价：未用变量与参数常是「该写的还没写」，格式串不匹配是未定义行为（§7.21.6.1），<code>-1 &lt; 3u</code> 会判成假，变量遮蔽让你改到另一个变量，隐式转换会悄悄改值，<code>if (x = 5)</code> 永远成立。</li>
+</ul>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">（续）这一单元的要点</span></header>
+<div class="box-b">
+<ul>
+<li>三个期各管一段：<code>undef_ref.c</code> 编译退出码 0、链接失败时给出 <code>undefined reference to 'helper_add'</code>；<code>1374389535</code> 是运行期的事；</li>
+<li><code>-c</code> 只编译（<code>.o</code>，2813 字节），链接后才是程序（135094 字节）；一条命令可以列多个源文件/目标文件；</li>
+<li><code>-O0</code> 与 <code>-g</code> 是本书默认：断点停得住、行号对得上（<code>-O2</code> 下 <code>add</code> 被内联，<code>bt</code> 直接说 <code>No stack.</code>）；有些警告只在优化或加严开关下出现；</li>
+<li><code>-Werror</code> 把警告变成硬门槛（退出码 0 → 1），代价是编译器升级可能让你的代码突然编不过——放 CI，别放本地默认；</li>
+<li>本机没有 ASan/UBSan（<code>-fsanitize=…</code> 链接失败）；可用的检测手段各管一摊，边界必须写清楚。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>下面这条诊断由哪个开关控制？在本书的基础参数下它会报出来吗？只加 <code>-Wall</code> 呢？
+<code>warn_zoo.c:24:11: warning: comparison of integer expressions of different signedness: 'int' and 'unsigned int' [-Wsign-compare]</code></li>
+<li><code>printf(&quot;用 %%d 打 price：%d\n&quot;, price);</code>（<code>price</code> 是 <code>double</code>）在本机跑出来是 <code>1374389535</code>，而且每次运行都一样。这个数字是怎么来的？C 标准对「格式串与参数类型不匹配」是怎么规定的？为什么不能因为它稳定复现就把它当成程序的行为？</li>
+<li><code>diag_chain.c</code> 只漏了一个分号，为什么会有三条诊断？你打算从哪一条开始改、改完第一件事做什么？</li>
+<li><code>undef_ref.c</code> 用 <code>-c</code> 编译退出码是 0，不加 <code>-c</code> 就失败。这两次分别在哪个阶段失败/成功？失败那段 stderr 里哪一行真正指出了「缺什么」？如果你看到的只有一行 <code>collect2.exe: error: ld returned 5 exit status</code>，那说明什么？</li>
+<li><code>-Werror</code> 的代价是什么？什么场合值得开？<code>gcc … &amp;&amp; ./app &amp;&amp; echo ok</code> 这串命令里，<code>&amp;&amp;</code> 依据什么决定要不要往下走？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>由 <code>-Wsign-compare</code> 控制。<strong>基础参数下会报</strong>（因为基础参数里有 <code>-Wextra</code>），<strong>只加 <code>-Wall</code> 时不报</strong>——实测同一份 <code>warn_zoo.c</code>：<code>-Wall</code> 下 3 条 warning，加上 <code>-Wextra</code> 变 5 条，多出来的正是这条和 <code>-Wunused-parameter</code>。可以用 <code>-Wno-sign-compare</code> 关掉，但本书的清单不允许减警告参数（构建脚本会拒）。</li>
+<li><code>3.14</code> 作为双精度浮点，八个字节是 <code>1f 85 eb 51 b8 1e 09 40</code>，低四位字节是 <code>51 eb 85 1f</code>，按小端读成十进制就是 <strong>1374389535</strong>——<code>%d</code> 读到的是<strong>这个 double 机器码的低 32 位</strong>，因为本机（Windows x86-64）的可变参数调用约定会把浮点参数同时抄一份到整数寄存器里。标准的规定是：<strong>参数类型与转换说明对不上就是未定义行为</strong>（§7.21.6.1 第 9 段），也就是「不作任何承诺」。稳定复现只是因为这套寄存器约定在这台机器、这个编译选项下没变——换 <code>-O2</code>、换参数顺序、换平台就不再有任何保证。标准说的是「未定义」，不是「会打印 1374389535」，所以不能拿它当程序的行为来依赖。</li>
+<li>三条诊断里只有第一条是真错误：报在第 <strong>7</strong> 行第 5 列（<code>expected ',' or ';' before 'int'</code>），而<strong>要改的是第 6 行的末尾</strong>——编译器要读到第 7 行才能确定第 6 行那条语句没收尾。第二条 <code>'count' undeclared</code> 是下游：第 7 行自己没被解析成完整语句，<code>count</code> 这个名字就没被承认，第 8 行用它的地方自然报「没声明」；第三条 <code>note</code> 是补充（同一个没声明的名字只报一次）。做法：<strong>只改第一条 → 重新编译 → 看剩下的还在不在</strong>（这个例子里三条会一起消失）。</li>
+<li><code>-c</code> 只做<strong>编译</strong>（把源文件翻成目标文件），退出码 <strong>0</strong>：编译期只对<strong>一个源文件</strong>负责，它看见 <code>extern int helper_add(int a, int b);</code> 这行声明，就认为「这个名字存在、调用合法」。不加 <code>-c</code> 要把目标文件<strong>链接</strong>成程序，链接期才去落实「这个名字到底有没有实现体」，于是失败。三行里<strong>第二行</strong>才是关键：<code>undefined reference to 'helper_add'</code>，它直接点出缺的名字（第一行说问题在哪个 <code>.o</code> 里，第三行只是 collect2 的总结「退出码 1」）。如果只看到一行 <code>collect2.exe: error: ld returned 5 exit status</code>，说明链接器的正文被环境吞掉了（我实测：默认 PATH 下如此，换一个干净的 MSYS2 PATH 就恢复成三行），这时换终端重跑一次，或者直接回命令里找：<strong>哪个源文件没被列进去</strong>（补上它之后 <code>gcc undef_ref.c helper_add.c -o app</code> 退出码 0，程序打印 <code>sum = 5</code>）。</li>
+<li>代价：<code>-Werror</code> 把「警告」这个可以商量的信号变成硬门槛，而警告是<strong>编译器版本相关</strong>的——升级编译器、多开一个开关，<strong>原本能编过的代码会突然编不过</strong>，失败原因还不是你改了代码。值得开的场合：持续集成、发布前构建、新写的代码（核心目的是不让警告攒起来）。别默认开在本地开发。<code>&amp;&amp;</code> 看的是<strong>前一条命令的退出码</strong>：退出码 0 才执行下一条，非 0 就停下——所以 <code>gcc … &amp;&amp; ./app &amp;&amp; echo ok</code> 要能走到 <code>echo ok</code>，前提是编译和运行都成功。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

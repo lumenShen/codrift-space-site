@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高等数学复习提纲（同济第八版·上册）</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+.chapter { margin: 0 0 1.6rem; padding-bottom: 1.1rem; border-bottom: 1px solid var(--rule, #dbe3ec); }
+.chapter:last-of-type { border-bottom: 0; }
+.chapter .toc-ch { font-size: 1.06rem; }
+.chapter .doc-meta { margin: 0.2rem 0 0.5rem; }
+.reader { margin: 0.9rem 0 1.4rem; padding: 0.9rem 1rem; border-left: 4px solid var(--ink, #16202b); background: #f7f9fc; }
+.reader p { margin: 0.25rem 0; }
+</style>
+</head>
+<body class="type-doc">
+<div class="doc">
+  <header class="doc-head">
+    <p class="doc-kicker">同济大学数学系《高等数学》第八版 · 上册 · 复习提纲</p>
+    <h1 class="doc-title">高等数学复习提纲</h1>
+    <p class="doc-sub">概念、公式、重要定理、关键推导与做题方法；不设例题与自测，按章速查。</p>
+    <p class="doc-meta"><span>7 章</span><span>17 个单元</span><span>143 节</span><span>52,458 汉字</span><span>整册 102 页</span></p>
+  </header>
+  <div class="reader">
+    <p><strong>怎么读：</strong></p>
+    <p>· 想按章浏览、点目录跳转 → 直接点下面的章标题（网页版，公式为矢量字形）。</p>
+    <p>· 想离线带走一份、双击即读 → <a href="book-inline.html">单文件 HTML</a>（样式与字体已内联）。</p>
+    <p>· 想打印或系统阅读 → <a href="notes-vol1.pdf">整册 PDF</a>（A4，带页码与页眉）。</p>
+    <p>· 想自己改内容 → 编辑 <code>chapters/</code> 下的 markdown，回到 <code>build/</code> 跑 <code>node render.js --all</code> 与 <code>node print.js --book</code>。</p>
+  </div>
+  <nav class="toc" aria-label="全书目录">
+  <p class="toc-h">全书目录</p>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch01.html">第 1 章 函数与极限</a></p>
+  <p class="doc-meta"><span>4 个单元</span><span>33 节</span><span>11,850 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch01.html#unit-ch01-01-mapping-functions-sequences">映射、函数与数列的极限</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-1">1.1.1 映射</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-2">1.1.2 单射、满射与一一映射</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-3">1.1.3 逆映射与复合映射</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-4">1.1.4 函数：两要素与分段函数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-5">1.1.5 函数的运算与初等函数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-6">1.1.6 函数的四条基本特性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-7">1.1.7 双曲函数与反双曲函数（选读）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-8">1.2.1 数列与它的表示</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-9">1.2.2 数列极限的 ε-N 定义</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-10">1.2.3 用定义证明极限的方法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-11">1.2.4 收敛数列的三条性质</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-12">1.2.5 子数列与发散判定</a></li>
+    <li class="toc-unit"><a href="ch01.html#unit-ch01-02-function-limits-infinitesimals">函数的极限、无穷小与无穷大</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-13">1.3.1 函数在一点处的极限：ε-δ 定义与几何意义</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-17">1.3.2 左极限、右极限与极限存在的充要条件</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-18">1.3.3 x 趋于无穷时的极限：ε-X 语言</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-19">1.3.4 极限不存在的两种典型</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-20">1.3.5 函数极限的三条性质：唯一性、局部有界性、局部保号性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-21">1.4.1 无穷小：以 0 为极限的变量</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-22">1.4.2 无穷小的两条运算性质</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-23">1.4.3 无穷大、倒数关系与铅直渐近线</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-24">1.4.4 小结</a></li>
+    <li class="toc-unit"><a href="ch01.html#unit-ch01-03-limit-rules-two-key-limits">极限运算法则、两个重要极限与无穷小的比较</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-25">1.5 极限运算法则</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-29">1.6 极限存在准则 两个重要极限</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-34">1.7 无穷小的比较</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-35">1.5–1.7 小结</a></li>
+    <li class="toc-unit"><a href="ch01.html#unit-ch01-04-continuity-of-functions">函数的连续性与闭区间上连续函数的性质</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-36">1.8.1 函数在一点的连续性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-39">1.8.2 间断点及其分类</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-40">1.9.1 连续函数的运算与复合函数的连续性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-41">1.9.2 初等函数的连续性：代入法求极限</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-42">1.10.1 闭区间上连续函数的有界性与最大值最小值定理</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-43">1.10.2 零点定理与介值定理</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-44">1.10.3 一致连续性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch01.html#sec-45">1.10.4 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch02.html">第 2 章 导数与微分</a></p>
+  <p class="doc-meta"><span>2 个单元</span><span>12 节</span><span>5,946 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch02.html#unit-ch02-01-derivative-concept-and-rules">导数概念、求导法则与高阶导数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-1">2.1 导数概念</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-9">2.2 函数的求导法则</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-14">2.3 高阶导数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-18">2.1–2.3 小结</a></li>
+    <li class="toc-unit"><a href="ch02.html#unit-ch02-02-implicit-parametric-and-differential">隐函数、参数方程求导与函数的微分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-19">2.4.1 隐函数的求导法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-23">2.4.2 对数求导法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-24">2.4.3 由参数方程确定的函数的导数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-26">2.4.4 相关变化率</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-27">2.5.1 微分的定义与几何意义</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-29">2.5.2 微分公式、运算法则与一阶微分形式不变性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-30">2.5.3 微分在近似计算中的应用</a></li>
+      <li class="toc-sec toc-deep"><a href="ch02.html#sec-31">2.5.4 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch03.html">第 3 章 微分中值定理与导数的应用</a></p>
+  <p class="doc-meta"><span>3 个单元</span><span>25 节</span><span>8,890 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch03.html#unit-ch03-01-mean-value-theorems-lhopital-taylor">微分中值定理、洛必达法则与泰勒公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-1">3.1.1 费马引理与罗尔定理</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-2">3.1.2 拉格朗日中值定理与有限增量公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-3">3.1.3 柯西中值定理、辅助函数与方程根的存在性</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-4">3.2.1 洛必达法则：0/0 型</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-5">3.2.2 ∞/∞ 型与其他未定式的转化</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-6">3.2.3 洛必达法则的三条使用边界</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-7">3.3.1 泰勒公式：泰勒多项式与两种余项</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-8">3.3.2 麦克劳林公式与常用初等函数的展开</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-9">3.3.3 误差估计、近似计算与用泰勒展开求极限</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-10">3.3.4 小结</a></li>
+    <li class="toc-unit"><a href="ch03.html#unit-ch03-02-monotonicity-extrema-and-graphs">单调性、凹凸性、极值最值与函数图形的描绘</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-11">3.4.1 单调性的判定与单调区间的求法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-12">3.4.2 曲线的凹凸性与拐点</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-13">3.5.1 函数的极值及其判定</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-14">3.5.2 最大值、最小值与实际问题</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-15">3.6.1 曲线的渐近线</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-16">3.6.2 函数图形的描绘</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-17">3.6.3 小结</a></li>
+    <li class="toc-unit"><a href="ch03.html#unit-ch03-03-curvature-and-approximate-roots">曲率与方程的近似解</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-18">3.7.1 弧微分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-21">3.7.2 曲率的定义</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-22">3.7.3 曲率的计算公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-23">3.7.4 曲率半径、曲率圆与曲率中心</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-24">3.8.1 二分法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-26">3.8.2 切线法（牛顿法）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-28">3.8.3 割线法（弦截法）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch03.html#sec-29">3.8.4 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch04.html">第 4 章 不定积分</a></p>
+  <p class="doc-meta"><span>2 个单元</span><span>16 节</span><span>6,088 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch04.html#unit-ch04-01-antiderivatives-and-substitution">不定积分的概念与性质、换元积分法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-1">4.1.1 原函数与不定积分的概念</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-3">4.1.2 不定积分的性质与基本积分表</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-5">4.2.1 第一类换元法（凑微分法）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-6">4.2.2 第二类换元法（三角代换）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-7">4.2.3 根式代换与倒代换</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-8">4.2.4 恒等变形：拆项与配方</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-9">4.2.5 小结</a></li>
+    <li class="toc-unit"><a href="ch04.html#unit-ch04-02-parts-rational-and-integral-tables">分部积分法、有理函数的积分与积分表的使用</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-10">4.3.1 分部积分公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-11">4.3.2 u 与 dv 的选取顺序</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-12">4.3.3 循环积分与递推积分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-13">4.4.1 有理函数的积分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-14">4.4.2 部分分式分解</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-15">4.4.3 三角有理式：万能代换与恒等变形</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-16">4.4.4 简单无理式的积分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-17">4.5.1 积分表的使用</a></li>
+      <li class="toc-sec toc-deep"><a href="ch04.html#sec-18">4.5.2 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch05.html">第 5 章 定积分</a></p>
+  <p class="doc-meta"><span>2 个单元</span><span>19 节</span><span>6,574 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch05.html#unit-ch05-01-definite-integral-and-ftc">定积分的概念与性质、微积分基本公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-1">5.1.1 两个引例：曲边梯形的面积与变速直线运动的路程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-4">5.1.2 定积分的定义与记号</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-6">5.1.3 可积的条件与定积分的几何意义</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-10">5.1.4 定积分的性质</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-12">5.1.5 定积分的近似计算：矩形法、梯形法与抛物线法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-13">5.1.6 积分中值定理与函数的平均值</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-14">5.2.1 积分上限函数与微积分基本定理</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-15">5.2.2 牛顿-莱布尼茨公式</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-16">5.2.3 变限积分的求导法则与和式极限的转化</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-17">5.2.4 小结</a></li>
+    <li class="toc-unit"><a href="ch05.html#unit-ch05-02-substitution-improper-and-gamma">定积分的换元与分部积分、反常积分与 Γ 函数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-18">5.3.1 定积分的换元法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-19">5.3.2 定积分的分部积分法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-20">5.3.3 奇偶函数与周期函数的积分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-21">5.4.1 无穷限反常积分</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-22">5.4.2 无界函数的反常积分（瑕积分）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-23">5.5.1 无穷限反常积分的审敛法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-24">5.5.2 无界函数反常积分的审敛法与绝对收敛</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-25">5.5.3 Γ 函数</a></li>
+      <li class="toc-sec toc-deep"><a href="ch05.html#sec-26">5.5.4 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch06.html">第 6 章 定积分的应用</a></p>
+  <p class="doc-meta"><span>1 个单元</span><span>12 节</span><span>3,618 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch06.html#unit-ch06-01-applications-of-definite-integrals">定积分的元素法及其几何、物理应用</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-1">6.1 定积分的元素法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-3">6.2.1 平面图形的面积（直角坐标）</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-4">6.2.2 极坐标下平面图形的面积</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-5">6.2.3 旋转体的体积：圆盘法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-6">6.2.4 旋转体的体积：垫片法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-7">6.2.5 平行截面面积为已知的立体</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-8">6.2.6 平面曲线的弧长</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-9">6.3.1 变力沿直线所做的功</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-10">6.3.2 水压力</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-11">6.3.3 引力</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-12">6.3.4 函数在区间上的平均值</a></li>
+      <li class="toc-sec toc-deep"><a href="ch06.html#sec-13">6.3.5 小结</a></li>
+  </ul>
+</section>
+<section class="chapter">
+  <p class="toc-ch"><a href="ch07.html">第 7 章 微分方程</a></p>
+  <p class="doc-meta"><span>3 个单元</span><span>26 节</span><span>9,492 汉字</span></p>
+  <ul class="toc-ul">
+    <li class="toc-unit"><a href="ch07.html#unit-ch07-01-first-order-equations">微分方程的基本概念与一阶微分方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-1">7.1 微分方程的基本概念</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-4">7.2 可分离变量的微分方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-8">7.3 齐次方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-12">7.4 一阶线性微分方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-18">7.4.5 从实际背景建立一阶方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-19">7.4.6 小结</a></li>
+    <li class="toc-unit"><a href="ch07.html#unit-ch07-02-reducible-and-linear-higher-order">可降阶的高阶微分方程、高阶线性方程与常系数齐次方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-20">7.5.1 连积 n 次：y⁽ⁿ⁾ = f(x) 型方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-21">7.5.2 缺 y 型的方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-22">7.5.3 缺 x 型的方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-23">7.6.1 二阶线性方程与齐次方程解的结构</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-24">7.6.2 线性相关与线性无关</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-25">7.6.3 非齐次方程解的结构与常数变易法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-26">7.7.1 特征方程：把微分方程换成代数方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-27">7.7.2 特征根的三种情形</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-28">7.7.3 n 阶常系数齐次线性微分方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-29">7.7.4 小结</a></li>
+    <li class="toc-unit"><a href="ch07.html#unit-ch07-03-nonhomogeneous-euler-and-systems">常系数非齐次线性方程、欧拉方程与微分方程组</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-30">7.8.1 非齐次方程的两步法</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-31">7.8.2 共振情形</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-32">7.8.3 三角型右端：两组系数与 k 的判定</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-33">7.9.1 欧拉方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-34">7.9.2 换元 x = eᵗ：三条转换关系</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-35">7.9.3 高阶与非齐次欧拉方程</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-36">7.10.1 消元法与行列式记号</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-37">7.10.2 初值问题</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-38">7.10.3 三个未知函数：三阶行列式与链式消元</a></li>
+      <li class="toc-sec toc-deep"><a href="ch07.html#sec-39">7.10.4 小结</a></li>
+  </ul>
+</section>
+  </nav>
+  <footer class="doc-foot">
+    <p>由 markdown-it + KaTeX 服务端渲染生成 HTML，经 headless Chrome 打印为 PDF，逐页做过分页与越界体检。</p>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,258 @@
+/*
+ * Codrift 设计令牌 —— 夜间极光 · 双主题（暗色默认 + 亮色）
+ *
+ * 方向由站长截图钉死（kexie.space 的视觉语言）：深海军蓝黑底、斜向极光光带、
+ * 冷描边玻璃面板、暖橙只作点题。物理场景决定明暗：夜里、笔记本屏幕前、一个人读自己的站。
+ *
+ * V2（DESIGN-V2 §3）：双主题。
+ *   - :root = 暗色（默认，值已按 §3.3 衰减为 Kimi 式扁平：砍白光学层与辉光、玻璃底收实）；
+ *   - html[data-theme='light'] 挂亮色组（§3.2/§3.4.1，Rein 高光学构造的亮色重标）；
+ *   - 不用媒体查询驱动，切换由用户显式控制（index.html 内联脚本 + useTheme）。
+ *
+ * 规则：页面与组件样式必须引用这里的令牌，禁止裸写颜色/圆角/间距。
+ * 令牌归 src/styles/** 所有；新增令牌须同步 docs/CONTRACTS.md。
+ */
+
+:root {
+  /* ---- 地面层（由深到浅，带冷色偏移） ---- */
+  --bg-0: #05080f; /* 最深：页面底 */
+  --bg-1: #070c18; /* 常规页面背景 */
+  --bg-2: #0c1426; /* 卡片/浮层基底 */
+  --bg-3: #111b33; /* 卡片悬停、内层 */
+  --bg-glow: rgba(79, 140, 255, 0.1); /* 背景基调光晕 */
+
+  /* ---- 极光（背景光带的四个色相；只有背景层该用它们） ---- */
+  --aurora-blue: #4f8cff;
+  --aurora-cyan: #38e0ff;
+  --aurora-green: #46e2a0;
+  --aurora-violet: #8b7bff;
+
+  /* ---- 前景层 ---- */
+  --fg-0: #eaf1ff; /* 主文本 */
+  --fg-1: #a8b8d8; /* 次要文本 */
+  --fg-2: #6b7c9e; /* 弱化文本、占位符 */
+
+  /* ---- 主色（极光蓝＝行动与链接） ---- */
+  --accent: #4f8cff;
+  --accent-strong: #8ab4ff; /* hover / 更亮 */
+  --accent-text: #4f8cff; /* 链接/小号文字用主色「墨水」档（暗色下即 --accent） */
+  --accent-dim: rgba(79, 140, 255, 0.16); /* 主色弱化底 */
+  --accent-line: rgba(79, 140, 255, 0.42); /* 主色描边（胶囊按钮的边缘光） */
+
+  /* ---- 点题色（暖橙：口号关键词、旗舰徽章；克制使用） ---- */
+  --accent-2: #ff9a4d;
+  --accent-2-text: #ff9a4d; /* 橙的文字安全档（暗色下即 --accent-2） */
+  --accent-2-dim: rgba(255, 154, 77, 0.16);
+
+  /* ---- 实底色上的文字色 ---- */
+  --on-accent: #071022; /* 实底主色（#4f8cff）上的深字 */
+  --on-accent-strong: #071022; /* 实底主色 hover 强化态（#8ab4ff）上的深字 */
+  --on-accent-2: #211003; /* 实底橙（#ff9a4d）上的深字 */
+
+  /* ---- 描边与深度（1px 冷描边为主，阴影克制、有偏移有模糊） ---- */
+  --line: rgba(140, 172, 224, 0.14);
+  --line-strong: rgba(140, 172, 224, 0.3);
+  --shadow-1: 0 1px 2px rgba(2, 6, 16, 0.5);
+  --shadow-2: 0 14px 44px rgba(2, 6, 16, 0.55);
+
+  /* ---- 交互面与遮罩 ---- */
+  --tab-hover: rgba(140, 172, 214, 0.1); /* tab/条目/圆钮 hover 底 */
+  --scrim: rgba(2, 6, 16, 0.55); /* overlay 遮罩 */
+
+  /* ---- router-rail / 文档面板 ---- */
+  --rail-panel-bg: rgba(7, 12, 24, 0.92); /* overlay 态 rail 面板底 */
+  --doc-panel-bg: rgba(12, 20, 38, 0.55); /* 文档面板底 */
+
+  /* ---- 滚动条 ---- */
+  --scrollbar-thumb: rgba(140, 172, 224, 0.26);
+  --scrollbar-thumb-hover: rgba(140, 172, 224, 0.44);
+
+  /* ---- 玻璃令牌（--glass-* 一组：玻璃表面统一取值） ----
+     V2 暗色按 Kimi 式扁平衰减（§3.3）：砍白光学层与辉光、玻璃底收实一档；
+     亮色组在 html[data-theme='light'] 段整套重标（§3.4.1）。 */
+  --glass-bg: rgba(12, 18, 34, 0.72);
+  --glass-border: rgba(148, 172, 214, 0.14);
+  --glass-blur: 6px;
+  --glass-highlight: rgba(255, 255, 255, 0.04);
+  --glass-shadow:
+    0 1px 2px rgba(2, 6, 16, 0.4),
+    0 10px 36px rgba(2, 6, 16, 0.38);
+  /* GlassSurface 的两条退化分支（毛玻璃/半透明实底）都读它；令牌在场时随主题换肤，
+     令牌缺失时组件里的暗色字面兜底仍生效（自包含契约不破坏）。 */
+  --glass-fallback-fill: rgba(10, 16, 30, 0.86);
+  /* prefers-reduced-transparency 分支（GlassSurface）的描边与近实底（§3.3 评审 #13） */
+  --glass-border-strong: rgba(148, 172, 214, 0.34);
+  --glass-solid: rgba(9, 14, 26, 0.95);
+  /* GlassSurface 折射分支底色的统一取值（fill 建议传它，或由组件自动读取） */
+  --glass-refract-fill: hsl(219 46% 6% / 0.72);
+
+  /* ---- 玻璃光学层（Rein 移植构造；V2 暗色衰减为 Kimi 扁平值） ----
+     构造与四层 --glass-insets 拼法不变，亮色主题整套重标（见下方 light 段）：
+       rim-hi / rim-lo  上亮下暗的受光边（顶光打在玻璃截面上的边缘亮度）
+       sheen            内顶高光（贴边一道 + 往下化开一道）
+       rim-2            内缩 1px 的细描边（厚玻璃的第二道截面亮线）
+       caustic          上缘内晕：光穿过玻璃洒在内容上的焦散
+       halo             外缘层——暗色下是玻璃溢到背后内容上的微光，不是落影
+     --glass-insets 是内容层卡片用的光学内层，四层拼法同 Rein 的 .glass-surface。 */
+  --glass-rim-hi: rgba(255, 255, 255, 0.1);
+  --glass-rim-lo: rgba(255, 255, 255, 0.05);
+  --glass-sheen: rgba(255, 255, 255, 0.06);
+  --glass-rim-2: rgba(255, 255, 255, 0.09);
+  --glass-caustic: rgba(255, 255, 255, 0.05);
+  --glass-halo: 0 -1px 20px -8px rgba(255, 255, 255, 0.1);
+  --glass-insets:
+    inset 0 1px 0 var(--glass-sheen),
+    inset 0 12px 20px -14px var(--glass-sheen),
+    inset 0 0 0 1px var(--glass-rim-2),
+    inset 0 1px 10px -2px var(--glass-caustic);
+
+  /* ---- 极光光束 opacity 与暗角（AuroraBackdrop 消费） ---- */
+  --aurora-o-a: 0.5;
+  --aurora-o-b: 0.34;
+  --aurora-o-c: 0.3;
+  --aurora-o-d: 0.26;
+  --vignette-a: radial-gradient(ellipse 120% 70% at 50% 0%, rgba(5, 8, 15, 0.1), rgba(5, 8, 15, 0.72) 78%);
+  --vignette-b: linear-gradient(to bottom, transparent 55%, rgba(5, 8, 15, 0.6));
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px; /* 卡片与面板（工艺地板：卡片 12–16px） */
+  --radius-full: 9999px; /* 胶囊：按钮/徽章 */
+
+  /* ---- 间距（4px 基准） ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* ---- 字体 ----
+     Archivo 变量字（拉丁：站名/拉丁标题，字重 100–900）自托管于
+     @fontsource-variable/archivo（SIL OFL 1.1，main.ts 引入 latin 子集）；
+     中文回退系统黑体栈——CJK 网络字体动辄数 MB，个人站不值得，这是有意的约束。 */
+  --font-display:
+    'Archivo Variable', 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC',
+    'Source Han Sans SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-sans:
+    'Archivo Variable', 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC',
+    'Source Han Sans SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  /* 等宽只给代码：仅 code/pre/kbd 与终端、代码可视化等真正渲染机器文本的元素可用；
+     日期、域名、kicker/徽章、meta 行等非代码文字禁用（DESIGN-V2 §0.4 第 8 条）——
+     区分层级用字重/字号/字距或更淡的 --fg-2，不切换字体。 */
+  --font-mono:
+    'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, 'Noto Sans Mono CJK SC', monospace;
+
+  /* ---- 层级（动效层挂载点统一取值，见 src/App.vue 注释） ---- */
+  --z-bg-layer: 0; /* 背景层（极光 + 动效） */
+  --z-content: 10; /* 页面内容 */
+  --z-header: 100; /* 悬浮页头 */
+  --z-fab: 200; /* 悬浮按钮 */
+  --z-rail: 400; /* router-rail overlay 层（scrim+抽屉，高于 FAB、低于光标） */
+  --z-reader: 500; /* 全屏笔记阅读器：盖住页头与 FAB，仍在光标层之下 */
+  --z-cursor: 9999; /* 光标层（始终最上） */
+
+  /* ---- 布局：router-rail ---- */
+  --rail-w: 264px; /* dock 态 rail 宽 */
+  --rail-overlay-w: min(85vw, 360px); /* overlay 抽屉宽 */
+  /* --rail-offset 是运行时变量（非静态主题值）：dock 且展开=264px，其余恒 0px。
+     定义在 .app-shell（src/App.vue），页头/条带/内容三处消费同一变量。 */
+
+  /* ---- 动效 ---- */
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 160ms; /* hover 类 */
+  --dur-base: 240ms; /* 显隐类 */
+  --dur-slow: 360ms; /* 位移类 */
+}
+
+/* ==================================================================
+   亮色主题（html[data-theme='light']）——命名延续，语义换值（§3.2/§3.4.1）。
+   只覆盖随主题变化的令牌；圆角/间距/字体/层级/布局/动效令牌在 :root 一份共用。
+   ================================================================== */
+html[data-theme='light'] {
+  /* ---- 地面层 ---- */
+  --bg-0: #ffffff; /* 最亮：内层/pre 实底 */
+  --bg-1: #f4f7fc; /* 页面底（雾面蓝白） */
+  --bg-2: #eef3f9; /* 次级面：表格头、代码块 */
+  --bg-3: #e4ebf5; /* 第三层：kbd、hover 内层 */
+  --bg-glow: rgba(79, 140, 255, 0.1);
+
+  /* ---- 前景层 ---- */
+  --fg-0: #0b1526; /* 主文本（对 bg-1 ≈15:1） */
+  --fg-1: #3d4d6b; /* 次要文本（≈7.9:1） */
+  --fg-2: #5f7092; /* 弱化文本/占位（≈4.6:1） */
+
+  /* ---- 主色：亮色下 #4f8cff 不作小号文字色（作墨水仅 3.00:1），走 --accent-text ---- */
+  --accent: #4f8cff;
+  --accent-strong: #1f56c4; /* hover/强化＝加深而非提亮 */
+  --accent-text: #2b66d9; /* 链接与小号主色文字（4.88:1，AA） */
+  --accent-dim: rgba(79, 140, 255, 0.12);
+  --accent-line: rgba(79, 140, 255, 0.45);
+
+  /* ---- 点题色：亮色下橙只用于图形/实底徽章 ---- */
+  --accent-2: #ff9a4d;
+  --accent-2-text: #b35310; /* 橙的文字档（4.70:1，全尺寸 AA） */
+  --accent-2-dim: rgba(255, 154, 77, 0.14);
+
+  /* ---- 实底色上的文字色 ---- */
+  --on-accent: #071022; /* #4f8cff 上 5.90:1（两主题同值） */
+  --on-accent-strong: #ffffff; /* 亮色 hover 加深底 #1f56c4 上的浅字（6.59:1） */
+  --on-accent-2: #211003; /* #ff9a4d 上 9.02:1（两主题同值） */
+
+  /* ---- 描边与深度（亮色＝深色低透明，不是白线） ---- */
+  --line: rgba(11, 21, 38, 0.1);
+  --line-strong: rgba(11, 21, 38, 0.22);
+  --shadow-1: 0 1px 2px rgba(11, 21, 38, 0.08);
+  --shadow-2: 0 14px 44px rgba(11, 21, 38, 0.14);
+
+  /* ---- 交互面与遮罩 ---- */
+  --tab-hover: rgba(11, 21, 38, 0.05);
+  --scrim: rgba(11, 21, 38, 0.35);
+
+  /* ---- router-rail / 文档面板 ---- */
+  --rail-panel-bg: rgba(244, 247, 252, 0.92);
+  --doc-panel-bg: rgba(255, 255, 255, 0.6);
+
+  /* ---- 滚动条 ---- */
+  --scrollbar-thumb: rgba(11, 21, 38, 0.24);
+  --scrollbar-thumb-hover: rgba(11, 21, 38, 0.38);
+
+  /* ---- 玻璃令牌（Rein 超高光学构造的亮色重标，§3.4.1） ---- */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(11, 21, 38, 0.1);
+  --glass-blur: 6px;
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-shadow:
+    0 1px 2px rgba(11, 21, 38, 0.06),
+    0 10px 36px rgba(31, 51, 89, 0.12);
+  --glass-fallback-fill: rgba(255, 255, 255, 0.78);
+  --glass-border-strong: rgba(11, 21, 38, 0.24);
+  --glass-solid: rgba(255, 255, 255, 0.95);
+  --glass-refract-fill: hsl(0 0% 100% / 0.72);
+
+  /* ---- 玻璃光学层（白 rim 在亮底上靠 --glass-border 深线与阴影立住） ---- */
+  --glass-rim-hi: rgba(255, 255, 255, 0.95);
+  --glass-rim-lo: rgba(255, 255, 255, 0.4);
+  --glass-sheen: rgba(255, 255, 255, 0.6);
+  --glass-rim-2: rgba(255, 255, 255, 0.7);
+  --glass-caustic: rgba(79, 140, 255, 0.12); /* 蓝调焦散 */
+  --glass-halo: 0 -1px 16px -6px rgba(79, 140, 255, 0.25); /* 冷光晕 */
+  --glass-insets:
+    inset 0 1px 0 var(--glass-sheen),
+    inset 0 12px 20px -14px var(--glass-sheen),
+    inset 0 0 0 1px var(--glass-rim-2),
+    inset 0 1px 10px -2px var(--glass-caustic);
+
+  /* ---- 极光：光束降为「薄雾」，暗角=纸缘雾 ---- */
+  --aurora-o-a: 0.22;
+  --aurora-o-b: 0.16;
+  --aurora-o-c: 0.14;
+  --aurora-o-d: 0.12;
+  --vignette-a: radial-gradient(ellipse 120% 70% at 50% 0%, rgba(244, 247, 252, 0.2), rgba(238, 243, 250, 0.62) 78%);
+  --vignette-b: linear-gradient(to bottom, transparent 55%, rgba(238, 243, 250, 0.55));
+}
