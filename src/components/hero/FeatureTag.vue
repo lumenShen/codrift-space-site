@@ -1,37 +1,55 @@
 <script setup lang="ts">
 /**
- * FeatureTag —— 身份行内联特色 TAG（改造自 vue-bits Stack，上游源码存档
- * research/vue-bits/Stack.vue）。视觉对标 kexie.space 的「硬件部」胶囊：
- * 点题橙实底 + 深色文字 + 圆角胶囊，内联在文字流中、高度与身份行文字匹配。
+ * FeatureTag —— 身份行内联特色「卡片堆」（改造自 vue-bits Stack，上游源码存档
+ * research/vue-bits/Stack.vue）。视觉仍是 kexie 式点题胶囊，但交互从单胶囊
+ * 升级为一副真正可拖拽的牌堆：
  *
- * 与上游 Stack 的差异（改造，不是照搬）：
- *  - 上游是大卡层叠（motion-v Motion 拖拽 + sendToBackOnClick + autoplay，
- *    Stack.vue:8-79,222-237,241-256）；本组件收进 tag 尺寸：单胶囊为交互
- *    主体，身后两枚静态壳层表达景深（kexie dept-deck「后卡更糊更暗」的暗语，
- *    位移缩到 ±0.2~0.3em、blur 1~1.8px、brightness 0.72/0.5）；
- *    无 prev/next、无指示点（.fs-controls 类控制条按规格移除）；
- *  - 换场走站长管线：文字时间轴由 SwapText 承载（旧内容 0s/0.3s 渐出+模糊
- *    增大后卸载；新内容 0.2s/0.3s 渐入+模糊减小；全程 0.5s 内完成）；toss
- *    模式下旧层同时被「甩回」：spring 微超伸（SPRING_SNAPPY，kexie 调研校准
- *    的更弹一档 k=480/c=27/m=1：ζ≈0.616、仿真过冲 ≈7.6%、≈179ms 到峰）——
- *    轻微向上 5px + 随机水平偏移 ±8px，scale 注入 -2.8/s 初速走出 1→≈0.94→1
- *    （仿真谷值 0.9434@50ms）；模糊随渐出增大到 6px，即 kexie 式「运动模糊感」；
- *  - 拖拽几何参考上游 Stack.vue（drag elastic 0.6 + 超阈值 sendToBack，
- *    Stack.vue:20-23,222-228），阈值按 tag 尺寸缩放：0.35×胶囊实测宽
- *    （夹 28~72px；上游 200px/约 300px 卡），弹性跟随 0.4；粗指针（触屏）
- *    只点击切换（上游 mobileClickOnly 同思路，不劫持页面滚动）；
- *  - 自动轮播约 5s：悬停/拖拽/聚焦中暂停、页面隐藏暂停、手动切换重置计时；
- *    prefers-reduced-motion 停用自动轮播（弹簧由 useSpring 自动退化为瞬时切换）；
- *  - 受控组件：activeId 由页面持有（Describe 行与 TAG 同步换场共用同一状态），
- *    本组件只发 update:activeId，不私改状态。
+ * 结构
+ *  - 五张特色卡同格叠放（CSS grid 同一格），按 depth 计算扇形姿态：
+ *    后方卡片逐层缩小 / 下沉 / 交替微旋 / 变淡，最上面的卡才是交互主体；
+ *  - 每张卡带自己的主题色（页面经 `tone` 传入令牌表达式）。轮播走完一轮
+ *    正好经过五种主题色；当前卡颜色同时由页面消费到 hero 光斑与 Describe
+ *    行的关键词上（页面用 activeId 算 tone，组件只管发 update:activeId）。
+ *
+ * 拖拽与换牌（对照上游 Stack 的 sendToBack 语义）
+ *  - 按下 1:1 跟手：直接写 SpringValue 的当前值，不加弹性延迟，手指在哪卡在哪；
+ *    水平位移同时驱动倾角（±10°）与轻微抬升（最多 +5%），形成「捏起一张牌」。
+ *  - 松手后交给弹簧：x / y / rotate / scale 全部是 SpringValue，共享
+ *    useSpring 的单根 rAF 管线，不新建计时器。
+ *  - 换牌信号有两个，满足任一即触发（上游只有 offset 一个）：
+ *      1) 位移阈值 = 0.32 × 卡宽（夹 24–64px）；
+ *      2) 甩出速度 = 4.2 × 卡宽 px/s（夹 320–900px/s）——快速轻甩也能换牌。
+ *  - 初速匹配：松手瞬间把 PointerVelocity 采到的 vx/vy 注入 x/y 弹簧（rotate /
+ *    scale 也按 vx / 合速度注入），所以卡不是「回到起点再重排」，而是顺着手指
+ *    的动量继续飞、再被弹簧收回牌堆后方；未过阈值时同样注入半速，回弹有惯性。
+ *  - 换牌后 activeId 变化 → 整副牌重新计算 depth → 每张卡用弹簧滑到新位，
+ *    被甩出的卡目标变成最后一层，于是「飞出 → 缩小 → 落入牌堆底部」一气呵成。
+ *
+ * 轮播与可达性
+ *  - 约 5s 自动换牌；悬停、拖拽、聚焦、页面隐藏都暂停，手动换牌重置计时；
+ *    prefers-reduced-motion 停用自动轮播（弹簧由 useSpring 退化为瞬时跳变）。
+ *  - 只有最上面的卡可聚焦（后方卡 disabled + aria-hidden），Enter/Space 触发
+ *    click 换牌；←/↑ 上一张、→/↓ 下一张；aria-live 只在手动换牌时播报。
+ *  - 触屏允许真实拖拽（touch-action: none 只作用于最上面的卡），
+ *    不再沿用上游 mobileClickOnly 的「触屏只点击」降级。
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue';
-import { reducedMotion, SPRING_SNAPPY, SpringValue } from '@/effects/useSpring';
-import SwapText from './SwapText.vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+  type CSSProperties,
+} from 'vue';
+import { reducedMotion, SpringValue } from '@/effects/useSpring';
+import { clamp, PointerVelocity, SPRING_STACK, stackPose } from './stackMotion';
 
 export interface FeatureTagItem {
   id: string;
   label: string;
+  /** 该卡的主题色（CSS 颜色表达式；页面传令牌引用，如 var(--aurora-violet)） */
+  tone?: string;
 }
 
 const props = withDefaults(
@@ -48,129 +66,351 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'update:activeId': [id: string] }>();
 
-function resolveItem(key: string | number): FeatureTagItem {
-  return props.items.find((i) => i.id === key) ?? props.items[0];
+/* ---------------- 牌堆顺序 ----------------
+   active 永远排第一（最上层），其余按 items 原序跟随；activeId 一变，
+   整副牌的 depth 全部重排——这就是换牌动画的唯一数据源。 */
+const ordered = computed<FeatureTagItem[]>(() => {
+  const { items } = props;
+  if (items.length === 0) return [];
+  const found = items.findIndex((item) => item.id === props.activeId);
+  const start = found < 0 ? 0 : found;
+  return items.map((_, offset) => items[(start + offset) % items.length]);
+});
+
+/* 反序渲染：最上层的卡在 DOM 里最后出现，即使 JS 尚未写 z-index 也不会闪错层 */
+const rendered = computed(() =>
+  ordered.value.map((item, depth) => ({ item, depth })).reverse(),
+);
+
+const activeItem = computed<FeatureTagItem | null>(() => ordered.value[0] ?? null);
+const activeLabel = computed(() => activeItem.value?.label ?? '');
+
+/* ---------------- 每张卡的弹簧运行时 ----------------
+   弹簧值只在 onUpdate 里标脏，同一帧内多根弹簧合并成一次 DOM 写入
+   （queueMicrotask 在绘制前执行），5 张卡 = 每帧最多 5 次 transform 写入。 */
+interface CardMotion {
+  x: SpringValue;
+  y: SpringValue;
+  rotate: SpringValue;
+  scale: SpringValue;
+  opacity: SpringValue;
 }
 
-const activeLabel = computed(() => resolveItem(props.activeId)?.label ?? '');
+const motions = new Map<string, CardMotion>();
+const cardEls = new Map<string, HTMLElement>();
+const dirty = new Set<string>();
+let flushQueued = false;
 
-/* ---- 切换（上游 sendToBack 语义：当前项甩回，下一项到前） ---- */
-function advance(): void {
-  if (props.items.length < 2) return;
-  const idx = props.items.findIndex((i) => i.id === props.activeId);
-  const next = props.items[(idx + 1) % props.items.length];
-  emit('update:activeId', next.id);
-  restartAutoplay(); // 手动/拖拽切换重置 5s 计时
+function writeCard(id: string): void {
+  const motion = motions.get(id);
+  const el = cardEls.get(id);
+  if (!motion || !el) return;
+  el.style.transform =
+    `translate3d(${motion.x.value.toFixed(2)}px, ${motion.y.value.toFixed(2)}px, 0) ` +
+    `rotate(${motion.rotate.value.toFixed(2)}deg) scale(${motion.scale.value.toFixed(4)})`;
+  el.style.opacity = motion.opacity.value.toFixed(3);
 }
 
-/* ---- 拖拽（参考上游 Stack.vue 拖动几何，阈值按 tag 尺寸缩放） ----
-   拖拽偏移用弹簧承载：拖动中 set() 直接跟手（不打架），松手 setTarget(0)
-   弹簧带劲回位（超阈值同样回位——换场动效由 SwapText toss 层承担）。 */
-const DRAG_ELASTIC = 0.4; // 弹性跟随（上游 drag-elastic 0.6 的 tag 缩比）
-const DRAG_RATIO = 0.35; // 阈值 = 0.35 × 胶囊实测宽（上游 200px/≈300px 卡）
-const DRAG_DEAD_ZONE = 4; // 位移超过此值才算拖拽手势（抑制误触 click）
+function markDirty(id: string): void {
+  dirty.add(id);
+  if (flushQueued) return;
+  flushQueued = true;
+  queueMicrotask(() => {
+    flushQueued = false;
+    for (const key of dirty) writeCard(key);
+    dirty.clear();
+  });
+}
 
-const dragX = new SpringValue(0, SPRING_SNAPPY, 0.1);
-const dragY = new SpringValue(0, SPRING_SNAPPY, 0.1);
-const dragOffset = ref({ x: 0, y: 0 });
-dragX.onUpdate = () => {
-  dragOffset.value = { x: dragX.value, y: dragY.value };
-};
-dragY.onUpdate = () => {
-  dragOffset.value = { x: dragX.value, y: dragY.value };
-};
+function createMotion(id: string): CardMotion {
+  const onChange = (): void => markDirty(id);
+  const motion: CardMotion = {
+    x: new SpringValue(0, SPRING_STACK, 0.05),
+    y: new SpringValue(0, SPRING_STACK, 0.05),
+    rotate: new SpringValue(0, SPRING_STACK, 0.01),
+    scale: new SpringValue(1, SPRING_STACK, 0.0005),
+    opacity: new SpringValue(1, SPRING_STACK, 0.001),
+  };
+  motion.x.onUpdate = onChange;
+  motion.y.onUpdate = onChange;
+  motion.rotate.onUpdate = onChange;
+  motion.scale.onUpdate = onChange;
+  motion.opacity.onUpdate = onChange;
+  motions.set(id, motion);
+  return motion;
+}
 
-const btnRef = ref<HTMLElement | null>(null);
-const isDragging = ref(false); // 按压/拖拽进行中（自动轮播暂停 + 光标态）
+function motionOf(id: string): CardMotion {
+  return motions.get(id) ?? createMotion(id);
+}
+
+function setCardEl(id: string, el: unknown): void {
+  if (el) cardEls.set(id, el as HTMLElement);
+  else cardEls.delete(id);
+}
+
+/* ---------------- 尺寸量测与目标姿态 ---------------- */
+const deckRef = ref<HTMLElement | null>(null);
+const size = { width: 0, height: 32 };
+let measured = false;
+
+function measure(): void {
+  const deck = deckRef.value;
+  if (!deck) return;
+  const rect = deck.getBoundingClientRect();
+  if (rect.width > 0) size.width = rect.width;
+  if (rect.height > 0) size.height = rect.height;
+}
+
+/** 换牌/重排时把每张卡的目标姿态同步到弹簧（instant 用于首帧与尺寸变化） */
+function applyTargets(instant = false): void {
+  const cards = rendered.value;
+  for (const { item, depth } of cards) {
+    const el = cardEls.get(item.id);
+    if (el) el.style.zIndex = String(cards.length - depth);
+    if (dragId === item.id && !instant) continue; // 拖拽中不夺走手指位置
+    const motion = motionOf(item.id);
+    const pose = stackPose(depth, size.height);
+    if (instant) {
+      motion.x.set(pose.x);
+      motion.y.set(pose.y);
+      motion.rotate.set(pose.rotate);
+      motion.scale.set(pose.scale);
+      motion.opacity.set(pose.opacity);
+    } else {
+      motion.x.setTarget(pose.x);
+      motion.y.setTarget(pose.y);
+      motion.rotate.setTarget(pose.rotate);
+      motion.scale.setTarget(pose.scale);
+      motion.opacity.setTarget(pose.opacity);
+    }
+  }
+}
+
+/* ---------------- 拖拽 ----------------
+   阈值随卡宽缩放：卡越小越容易「甩」出去；速度阈值夹在 320–900px/s，
+   对应桌面鼠标快速一拨与触屏轻扫都能命中的区间。 */
+const DRAG_DEAD_ZONE = 4; // 超过此位移才算拖拽（抑制误触 click）
+const OFFSET_RATIO = 0.32;
+const FLING_RATIO = 4.2;
+
+const isDragging = ref(false);
+const velocity = new PointerVelocity();
+
+let dragId: string | null = null;
 let pointerId: number | null = null;
 let startX = 0;
 let startY = 0;
-let moved = false; // 本次按压是否已成拖拽手势（click 抑制）
-let threshold = 42;
+let lastX = 0;
+let lastY = 0;
+let moved = false;
+let suppressClick = false;
+let suppressTimer: ReturnType<typeof setTimeout> | undefined;
 
-function onPointerDown(e: PointerEvent): void {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  // 粗指针（触屏）：只点击切换，不劫持滚动（上游 mobileClickOnly 思路）
-  if (
-    typeof window.matchMedia === 'function' &&
-    !window.matchMedia('(pointer: fine)').matches
-  ) {
-    return;
-  }
-  const root = e.currentTarget as HTMLElement | null;
-  if (!root) return;
-  pointerId = e.pointerId;
-  startX = e.clientX;
-  startY = e.clientY;
+function offsetThreshold(): number {
+  return clamp((size.width || 96) * OFFSET_RATIO, 24, 64);
+}
+
+function flingThreshold(): number {
+  return clamp((size.width || 96) * FLING_RATIO, 320, 900);
+}
+
+function suppressNextClick(): void {
+  suppressClick = true;
+  clearTimeout(suppressTimer);
+  suppressTimer = setTimeout(() => {
+    suppressClick = false;
+  }, 400);
+}
+
+function onPointerDown(event: PointerEvent, id: string, depth: number): void {
+  if (depth !== 0 || id !== props.activeId) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  const el = event.currentTarget as HTMLElement | null;
+  if (!el) return;
+
+  pointerId = event.pointerId;
+  dragId = id;
+  startX = lastX = event.clientX;
+  startY = lastY = event.clientY;
   moved = false;
+  suppressClick = false;
   isDragging.value = true;
-  const w = btnRef.value?.getBoundingClientRect().width ?? 0;
-  threshold = Math.min(72, Math.max(28, w * DRAG_RATIO));
-  root.setPointerCapture(e.pointerId);
+  velocity.reset(event.clientX, event.clientY, event.timeStamp);
+  el.setPointerCapture(event.pointerId);
+  stopAutoplay();
 }
 
-function onPointerMove(e: PointerEvent): void {
-  if (pointerId !== e.pointerId) return;
-  const dx = e.clientX - startX;
-  const dy = e.clientY - startY;
+function onPointerMove(event: PointerEvent): void {
+  if (pointerId !== event.pointerId || !dragId) return;
+  const dx = event.clientX - startX;
+  const dy = event.clientY - startY;
+  lastX = event.clientX;
+  lastY = event.clientY;
+  velocity.sample(event.clientX, event.clientY, event.timeStamp);
+
   if (!moved && Math.hypot(dx, dy) > DRAG_DEAD_ZONE) moved = true;
-  dragX.set(dx * DRAG_ELASTIC);
-  dragY.set(dy * DRAG_ELASTIC);
+
+  const motion = motionOf(dragId);
+  // 拖拽期间直接跟随手指（弹簧在松手时才接管），倾角与抬升保持物理直觉
+  motion.x.set(dx);
+  motion.y.set(dy);
+  motion.rotate.set(clamp(dx * 0.06, -10, 10));
+  const lift = Math.min(1, Math.hypot(dx, dy) / Math.max(60, size.width || 96));
+  motion.scale.set(1 + lift * 0.05);
 }
 
-function endDrag(e: PointerEvent | null): void {
-  if (e && pointerId !== e.pointerId) return;
-  pointerId = null;
-  isDragging.value = false;
-  if (e) {
-    const rawX = e.clientX - startX;
-    const rawY = e.clientY - startY;
-    // 上游 Stack.vue:222-228：|offset| 超阈值 → sendToBack（此处 = advance）
-    if (moved && (Math.abs(rawX) > threshold || Math.abs(rawY) > threshold)) advance();
+function endDrag(event: PointerEvent | null): void {
+  const id = dragId;
+  if (!id) return;
+  if (event && pointerId !== event.pointerId) return;
+  if (event) {
+    lastX = event.clientX;
+    lastY = event.clientY;
   }
-  dragX.setTarget(0);
-  dragY.setTarget(0);
+
+  const motion = motionOf(id);
+  const dx = lastX - startX;
+  const dy = lastY - startY;
+  const sampling = event
+    ? velocity.read(event.timeStamp)
+    : { vx: 0, vy: 0 };
+  const vx = clamp(sampling.vx, -2200, 2200);
+  const vy = clamp(sampling.vy, -2200, 2200);
+  const distance = Math.hypot(dx, dy);
+  const shouldAdvance =
+    moved &&
+    (distance > offsetThreshold() ||
+      Math.abs(vx) > flingThreshold() ||
+      Math.abs(vy) > flingThreshold());
+
+  pointerId = null;
+  dragId = null;
+  isDragging.value = false;
+  velocity.clear();
+
+  if (shouldAdvance) {
+    // 初速匹配：先注入手指末速，再换 activeId；随后 applyTargets 把这张卡的
+    // 目标换成牌堆最后一层，弹簧会带着动量把它甩出去、再收进牌堆。
+    motion.x.kick(vx);
+    motion.y.kick(vy);
+    motion.rotate.kick(vx * 0.03);
+    motion.scale.kick(-Math.min(1400, Math.hypot(vx, vy)) * 0.00012);
+    advance(1, isCardFocused());
+    void nextTick(() => applyTargets());
+  } else {
+    const pose = stackPose(0, size.height);
+    motion.x.setTarget(pose.x);
+    motion.y.setTarget(pose.y);
+    motion.rotate.setTarget(pose.rotate);
+    motion.scale.setTarget(pose.scale);
+    motion.opacity.setTarget(pose.opacity);
+    // 未过阈值也保留一点回弹动量，避免「拖了一半突然被吸回去」的塑料感
+    motion.x.kick(vx * 0.5);
+    motion.y.kick(vy * 0.5);
+    motion.rotate.kick(vx * 0.012);
+  }
+
+  if (moved) suppressNextClick();
 }
 
-function onPointerUp(e: PointerEvent): void {
-  endDrag(e);
+function onPointerUp(event: PointerEvent): void {
+  endDrag(event);
 }
 
 function onPointerCancel(): void {
+  const id = dragId;
+  if (!id) return;
+  const motion = motionOf(id);
+  const pose = stackPose(0, size.height);
+  motion.x.setTarget(pose.x);
+  motion.y.setTarget(pose.y);
+  motion.rotate.setTarget(pose.rotate);
+  motion.scale.setTarget(pose.scale);
+  motion.opacity.setTarget(pose.opacity);
+
+  dragId = null;
+  pointerId = null;
+  isDragging.value = false;
+  velocity.clear();
   moved = false;
-  endDrag(null);
 }
 
-function onClick(): void {
-  if (moved) {
-    moved = false; // 拖拽松手后的合成 click 不当点击
+function onCardClick(id: string, depth: number): void {
+  if (depth !== 0 || id !== props.activeId) return;
+  if (suppressClick) {
+    suppressClick = false;
     return;
   }
-  advance();
+  // 点击/键盘激活都走同一路径：换牌后把焦点交给新顶卡。鼠标点击通常也会聚焦
+  // 按钮，而 :focus-visible 的启发式只对键盘显形，所以不会给鼠标用户画焦点环。
+  advance(1, true);
 }
 
-const dragStyle = computed<CSSProperties>(() => ({
-  transform: `translate3d(${dragOffset.value.x.toFixed(2)}px, ${dragOffset.value.y.toFixed(2)}px, 0)`,
-}));
+function onKeydown(event: KeyboardEvent): void {
+  // Enter / Space 自己处理并 preventDefault：一部分 WebView 与自动化环境
+  // 不会为聚焦按钮合成原生 click，自己兜住可保证键盘换牌稳定且只换一次。
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    suppressClick = false;
+    advance(1, true);
+    return;
+  }
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    suppressClick = false;
+    advance(1, true);
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    suppressClick = false;
+    advance(-1, true);
+  }
+}
 
-/* ---- 自动轮播（约 5s；悬停/拖拽/聚焦中暂停，页面隐藏暂停） ---- */
+/* ---------------- 换牌 ---------------- */
+function isCardFocused(): boolean {
+  const el = document.activeElement;
+  return el instanceof HTMLElement && el.classList.contains('ft-card');
+}
+
+function advance(step = 1, keepFocus = false): void {
+  const { items } = props;
+  if (items.length < 2) return;
+  const found = items.findIndex((item) => item.id === props.activeId);
+  const base = found < 0 ? 0 : found;
+  const nextId = items[(base + step + items.length) % items.length].id;
+  emit('update:activeId', nextId);
+  // 换牌后旧顶卡变 disabled，浏览器会因此丢焦点；键盘/点击换牌时把焦点交给新顶卡，
+  // 保证 Enter / 方向键可以连续操作（nextTick 等 DOM 更新完再 focus）。
+  if (keepFocus) {
+    void nextTick(() => cardEls.get(nextId)?.focus({ preventScroll: true }));
+  }
+  restartAutoplay();
+}
+
+/* ---------------- 自动轮播（悬停/拖拽/聚焦/页面隐藏暂停） ---------------- */
 const hovered = ref(false);
+const focused = ref(false);
 const canRun = computed(
-  () => !hovered.value && !isDragging.value && !reducedMotion.value,
+  () =>
+    !hovered.value &&
+    !focused.value &&
+    !isDragging.value &&
+    !reducedMotion.value &&
+    props.items.length > 1,
 );
 
 let timer: ReturnType<typeof setInterval> | undefined;
 
 function stopAutoplay(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = undefined;
-  }
+  if (!timer) return;
+  clearInterval(timer);
+  timer = undefined;
 }
 
 function restartAutoplay(): void {
   stopAutoplay();
-  if (!canRun.value || props.items.length < 2) return;
+  if (!canRun.value) return;
   timer = setInterval(() => advance(), props.intervalMs);
 }
 
@@ -181,51 +421,98 @@ function onVisibility(): void {
   else restartAutoplay();
 }
 
+/* ---------------- 生命周期 ---------------- */
+let observer: ResizeObserver | null = null;
+
 onMounted(() => {
+  measure();
+  applyTargets(true);
+  measured = true;
+  if (typeof ResizeObserver !== 'undefined') {
+    observer = new ResizeObserver(() => {
+      measure();
+      applyTargets(true);
+    });
+    if (deckRef.value) observer.observe(deckRef.value);
+  }
   restartAutoplay();
   document.addEventListener('visibilitychange', onVisibility);
 });
 
+watch(
+  rendered,
+  () => {
+    if (measured) applyTargets();
+  },
+  { flush: 'post' },
+);
+
 onBeforeUnmount(() => {
   stopAutoplay();
+  clearTimeout(suppressTimer);
+  observer?.disconnect();
+  observer = null;
   document.removeEventListener('visibilitychange', onVisibility);
+  // 让仍在飞行的弹簧脱离全局 rAF 管线，避免卸载后空转
+  for (const motion of motions.values()) {
+    motion.x.snap();
+    motion.y.snap();
+    motion.rotate.snap();
+    motion.scale.snap();
+    motion.opacity.snap();
+  }
+  motions.clear();
+  cardEls.clear();
 });
+
+/* ---------------- 模板辅助 ---------------- */
+function cardStyle(item: FeatureTagItem, depth: number): CSSProperties {
+  return {
+    '--card-tone': item.tone ?? 'var(--accent-2)',
+    zIndex: rendered.value.length - depth,
+  } as CSSProperties;
+}
 </script>
 
 <template>
   <span
     class="ft"
     role="group"
-    aria-roledescription="轮播"
+    aria-roledescription="卡片轮播"
     aria-label="站点特色"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
-    @focusin="hovered = true"
-    @focusout="hovered = false"
-    @pointerdown="onPointerDown"
-    @pointermove="onPointerMove"
-    @pointerup="onPointerUp"
-    @pointercancel="onPointerCancel"
+    @focusin="focused = true"
+    @focusout="focused = false"
   >
-    <!-- 景深壳层：kexie dept-deck 的「后卡更糊更暗」，静态、不参与交互 -->
-    <span class="ft-shell ft-shell--a" aria-hidden="true"></span>
-    <span class="ft-shell ft-shell--b" aria-hidden="true"></span>
-
-    <button
-      ref="btnRef"
-      type="button"
-      class="ft-btn"
-      :class="{ 'is-dragging': isDragging }"
-      :style="dragStyle"
-      :aria-label="`当前特色：${activeLabel}，点击或拖动切换`"
-      @click="onClick"
-    >
-      <SwapText :swap-key="activeId" :resolve="resolveItem" toss class="ft-swap">
-        <template #default="{ item }">
-          <span class="ft-pill"><span class="ft-label">{{ item.label }}</span></span>
-        </template>
-      </SwapText>
-    </button>
+    <span ref="deckRef" class="ft-deck">
+      <button
+        v-for="card in rendered"
+        :key="card.item.id"
+        :ref="(el) => setCardEl(card.item.id, el)"
+        type="button"
+        class="ft-card"
+        :class="{ 'is-top': card.depth === 0, 'is-dragging': isDragging && card.depth === 0 }"
+        :style="cardStyle(card.item, card.depth)"
+        :disabled="card.depth > 0"
+        :tabindex="card.depth === 0 ? 0 : -1"
+        :aria-hidden="card.depth > 0 ? 'true' : undefined"
+        :aria-label="
+          card.depth === 0
+            ? `当前特色：${card.item.label}，点击、拖动或左右滑动切换`
+            : undefined
+        "
+        @pointerdown="onPointerDown($event, card.item.id, card.depth)"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerCancel"
+        @click="onCardClick(card.item.id, card.depth)"
+        @keydown="onKeydown"
+      >
+        <span class="ft-label">{{ card.item.label }}</span>
+      </button>
+    </span>
+    <span class="ft-live" aria-live="polite">{{ focused ? activeLabel : '' }}</span>
   </span>
 </template>
 
@@ -239,62 +526,54 @@ onBeforeUnmount(() => {
   -webkit-user-select: none;
 }
 
-/* ---- 景深壳层（kexie dept-deck 暗语：后卡下沉/偏移/更糊/更暗） ---- */
-.ft-shell {
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-full);
-  background: var(--accent-2);
-  pointer-events: none;
+/* 同格叠放：grid 让容器自然取「最宽一张卡」的尺寸，transform 不参与布局 */
+.ft-deck {
+  display: grid;
 }
 
-.ft-shell--a {
-  transform: translate(0.28em, 0.16em) rotate(-3.5deg) scale(0.985);
-  filter: blur(1px) brightness(0.72);
-  opacity: 0.9;
-}
-
-.ft-shell--b {
-  transform: translate(-0.22em, 0.28em) rotate(4deg) scale(0.965);
-  filter: blur(1.8px) brightness(0.5);
-  opacity: 0.75;
-}
-
-/* ---- 胶囊按钮：交互主体（点击/拖拽/键盘 Enter） ----
-   font-size/font-family 显式 inherit：button 的 UA 默认（13.333px 系统字体）
-   会打断 .ft 的 em 字号链，胶囊会缩成 13px 系（实测 78×28px）。 */
-.ft-btn {
+/* ---- 卡片本体：点题色实底 + 深色文字（--on-accent） ----
+   每张卡的 --card-tone 由页面传入的令牌表达式决定；轮播一轮经过五种主题色。 */
+.ft-card {
+  grid-area: 1 / 1;
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-size: inherit;
-  font-family: inherit;
-  cursor: grab;
-  will-change: transform;
-}
-
-.ft-btn.is-dragging {
-  cursor: grabbing;
-}
-
-/* ---- 胶囊本体：点题橙实底 + 深色文字（--on-accent-2） ----
-   每个换场层各自渲染完整胶囊（壳+字一起渐出/甩回，不会字走壳留）。 */
-.ft-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 2.1em;
   padding: 0 0.9em;
+  border: 1px solid color-mix(in srgb, var(--card-tone, var(--accent-2)) 62%, var(--line));
   border-radius: var(--radius-full);
-  background: var(--accent-2);
-  color: var(--on-accent-2);
-  box-shadow: var(--shadow-1);
-  /* 顶对齐：压掉 inline-flex 基线对齐在行盒下方的 descender 空隙，
-     保证 sizer/层高度 = 胶囊高度（按钮与壳层不错位） */
-  vertical-align: top;
+  background: var(--card-tone, var(--accent-2));
+  color: var(--on-accent);
+  font: inherit;
+  font-size: inherit;
+  line-height: 1;
+  box-shadow:
+    var(--shadow-1),
+    0 10px 22px -14px color-mix(in srgb, var(--card-tone, var(--accent-2)) 70%, transparent);
+  transform-origin: 50% 85%;
+  will-change: transform, opacity;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 只有最上面的卡接指针；后方卡 disabled + pointer-events: none */
+.ft-card.is-top {
+  touch-action: none;
+}
+
+.ft-card.is-dragging {
+  cursor: grabbing;
+}
+
+.ft-card:disabled {
+  pointer-events: none;
+  cursor: default;
+}
+
+.ft-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .ft-label {
@@ -305,11 +584,29 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+/* 换牌播报：视觉隐藏，仅屏幕阅读器可听（自动轮播在聚焦/悬停时已暂停） */
+.ft-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  /* 弹簧/换场由 useSpring 与 SwapText 的 reduce 分支退化；
-     这里只去掉无意义的抓取光标态 */
-  .ft-btn {
+  .ft-card {
     cursor: pointer;
+  }
+}
+
+@media (hover: none) {
+  .ft-card.is-top {
+    cursor: default;
   }
 }
 </style>

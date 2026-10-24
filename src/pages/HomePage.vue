@@ -4,8 +4,10 @@
  * hero 三层结构（站长最新定稿，覆盖 DESIGN-V2.md 的 hero 章节与更早的双栏/
  * 右栏卡叠构图）：
  *   第一行 身份行：「我 LumenShen（旧名 gozaoo）」——名字大字重、旧名次级
- *     文本，行尾内联 FeatureTag（五特色轮换的橙色胶囊，句式位对标 kexie
+ *     文本，行尾内联 FeatureTag（五特色卡片堆，句式位对标 kexie
  *     「在 > [科协] 硬件部」）；站名 Codrift 已在页头，hero 不再重复巨字站名；
+ *     牌堆可拖拽/甩出换牌，每张卡一种主题色，轮播一轮经过五种色，
+ *     当前色同步到 hero 光斑与 Describe 行关键词；
  *   第二行 Describe 行：当前特色的一句话描述，大字重（对标 kexie 第二行的
  *     大粗排版，点题橙高亮关键词），经 SwapText 与 TAG 同步换场（0.5s 管线）；
  *   第三行：小口号「代码与想法，漂流至此。」+ 四枚胶囊 CTA。
@@ -16,7 +18,7 @@
  * 板块正文全部经内容系统渲染（tag 'home' 的条目，见 components/content.ts）；
  * 作品集是调研定稿的结构化数据（卡片渲染），博客速览取内容系统最新文章。
  */
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, type CSSProperties } from 'vue';
 import PortfolioCard from '@/components/PortfolioCard.vue';
 import BlogCard from '@/components/BlogCard.vue';
 import FeatureTag from '@/components/hero/FeatureTag.vue';
@@ -111,12 +113,15 @@ interface FeatureItem {
   pre: string;
   hl: string;
   post: string;
+  /** 该特色的主题色（引用 tokens.css 令牌，不裸写色值） */
+  tone: string;
 }
 
 const features: FeatureItem[] = [
   {
     id: 'aesthetic',
     label: '前端审美',
+    tone: 'var(--aurora-violet)',
     pre: '研究好看的',
     hl: '前端效果',
     post: '和经验，把值得拆解的实现思路收进站点。',
@@ -124,6 +129,7 @@ const features: FeatureItem[] = [
   {
     id: 'efficiency',
     label: '效率至上',
+    tone: 'var(--aurora-cyan)',
     pre: 'vibe Coding 的使用经验和分享交流，把想法',
     hl: '更快变成能跑的东西',
     post: '。',
@@ -131,6 +137,7 @@ const features: FeatureItem[] = [
   {
     id: 'output',
     label: '产品产出',
+    tone: 'var(--aurora-blue)',
     pre: '',
     hl: '从想法到成品',
     post: '：Rein、EffiBuddy、开源笔记库等作品的沉淀与展示。',
@@ -138,6 +145,7 @@ const features: FeatureItem[] = [
   {
     id: 'sport',
     label: '运动交流',
+    tone: 'var(--aurora-green)',
     pre: '关于运动的记录与交流，给久坐的代码节奏留',
     hl: '一段身体的运转',
     post: '。',
@@ -145,6 +153,7 @@ const features: FeatureItem[] = [
   {
     id: 'music',
     label: '音乐爱好',
+    tone: 'var(--accent-2)',
     pre: '听歌口味与音乐相关的分享，给代码之外留',
     hl: '一点旋律',
     post: '。',
@@ -157,6 +166,14 @@ const activeFeatureId = ref(features[0].id);
 function resolveFeature(key: string | number): FeatureItem {
   return features.find((f) => f.id === key) ?? features[0];
 }
+
+/* 当前特色的主题色：牌堆换牌时由 activeId 驱动，hero 光斑与 Describe
+   关键词经 --hero-tone 同步换色（颜色过渡写在 scoped CSS 里）。 */
+const activeFeature = computed<FeatureItem>(() => resolveFeature(activeFeatureId.value));
+
+const heroStyle = computed<CSSProperties>(
+  () => ({ '--hero-tone': activeFeature.value.tone }) as CSSProperties,
+);
 
 /* 内容系统板块（tag 'home'）：about → contact → 其余板块（skills/now 等），
    全部直接展开（本期拆除折叠系统） */
@@ -179,7 +196,7 @@ const latestPosts = selectLatestPosts(3);
 
 <template>
   <main class="page-home">
-    <section class="hero">
+    <section class="hero" :style="heroStyle">
       <div class="hero-inner">
         <!-- 第一行：身份行（名字大字重 + 旧名次级 + 行尾内联特色 TAG） -->
         <div class="hero-identity-row">
@@ -347,13 +364,12 @@ const latestPosts = selectLatestPosts(3);
   width: min(720px, 92vw);
   aspect-ratio: 2 / 1;
   transform: translate(-50%, -50%);
-  /* 光斑色取自主色令牌（color-mix），随主题换肤 */
-  background: radial-gradient(
-    ellipse at center,
-    color-mix(in srgb, var(--accent) 20%, transparent),
-    transparent 68%
-  );
-  filter: blur(10px);
+  /* 光斑跟着当前特色卡的主题色走（--hero-tone 由牌堆 activeId 驱动）；
+     纯色椭球 + 大半径模糊 = 可过渡的柔光（渐变本身不能做 color 过渡）。 */
+  background-color: color-mix(in srgb, var(--hero-tone, var(--accent)) 18%, transparent);
+  border-radius: 50%;
+  filter: blur(64px);
+  transition: background-color var(--dur-slow) var(--ease-out-quart);
   pointer-events: none;
 }
 
@@ -419,8 +435,10 @@ const latestPosts = selectLatestPosts(3);
 }
 
 .hero-describe-hl {
-  /* 点题橙的文字安全档（亮色下 --accent-2 直接作字不达 AA，§3.6-A） */
-  color: var(--accent-2-text);
+  /* 与当前特色卡同色：与前景混 55% 得到两主题下都够亮/够深的同色相文字
+     （暗色提亮、亮色压深；大字号 800 重，AA-large 阈值 3:1 亦留有余量）。 */
+  color: color-mix(in srgb, var(--hero-tone, var(--accent-2)) 55%, var(--fg-0));
+  transition: color var(--dur-base) var(--ease-out-quart);
 }
 
 /* ---- 第三行：小口号 + 四枚胶囊 CTA ---- */
@@ -572,6 +590,12 @@ const latestPosts = selectLatestPosts(3);
   .hero-slogan,
   .hero-actions {
     animation: none;
+  }
+
+  /* 牌堆换牌时主题色直接跳变（弹簧本身已由 useSpring 退化） */
+  .hero::before,
+  .hero-describe-hl {
+    transition: none;
   }
 
   .panel {

@@ -34,7 +34,7 @@ export interface SpringConfig {
 export const SPRING_MICRO_OVERSHOOT: SpringConfig = { stiffness: 320, damping: 24, mass: 1 };
 
 /**
- * 「更弹」一档（kexie.space 调研校准，FeatureTag 换场甩回/拖拽回弹共用）：
+ * 「更弹」一档（kexie.space 调研校准；需要更陡攻击剖面时的通用预设）：
  * k=480、c=27、m=1 → ζ≈0.616。数值仿真（本工具同款 semi-implicit Euler、
  * 1/240s 子步、行程 1→0 实测）：过冲 ≈7.6%（kexie 签名曲线实测过冲 5.3%，
  * 同处调研建议的 5~8% 微超伸带）、≈179ms 到峰、≈270ms 回 2% 带内、
