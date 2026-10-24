@@ -94,7 +94,7 @@ const props = withDefaults(defineProps<GhostCursorProps>(), {
   bloomRadius: 1.0,
   bloomThreshold: 0.025,
   brightness: 1,
-  color: '#A0FFBC',
+  color: '#4f8cff',
   mixBlendMode: 'screen',
   edgeIntensity: 0,
   maxDevicePixelRatio: 0.5,

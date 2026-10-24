@@ -1,22 +1,26 @@
 <script setup lang="ts">
 /*
- * HomePage —— 首页：大字重 hero 双栏 + 全展开板块。
- * hero 双栏构图（站长批注，优先级高于 DESIGN-V2 hero 章节）：
- *   左栏 = 巨型 Codrift（≤6rem、Archivo 800）+ 身份行 + 口号 + 四枚胶囊 CTA；
- *   右栏 = FeatureStack 层叠卡（紧凑 380~440 宽 × 420~480 高，与左栏顶对齐）；
- *   移动端（<768px）上下堆叠，卡叠限宽居中于文字下方。
- * 身份行定稿「LumenShen（旧名 gozaoo）」：站长划掉「这是」与「的主页」，
- * 只留名字本身，旧名以次级文本弱化，不喧宾；口号「漂流至此」用点题橙。
+ * HomePage —— 首页：hero 单列三层 + 全展开板块。
+ * hero 三层结构（站长最新定稿，覆盖 DESIGN-V2.md 的 hero 章节与更早的双栏/
+ * 右栏卡叠构图）：
+ *   第一行 身份行：「我 LumenShen（旧名 gozaoo）」——名字大字重、旧名次级
+ *     文本，行尾内联 FeatureTag（五特色轮换的橙色胶囊，句式位对标 kexie
+ *     「在 > [科协] 硬件部」）；站名 Codrift 已在页头，hero 不再重复巨字站名；
+ *   第二行 Describe 行：当前特色的一句话描述，大字重（对标 kexie 第二行的
+ *     大粗排版，点题橙高亮关键词），经 SwapText 与 TAG 同步换场（0.5s 管线）；
+ *   第三行：小口号「代码与想法，漂流至此。」+ 四枚胶囊 CTA。
+ * 站长明确否掉「下面一个空空白白的大 block」：hero 不渲染任何独立大卡片块，
+ * FeatureStack 大卡/右栏卡叠整组移除（组件已删）。
  * 本期拆除折叠系统（站长指示：全部板块直接展开），
  * CollapsibleSection 组件与「全部展开/收起」控制已移除。
  * 板块正文全部经内容系统渲染（tag 'home' 的条目，见 components/content.ts）；
  * 作品集是调研定稿的结构化数据（卡片渲染），博客速览取内容系统最新文章。
- * 特色轮播 FeatureStack 改造自 vue-bits Stack（上游存档 research/vue-bits/Stack.vue）。
  */
-import { computed, nextTick } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import PortfolioCard from '@/components/PortfolioCard.vue';
 import BlogCard from '@/components/BlogCard.vue';
-import FeatureStack from '@/components/hero/FeatureStack.vue';
+import FeatureTag from '@/components/hero/FeatureTag.vue';
+import SwapText from '@/components/hero/SwapText.vue';
 import { GlassButton } from '@/effects';
 import {
   ensureExtendComponentsRegistered,
@@ -99,6 +103,61 @@ const repos: Repo[] = [
   },
 ];
 
+/* ---- hero 特色（五张卡的标题与说明文案为上一代 FeatureStack 定稿，原样
+   保留、不编造；说明拆成 前段+高亮+后段 供 Describe 行点题橙高亮） ---- */
+interface FeatureItem {
+  id: string;
+  label: string;
+  pre: string;
+  hl: string;
+  post: string;
+}
+
+const features: FeatureItem[] = [
+  {
+    id: 'aesthetic',
+    label: '前端审美',
+    pre: '研究好看的',
+    hl: '前端效果',
+    post: '和经验，把值得拆解的实现思路收进站点。',
+  },
+  {
+    id: 'efficiency',
+    label: '效率至上',
+    pre: 'vibe Coding 的使用经验和分享交流，把想法',
+    hl: '更快变成能跑的东西',
+    post: '。',
+  },
+  {
+    id: 'output',
+    label: '产品产出',
+    pre: '',
+    hl: '从想法到成品',
+    post: '：Rein、EffiBuddy、开源笔记库等作品的沉淀与展示。',
+  },
+  {
+    id: 'sport',
+    label: '运动交流',
+    pre: '关于运动的记录与交流，给久坐的代码节奏留',
+    hl: '一段身体的运转',
+    post: '。',
+  },
+  {
+    id: 'music',
+    label: '音乐爱好',
+    pre: '听歌口味与音乐相关的分享，给代码之外留',
+    hl: '一点旋律',
+    post: '。',
+  },
+];
+
+/* TAG 与 Describe 行共用同一状态：FeatureTag 受控，页面持有当前特色 */
+const activeFeatureId = ref(features[0].id);
+
+function resolveFeature(key: string | number): FeatureItem {
+  return features.find((f) => f.id === key) ?? features[0];
+}
+
 /* 内容系统板块（tag 'home'）：about → contact → 其余板块（skills/now 等），
    全部直接展开（本期拆除折叠系统） */
 const contentSections = computed<HomeSection[]>(() => selectHomeSections());
@@ -122,73 +181,89 @@ const latestPosts = selectLatestPosts(3);
   <main class="page-home">
     <section class="hero">
       <div class="hero-inner">
-        <div class="hero-copy">
-          <h1 class="hero-title">Codrift</h1>
-          <p class="hero-identity">
-            <strong class="hero-identity-name">LumenShen</strong><span class="hero-identity-former">（旧名 gozaoo）</span>
-          </p>
-          <p class="hero-slogan">代码与想法，<span class="hero-slogan-hl">漂流至此</span>。</p>
-
-          <div class="hero-actions">
-            <GlassButton class="hero-pill hero-pill--primary" size="lg" href="#/blog">
-              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path
-                  d="M5 12h14m-6-6 6 6-6 6"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              看看博客
-            </GlassButton>
-            <GlassButton class="hero-pill" size="lg" href="https://github.com/lumenShen/">
-              <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
-                />
-              </svg>
-              GitHub
-            </GlassButton>
-            <GlassButton class="hero-pill" size="lg" @click="scrollToPortfolio">
-              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path
-                  d="M4 5h7v7H4zM13 5h7v4h-7zM13 12h7v7h-7zM4 15h7v4H4z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              作品集
-            </GlassButton>
-            <GlassButton class="hero-pill" size="lg" href="mailto:gozaoo@outlook.com">
-              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
-                <path
-                  d="M3 5h18v14H3z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linejoin="round"
-                />
-                <path
-                  d="m3 7 9 6 9-6"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.8"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              联系我
-            </GlassButton>
-          </div>
+        <!-- 第一行：身份行（名字大字重 + 旧名次级 + 行尾内联特色 TAG） -->
+        <div class="hero-identity-row">
+          <h1 class="hero-identity">
+            <span class="hero-identity-i">我</span>
+            <strong class="hero-identity-name">LumenShen</strong>
+            <span class="hero-identity-former">（旧名 gozaoo）</span>
+          </h1>
+          <FeatureTag
+            class="hero-tag"
+            :items="features"
+            v-model:active-id="activeFeatureId"
+          />
         </div>
 
-        <div class="hero-feature">
-          <FeatureStack />
+        <!-- 第二行：Describe 行（大字重一句话，与 TAG 同步换场） -->
+        <div class="hero-describe">
+          <SwapText
+            :swap-key="activeFeatureId"
+            :resolve="resolveFeature"
+            :max-width="880"
+          >
+            <template #default="{ item }">{{ item.pre }}<span class="hero-describe-hl">{{ item.hl }}</span>{{ item.post }}</template>
+          </SwapText>
+        </div>
+
+        <!-- 第三行：小口号 + 四枚胶囊 CTA -->
+        <p class="hero-slogan">代码与想法，<span class="hero-slogan-hl">漂流至此</span>。</p>
+
+        <div class="hero-actions">
+          <GlassButton class="hero-pill hero-pill--primary" size="lg" href="#/blog">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path
+                d="M5 12h14m-6-6 6 6-6 6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            看看博客
+          </GlassButton>
+          <GlassButton class="hero-pill" size="lg" href="https://github.com/lumenShen/">
+            <svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
+              />
+            </svg>
+            GitHub
+          </GlassButton>
+          <GlassButton class="hero-pill" size="lg" @click="scrollToPortfolio">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path
+                d="M4 5h7v7H4zM13 5h7v4h-7zM13 12h7v7h-7zM4 15h7v4H4z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linejoin="round"
+              />
+            </svg>
+            作品集
+          </GlassButton>
+          <GlassButton class="hero-pill" size="lg" href="mailto:gozaoo@outlook.com">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+              <path
+                d="M3 5h18v14H3z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+              />
+              <path
+                d="m3 7 9 6 9-6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            联系我
+          </GlassButton>
         </div>
       </div>
     </section>
@@ -255,20 +330,20 @@ const latestPosts = selectLatestPosts(3);
   padding-bottom: var(--space-9);
 }
 
-/* ---- hero ----
-   巨型站名「坐」在一束环境光里（radial 光斑，不是文字发光）；
+/* ---- hero（单列三层）----
+   巨型站名撤场后，视觉主角是身份行 + TAG + Describe 行；
+   巨字仍「坐」在一束环境光里（radial 光斑，不是文字发光）；
    进场是一次编排好的浮现（0.7s + 0.08s 阶梯），之后交给极光漂移与指针动效。 */
 .hero {
   position: relative;
   padding: var(--space-9) 0 var(--space-8);
-  text-align: center;
 }
 
 .hero::before {
   content: '';
   position: absolute;
   left: 50%;
-  top: 44%;
+  top: 40%;
   width: min(720px, 92vw);
   aspect-ratio: 2 / 1;
   transform: translate(-50%, -50%);
@@ -282,45 +357,78 @@ const latestPosts = selectLatestPosts(3);
   pointer-events: none;
 }
 
-.hero-title {
+/* ---- 第一行：身份行 ----
+   「我 LumenShen（旧名 gozaoo）[TAG]」——句式位对标 kexie「在 > [科协] 硬件部」；
+   左对齐阅读流，TAG 内联行尾、高度与身份行文字匹配（em 随行字号缩放）。 */
+.hero-identity-row {
   position: relative;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(3.4rem, 13vw, 6rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.04;
-  color: var(--fg-0);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: clamp(1.5rem, 3.6vw, 2.3rem);
+  line-height: 1.15;
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .hero-identity {
-  position: relative;
-  margin: var(--space-3) 0 0;
-  color: var(--fg-1);
-  font-size: clamp(1rem, 2.2vw, 1.15rem);
+  margin: 0;
+  /* 压掉 UA 的 h1 2em 默认（实测会放大到 73.6px）：字号统一由 .hero-identity-row 给 */
+  font-size: inherit;
+  font-family: var(--font-display);
   font-weight: 500;
-  letter-spacing: 0.01em;
-  animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
 }
 
 .hero-identity-name {
+  margin-left: 0.18em;
   color: var(--fg-0);
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: -0.025em;
 }
 
 /* 旧名：次级文本弱化呈现，不喧宾 */
 .hero-identity-former {
+  margin-left: 0.22em;
   color: var(--fg-2);
-  font-size: 0.85em;
+  font-size: 0.55em;
   font-weight: 400;
+  letter-spacing: 0;
 }
 
+/* TAG 胶囊：字号按身份行的 0.64em 缩放（FeatureTag 内部全走 em） */
+.hero-tag {
+  font-size: 0.64em;
+}
+
+/* ---- 第二行：Describe 行 ----
+   大字重一句话（对标 kexie 第二行的大粗排版），点题橙高亮关键词；
+   SwapText 容器宽度 spring 过渡，换场与 TAG 同拍。 */
+.hero-describe {
+  position: relative;
+  margin-top: var(--space-5);
+  max-width: 100%;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 4.4vw, 2.55rem);
+  font-weight: 800;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  color: var(--fg-0);
+  animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+.hero-describe-hl {
+  /* 点题橙的文字安全档（亮色下 --accent-2 直接作字不达 AA，§3.6-A） */
+  color: var(--accent-2-text);
+}
+
+/* ---- 第三行：小口号 + 四枚胶囊 CTA ---- */
 .hero-slogan {
   position: relative;
-  margin: var(--space-4) 0 0;
+  margin: var(--space-6) 0 0;
   color: var(--fg-1);
-  font-size: clamp(1.05rem, 2.6vw, 1.4rem);
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
   font-weight: 500;
   letter-spacing: 0.01em;
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both;
@@ -336,19 +444,10 @@ const latestPosts = selectLatestPosts(3);
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
   gap: var(--space-4);
   margin-top: var(--space-7);
   animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.24s both;
-}
-
-.hero-feature {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  margin-top: var(--space-8);
-  animation: hero-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.32s both;
 }
 
 /* 玻璃胶囊的边缘光：经 CSS 变量传给 GlassSurface 的 border（不硬掰它的样式） */
@@ -468,11 +567,10 @@ const latestPosts = selectLatestPosts(3);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-title,
-  .hero-identity,
+  .hero-identity-row,
+  .hero-describe,
   .hero-slogan,
-  .hero-actions,
-  .hero-feature {
+  .hero-actions {
     animation: none;
   }
 

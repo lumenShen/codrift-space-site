@@ -429,7 +429,7 @@ watch(
   width: 4px;
   height: 4px;
   border-radius: 9999px;
-  background: var(--tcursor-color, #ffffff);
+  background: var(--tcursor-color, var(--fg-0));
   transform: translate(-50%, -50%);
   transition: transform 0.3s ease-out;
   will-change: transform;
@@ -448,7 +448,7 @@ watch(
   left: 0;
   width: 12px;
   height: 12px;
-  border: 3px solid var(--tcursor-color, #ffffff);
+  border: 3px solid var(--tcursor-color, var(--fg-0));
   translate: var(--rest-x) var(--rest-y);
   will-change: transform;
 }

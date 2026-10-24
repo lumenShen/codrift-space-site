@@ -495,7 +495,7 @@ function scrollToLibrary(): void {
 
 .hl-ai,
 .hl-key {
-  color: var(--accent-2);
+  color: var(--accent-2-text); /* §3.6-A 墨水档 */
 }
 
 .notes-lede {
@@ -698,7 +698,7 @@ function scrollToLibrary(): void {
 
 .section-kicker {
   margin: 0 0 var(--space-3);
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档 */
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -1039,7 +1039,7 @@ function scrollToLibrary(): void {
 
 .demo-arrow {
   align-self: center;
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档 */
   font-size: 1.4rem;
 }
 
@@ -1063,7 +1063,7 @@ function scrollToLibrary(): void {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档 */
   font: inherit;
   font-size: 0.86rem;
   cursor: pointer;
@@ -1090,7 +1090,7 @@ function scrollToLibrary(): void {
 }
 
 .method-step > span {
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档 */
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;

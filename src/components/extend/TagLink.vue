@@ -40,7 +40,7 @@ const tagName = computed(() => {
   border: 1px solid var(--line);
   border-radius: var(--radius-full);
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档：亮色下落到达标的深一档 */
   font-size: 0.85em;
   line-height: 1.6;
   transition:

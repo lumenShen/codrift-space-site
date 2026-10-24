@@ -145,7 +145,7 @@ export { default as GlassButton } from './GlassButton.vue';
 | `bloomRadius` | `number` | `1.0` |
 | `bloomThreshold` | `number` | `0.025` |
 | `brightness` | `number` | `1` |
-| `color` | `string` | `'#A0FFBC'` |
+| `color` | `string` | `'#4f8cff'`（V2 起，DESIGN-V2 §3.6-B：兜底对齐 `--accent`；App 调用显式传 `accentColor`） |
 | `mixBlendMode` | `CSSProperties['mixBlendMode']` | `'screen'` |
 | `edgeIntensity` | `number` | `0` |
 | `maxDevicePixelRatio` | `number` | `0.5` |

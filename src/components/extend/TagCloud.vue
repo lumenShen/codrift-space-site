@@ -45,7 +45,7 @@ const tags = computed(() => getAllTags());
   border: 1px solid var(--line);
   border-radius: var(--radius-full);
   background: var(--accent-dim);
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档：亮色下落到达标的深一档 */
   font-size: 0.85rem;
   line-height: 1.6;
   transition:

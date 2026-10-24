@@ -12,7 +12,13 @@ import { ref, type Ref } from 'vue';
  *   → ω0=√(k/m)≈17.9 rad/s，ζ=c/(2√(k·m))≈0.671
  *   → 理论过冲 ≈ exp(-πζ/√(1-ζ²)) ≈ 5.8%，≈0.24s 到峰、≈0.33s 回到 2% 带内；
  * - prefers-reduced-motion：模块级单例监听；reduced 时 setTarget()/kick()
- *   退化为瞬时跳变，运行中的弹簧在系统切换瞬间全部吸附到目标（snapAll）。
+ *   退化为瞬时跳变，运行中的弹簧在系统切换瞬间全部吸附到目标（snapAll）；
+ * - 曲线校准基准（kexie.space 动效调研，2026-10-24，取证件 research/kexie/）：
+ *   kexie 全站唯一过冲曲线 cubic-bezier(0.34, 1.4, 0.5, 1)（峰值过冲 5.3%、
+ *   0.7s 时长 395ms 到峰）；本工具 SPRING_MICRO_OVERSHOOT(k=320/c=24) 在 0.5s
+ *   尺度下与其行程剖面几乎重合（调研结论：参数不必大改），需要「更弹一档」
+ *   时用 SPRING_SNAPPY(k=480/c=27)。两条预设均落在调研建议的 5~8% 过冲带内；
+ *   大位移场景学 kexie 不加过冲（他们用 cubic-bezier(.4,0,.2,1)），本工具不承担。
  */
 
 export interface SpringConfig {
@@ -24,8 +30,18 @@ export interface SpringConfig {
   mass?: number;
 }
 
-/** 微超伸预设（FeatureStack 卡片换位 / SwapText 容器宽度共用）：k=320 c=24 m=1 */
+/** 微超伸预设（SwapText 容器宽度共用）：k=320 c=24 m=1 */
 export const SPRING_MICRO_OVERSHOOT: SpringConfig = { stiffness: 320, damping: 24, mass: 1 };
+
+/**
+ * 「更弹」一档（kexie.space 调研校准，FeatureTag 换场甩回/拖拽回弹共用）：
+ * k=480、c=27、m=1 → ζ≈0.616。数值仿真（本工具同款 semi-implicit Euler、
+ * 1/240s 子步、行程 1→0 实测）：过冲 ≈7.6%（kexie 签名曲线实测过冲 5.3%，
+ * 同处调研建议的 5~8% 微超伸带）、≈179ms 到峰、≈270ms 回 2% 带内、
+ * 100ms 行程 ≈86% —— 攻击剖面比 k=320 更陡（调研「灵动配方 = 陡攻击 +
+ * 小过冲 + 长软落地 + filter 焦点变化」）。
+ */
+export const SPRING_SNAPPY: SpringConfig = { stiffness: 480, damping: 27, mass: 1 };
 
 /* ---------------- prefers-reduced-motion（模块级单例） ---------------- */
 

@@ -694,7 +694,7 @@ function downloadHref(file: string): string {
 
 .side-kind {
   margin: 0;
-  color: var(--accent);
+  color: var(--accent-text); /* §3.6-A 墨水档 */
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.12em;
