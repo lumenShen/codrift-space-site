@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { RouterLink } from 'vue-router';
+import NoteCover from '@/components/notes/NoteCover.vue';
 import NotesReader from '@/components/NotesReader.vue';
 import {
   noteDownloadName,
@@ -56,10 +57,6 @@ const offlineItems = [
 
 function formatWan(value: number): string {
   return `${(value / 10000).toFixed(1)} 万`;
-}
-
-function coverUrl(collection: NoteCollection): string {
-  return noteFileUrl(collection, collection.cover);
 }
 
 function chapterPreview(collection: NoteCollection): string {
@@ -167,12 +164,7 @@ function scrollToLibrary(): void {
           @click="openReader(item)"
         >
           <span class="cover-image">
-            <img
-              :src="coverUrl(item)"
-              :alt="item.coverAlt"
-              :loading="index === 0 ? 'eager' : 'lazy'"
-              decoding="async"
-            />
+            <NoteCover :collection="item" :index="index" />
           </span>
           <span class="cover-meta">
             <span class="cover-kind">{{ item.kind }}</span>
@@ -207,7 +199,9 @@ function scrollToLibrary(): void {
             :aria-label="`打开${item.title}阅读器`"
             @click="openReader(item)"
           >
-            <img :src="coverUrl(item)" :alt="item.coverAlt" loading="lazy" decoding="async" />
+            <span class="note-stage">
+              <NoteCover class="note-stage-cover" :collection="item" :index="index" />
+            </span>
             <span class="note-preview-shade"></span>
             <span class="note-kind">{{ item.kind }}</span>
             <span v-if="item.status" class="note-status">{{ item.status }}</span>
@@ -617,26 +611,11 @@ function scrollToLibrary(): void {
 }
 
 .cover-image {
-  position: relative;
   display: block;
-  aspect-ratio: 3 / 4;
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  background: #fff;
-  box-shadow: var(--shadow-2);
   transition:
     transform 0.28s var(--ease-out-quart, cubic-bezier(0.22, 1, 0.36, 1)),
-    border-color 0.2s ease-out,
-    box-shadow 0.2s ease-out;
-}
-
-.cover-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  transition: transform 0.5s var(--ease-out-quart, cubic-bezier(0.22, 1, 0.36, 1));
+    filter 0.2s ease-out;
 }
 
 .cover-tile--2 .cover-image {
@@ -649,12 +628,7 @@ function scrollToLibrary(): void {
 
 .cover-tile:hover .cover-image {
   transform: translateY(-6px);
-  border-color: var(--accent-line);
-  box-shadow: 0 20px 48px rgba(2, 6, 16, 0.62);
-}
-
-.cover-tile:hover .cover-image img {
-  transform: scale(1.02);
+  filter: brightness(1.03);
 }
 
 .cover-meta {
@@ -778,21 +752,52 @@ function scrollToLibrary(): void {
   padding: 0;
   border: 0;
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background:
+    radial-gradient(
+      120% 88% at 50% 2%,
+      color-mix(in srgb, var(--note-accent) 26%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(180deg, var(--bg-3), var(--bg-1));
   cursor: pointer;
   text-align: left;
 }
 
-.note-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top center;
-  transition: transform 0.55s var(--ease-out-quart, cubic-bezier(0.22, 1, 0.36, 1));
+/* 封面舞台：网格与光把「书」从卡片底上托起来，不再依赖内页截图 */
+.note-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.note-preview:hover img {
-  transform: scale(1.025);
+.note-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.55;
+  -webkit-mask-image: radial-gradient(92% 92% at 50% 42%, #000 26%, transparent 78%);
+  mask-image: radial-gradient(92% 92% at 50% 42%, #000 26%, transparent 78%);
+  pointer-events: none;
+}
+
+.note-preview .note-stage-cover {
+  width: auto;
+  height: 76%;
+  transform: rotate(-2.4deg);
+  transition:
+    transform 0.5s var(--ease-out-quart, cubic-bezier(0.22, 1, 0.36, 1)),
+    filter 0.3s ease-out;
+}
+
+.note-preview:hover .note-stage-cover {
+  transform: rotate(0deg) translateY(-5px) scale(1.02);
+  filter: brightness(1.04);
 }
 
 .note-preview-shade {
@@ -800,10 +805,10 @@ function scrollToLibrary(): void {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(5, 8, 15, 0.08) 0%,
-    transparent 36%,
-    rgba(5, 8, 15, 0.2) 66%,
-    rgba(5, 8, 15, 0.78) 100%
+    rgba(5, 8, 15, 0.04) 0%,
+    transparent 40%,
+    rgba(5, 8, 15, 0.14) 72%,
+    rgba(5, 8, 15, 0.7) 100%
   );
   pointer-events: none;
 }
@@ -1324,17 +1329,15 @@ function scrollToLibrary(): void {
 
 @media (prefers-reduced-motion: reduce) {
   .cover-image,
-  .cover-image img,
   .cover-tile:hover .cover-image,
-  .cover-tile:hover .cover-image img,
   .notes-cta,
   .notes-ghost,
   .notes-cta:hover,
   .notes-ghost:hover,
   .note-card,
   .note-card:hover,
-  .note-preview img,
-  .note-preview:hover img,
+  .note-preview .note-stage-cover,
+  .note-preview:hover .note-stage-cover,
   .note-read,
   .note-download,
   .note-read:hover,

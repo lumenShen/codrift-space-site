@@ -27,8 +27,6 @@ export interface NoteCollection {
   subject: string;
   tagline: string;
   description: string;
-  cover: string;
-  coverAlt: string;
   status?: string;
   keywords: string[];
   metrics: NoteMetric[];
@@ -274,8 +272,6 @@ export const notesCollections: NoteCollection[] = [
     tagline: '把每一步讲透：定义、证明、例题，再加一段大白话。',
     description:
       '以同济《高等数学》第八版上册为底本，逐节重写定义、定理与推导，每节补一段「大白话」；216 道例题、113 幅函数图像、253 条机械验算，HTML 与 464 页 A4 PDF 出自同一条流水线。',
-    cover: 'gaoshu/preview-page.png',
-    coverAlt: '高等数学正课版内页：定义、例题与易错提醒的纸面排版',
     keywords: ['ε-δ', '中值定理', '泰勒公式', '定积分', '微分方程'],
     metrics: [
       { value: '7', label: '章' },
@@ -298,8 +294,6 @@ export const notesCollections: NoteCollection[] = [
     tagline: '只留概念、公式与做题路径，按章速查。',
     description:
       '正课版的速查 companion：143 节压成概念、公式、重要定理与关键推导，不设例题与自测；102 页 A4，适合考前翻查、建立框架，再回正课版补细节。',
-    cover: 'gaoshu-review/preview-page.png',
-    coverAlt: '高等数学复习版内页：证明、方法提示与极限定义速查',
     keywords: ['概念速查', '公式表', '定理清单', '做题路径'],
     metrics: [
       { value: '7', label: '章' },
@@ -322,8 +316,6 @@ export const notesCollections: NoteCollection[] = [
     tagline: '从编译器、内存与链接的视角，重学一遍 C。',
     description:
       '以「能维护一个 C 程序」为目标：20 个单元覆盖类型、指针、内存、结构体、文件、预处理、多文件链接与未定义行为；代码清单过真编译、真运行闸门，面向 gcc/g++ 16 与 x86_64-w64-mingw32。',
-    cover: 'c-engineering/preview-page.png',
-    coverAlt: 'C 语言工程笔记内页：printf 调用链、gdb 会话与指针说明',
     status: '持续打磨',
     keywords: ['编译器视角', '指针与内存', '链接', '未定义行为'],
     metrics: [
