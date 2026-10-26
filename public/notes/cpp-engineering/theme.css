@@ -146,8 +146,22 @@ body {
 }
 
 @media screen {
-  body { font-size: 16.5px; background: #fff; }
-  .doc { padding-top: 1.2rem; }
+  /* 屏幕阅读尺度：打印用的 9.5pt / 行高 1.49 / 代码 8pt 放到大屏上又小又挤。
+     根字号必须和正文对齐，否则 .toc / .legend / .cb-head 这些 rem 小字
+     会继续按 9.5pt 结算，比正文小一大截。 */
+  html { font-size: 17px; }
+  :root {
+    --font-sans: "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC",
+      "Source Han Sans SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    --fs-code: 0.84rem;   /* ≈14.3px，代码块与终端输出共用 */
+    --lh-code: 1.55;
+  }
+  body {
+    font-size: 17px;
+    line-height: 1.75;
+    background: #fff;
+  }
+  .doc { padding-top: 1.4rem; }
 }
 
 /* --- 站内导航（屏幕可见，打印隐藏）--- */
