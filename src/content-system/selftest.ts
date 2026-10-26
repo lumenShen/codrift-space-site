@@ -76,7 +76,7 @@ check(fm4.body.includes('body 永远是 body'), '未闭合 frontmatter 兜底');
 section('registry（import.meta.glob 收集真实 src/content 文件）');
 
 const all = getAllEntries();
-check(all.length === 10, `getAllEntries 共 10 条（实际 ${all.length}）`);
+check(all.length === 11, `getAllEntries 共 11 条（实际 ${all.length}）`);
 
 const types = new Map(all.map((entry) => [entry.slug, entry.type]));
 check(types.get('about') === 'markdownWithExtend', 'about.extend.md → markdownWithExtend');
@@ -87,20 +87,21 @@ check(types.get('design-system') === 'markdownWithExtend', 'design-system.extend
 const homeEntries = getEntriesByTag('home');
 const postEntries = getEntriesByTag('post');
 check(homeEntries.length === 4, `tag 'home' 命中 4 块首页板块（实际 ${homeEntries.length}）`);
-check(postEntries.length === 5, `tag 'post' 命中 5 篇博客（实际 ${postEntries.length}）`);
+check(postEntries.length === 6, `tag 'post' 命中 6 篇博客（实际 ${postEntries.length}）`);
 check(getEntriesByTag('HOME').length === 0, 'tag 查询大小写敏感');
 
 check(
-  all[0]?.slug === '2026-10-24-xiaomi-sound-party-eq' &&
-    all[1]?.slug === 'design-system' &&
-    all[2]?.slug === 'now' &&
-    all[3]?.slug === 'particle-demo',
+  all[0]?.slug === '2026-10-24-trae-friends-guilin' &&
+    all[1]?.slug === '2026-10-24-xiaomi-sound-party-eq' &&
+    all[2]?.slug === 'design-system' &&
+    all[3]?.slug === 'now' &&
+    all[4]?.slug === 'particle-demo',
   'date 降序（同日按 slug，数字前缀排字母前）',
 );
 const postSlugs = postEntries.map((entry) => entry.slug);
 check(
   postSlugs.join(',') ===
-    '2026-10-24-xiaomi-sound-party-eq,design-system,glob-content-store,why-self-host,hello-codrift',
+    '2026-10-24-trae-friends-guilin,2026-10-24-xiaomi-sound-party-eq,design-system,glob-content-store,why-self-host,hello-codrift',
   `博客按 date 降序（实际 ${postSlugs.join(',')}）`,
 );
 check(all[all.length - 1]?.slug === 'skills', '无 date/最早 date 的排最后');
