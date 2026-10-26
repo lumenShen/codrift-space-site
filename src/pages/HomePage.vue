@@ -19,14 +19,12 @@
  * 作品集是调研定稿的结构化数据（卡片渲染），博客速览取内容系统最新文章。
  */
 import { computed, nextTick, ref, type CSSProperties } from 'vue';
-import PortfolioCard from '@/components/PortfolioCard.vue';
-import BlogCard from '@/components/BlogCard.vue';
+import SwissSections from '@/components/home/swiss/SwissSections.vue';
 import FeatureTag from '@/components/hero/FeatureTag.vue';
 import SwapText from '@/components/hero/SwapText.vue';
 import { GlassButton } from '@/effects';
 import {
   ensureExtendComponentsRegistered,
-  renderedEntry,
   selectHomeSections,
   selectLatestPosts,
   type HomeSection,
@@ -62,11 +60,11 @@ const repos: Repo[] = [
     name: '开源知识笔记库',
     url: '/notes',
     description:
-      '三类开源知识笔记：同济《高等数学》第八版上册正课版（7 章 / 17 单元 / 144 节 / 216 例题 / 464 页 PDF）、与其逐章对应的复习版（143 节 / 102 页 PDF），以及从编译器、内存与链接视角重学的 C 语言工程笔记（8 章 / 20 单元 / 17.7 万汉字）。三种笔记均可在站内全屏阅读，高数两套另可下载 PDF 与单文件 HTML',
+      '四类开源知识笔记：同济《高等数学》第八版上册正课版（7 章 / 17 单元 / 144 节 / 216 例题 / 464 页 PDF）、与其逐章对应的复习版（143 节 / 102 页 PDF），从编译器、内存与链接视角重学的 C 语言工程笔记（8 章 / 20 单元 / 23.0 万汉字 / 512 页 PDF），以及从 C 出发的 C++ 工程笔记（9 章 / 20 单元 / 9.2 万汉字 / 170 页 PDF）。四种笔记均可在站内全屏阅读，高数两套与 C / C++ 另可下载 PDF 与单文件 HTML',
     language: 'Markdown',
     internal: true,
     featured: true,
-    badge: '开源笔记 · 3 种',
+    badge: '开源笔记 · 4 种',
     highlight: 'AI驱动的知识笔记再优化，让晦涩难懂的语言更加易懂',
   },
   {
@@ -293,60 +291,8 @@ const latestPosts = selectLatestPosts(3);
       </div>
     </section>
 
-    <div class="sections">
-      <section
-        v-for="s in contentSections"
-        :key="s.id"
-        class="panel"
-        :aria-labelledby="`${s.id}-title`"
-      >
-        <header class="panel-head">
-          <h2 :id="`${s.id}-title`" class="panel-title">{{ s.title }}</h2>
-        </header>
-        <div class="panel-body">
-          <component :is="renderedEntry(s.entry)" />
-        </div>
-      </section>
-
-      <section id="portfolio" class="panel" aria-labelledby="portfolio-title">
-        <header class="panel-head">
-          <h2 id="portfolio-title" class="panel-title">作品集</h2>
-        </header>
-        <div class="panel-body">
-          <div class="repo-grid">
-            <PortfolioCard
-              v-for="r in repos"
-              :key="r.name"
-              :name="r.name"
-              :url="r.url"
-              :description="r.description"
-              :language="r.language"
-              :stars="r.stars"
-              :flagship="r.flagship"
-              :internal="r.internal"
-              :badge="r.badge"
-              :highlight="r.highlight"
-              :featured="r.featured"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="blog-title">
-        <header class="panel-head">
-          <h2 id="blog-title" class="panel-title">博客速览</h2>
-        </header>
-        <div class="panel-body">
-          <div v-if="latestPosts.length" class="post-grid">
-            <BlogCard v-for="p in latestPosts" :key="p.slug" :entry="p" />
-          </div>
-          <p v-else class="empty-note">博客文章即将上线。</p>
-          <RouterLink v-if="latestPosts.length" class="more-link" to="/blog" data-cursor="target">
-            全部文章 →
-          </RouterLink>
-        </div>
-      </section>
-    </div>
+    <!-- 板块区（瑞士版式）；hero 如上，完全不受板块区样式影响 -->
+    <SwissSections :sections="contentSections" :repos="repos" :posts="latestPosts" />
   </main>
 </template>
 
@@ -500,90 +446,9 @@ const latestPosts = selectLatestPosts(3);
   }
 }
 
-/* ---- 板块（全部直接展开）----
-   外壳沿用原折叠板的形态：1px --line + radius-lg + 玻璃底 + 光学内层（§4.1），
-   头行保持 56px 条形（14px 上下 + 24px 左右），头行与正文之间 1px 分隔线。 */
-.sections {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--glass-bg);
-  box-shadow: var(--shadow-1), var(--glass-insets);
-  transition: border-color 0.2s ease-out;
-}
-
-.panel:hover {
-  border-color: var(--line-strong);
-}
-
-.panel-head {
-  padding: 14px var(--space-5);
-  border-bottom: 1px solid var(--line);
-}
-
-.panel-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--fg-0);
-}
-
-.panel-body {
-  padding: var(--space-5);
-  color: var(--fg-1);
-  font-size: 0.95rem;
-}
-
-/* 渲染出来的正文（内容系统组件）内部排版微调 */
-.panel-body > :deep(*:first-child) {
-  margin-top: 0;
-}
-
-.panel-body > :deep(*:last-child) {
-  margin-bottom: 0;
-}
-
-.panel-body :deep(a) {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-/* hero「作品集」胶囊的滚动落点：给悬浮页头留出空间 */
-#portfolio {
-  scroll-margin-top: 6rem;
-}
-
-.repo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-4);
-}
-
-.post-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--space-4);
-}
-
-.more-link {
-  display: inline-block;
-  margin-top: var(--space-4);
-  /* 小号主色文字：墨水用途取 --accent-text（亮色 #2b66d9，4.88:1） */
-  color: var(--accent-text, var(--accent));
-  font-size: 0.92rem;
-}
-
-.empty-note {
-  margin: 0;
-  color: var(--fg-2);
-}
+/* ---- 板块 ----
+   版式（栅格/字阶/反白）全部在 components/home/swiss/swiss.css 里；
+   这里只保留 hero 的样式，hero 不消费板块区的任何规则。 */
 
 @media (max-width: 640px) {
   .hero {
@@ -606,10 +471,6 @@ const latestPosts = selectLatestPosts(3);
   /* 牌堆换牌时主题色直接跳变（弹簧本身已由 useSpring 退化） */
   .hero::before,
   .hero-describe-hl {
-    transition: none;
-  }
-
-  .panel {
     transition: none;
   }
 }
