@@ -24,6 +24,20 @@
  *    的动量继续飞、再被弹簧收回牌堆后方；未过阈值时同样注入半速，回弹有惯性。
  *  - 换牌后 activeId 变化 → 整副牌重新计算 depth → 每张卡用弹簧滑到新位，
  *    被甩出的卡目标变成最后一层，于是「飞出 → 缩小 → 落入牌堆底部」一气呵成。
+ *  - 换牌分两拍：旧顶卡先以顶层姿态向下沉 2em；沉到最外端的那一刻才真正
+ *    换牌（z-index 降为底层、开始虚化、整副牌重排），随后它在底层回弹归位。
+ *    press 是独立弹簧，初速按当前 em 与弹簧参数换算成精确首峰，首峰时刻也由
+ *    同一套积分器算出；与 x/y 共用一根 rAF 管线，不额外开动画计时器。
+ *
+ * 随机姿态与景深（本站新增，上游 Stack 只有 ±5° 的 randomRotation）
+ *  - 每张后方卡首次出现时抽一份固定的随机量：±randomRotationAmount 的倾角，以及
+ *    transform-origin 在 50% 85% 基础上横纵各 ±randomRotationOriginOffsetAmount
+ *    的偏移。随机量按卡 id 保存，换牌重排只改 depth、不改「性格」——牌堆像
+ *    随手摊开又收回的一叠实体卡，而不是每次换牌重新抖一遍。
+ *  - 顶卡（depth 0）始终水平：它和身份行文字同排，随机倾斜会让整行显得歪；
+ *    水平位移驱动的临时倾角只在拖拽期间存在，松手即回 0°。
+ *  - 非顶卡按 depth 逐层虚化，每深一层 +0.03em；blur 直接吃 em，随身份行
+ *    字号整体缩放，小屏大屏的景深比例一致。
  *
  * 轮播与可达性
  *  - 约 5s 自动换牌；悬停、拖拽、聚焦、页面隐藏都暂停，手动换牌重置计时；
@@ -43,7 +57,13 @@ import {
   type CSSProperties,
 } from 'vue';
 import { reducedMotion, SpringValue } from '@/effects/useSpring';
-import { clamp, PointerVelocity, SPRING_STACK, stackPose } from './stackMotion';
+import {
+  clamp,
+  impulseResponse,
+  PointerVelocity,
+  SPRING_STACK,
+  stackPose,
+} from './stackMotion';
 
 export interface FeatureTagItem {
   id: string;
@@ -60,8 +80,22 @@ const props = withDefaults(
     activeId: string;
     /** 自动轮播间隔（约 5s 规格值） */
     intervalMs?: number;
+    /** 后方卡是否带固定随机倾角（顶卡始终水平，不参与随机） */
+    randomRotation?: boolean;
+    /** 随机倾角幅度：在后方卡上叠加 ±该角度（deg） */
+    randomRotationAmount?: number;
+    /** 是否随机偏移每张卡的 transform-origin（旋转支点） */
+    randomRotationOriginOffset?: boolean;
+    /** 原点随机幅度：以 50% 85% 为基准，横纵各 ±该百分点 */
+    randomRotationOriginOffsetAmount?: number;
   }>(),
-  { intervalMs: 5000 },
+  {
+    intervalMs: 5000,
+    randomRotation: true,
+    randomRotationAmount: 10,
+    randomRotationOriginOffset: true,
+    randomRotationOriginOffsetAmount: 12,
+  },
 );
 
 const emit = defineEmits<{ 'update:activeId': [id: string] }>();
@@ -94,6 +128,8 @@ interface CardMotion {
   rotate: SpringValue;
   scale: SpringValue;
   opacity: SpringValue;
+  /** 换牌下压：独立弹簧，绕 0 振动，叠加进 y（顶卡沉 2em 后自动回弹） */
+  press: SpringValue;
 }
 
 const motions = new Map<string, CardMotion>();
@@ -106,7 +142,7 @@ function writeCard(id: string): void {
   const el = cardEls.get(id);
   if (!motion || !el) return;
   el.style.transform =
-    `translate3d(${motion.x.value.toFixed(2)}px, ${motion.y.value.toFixed(2)}px, 0) ` +
+    `translate3d(${motion.x.value.toFixed(2)}px, ${(motion.y.value + motion.press.value).toFixed(2)}px, 0) ` +
     `rotate(${motion.rotate.value.toFixed(2)}deg) scale(${motion.scale.value.toFixed(4)})`;
   el.style.opacity = motion.opacity.value.toFixed(3);
 }
@@ -130,12 +166,14 @@ function createMotion(id: string): CardMotion {
     rotate: new SpringValue(0, SPRING_STACK, 0.01),
     scale: new SpringValue(1, SPRING_STACK, 0.0005),
     opacity: new SpringValue(1, SPRING_STACK, 0.001),
+    press: new SpringValue(0, SPRING_STACK, 0.01),
   };
   motion.x.onUpdate = onChange;
   motion.y.onUpdate = onChange;
   motion.rotate.onUpdate = onChange;
   motion.scale.onUpdate = onChange;
   motion.opacity.onUpdate = onChange;
+  motion.press.onUpdate = onChange;
   motions.set(id, motion);
   return motion;
 }
@@ -162,21 +200,87 @@ function measure(): void {
   if (rect.height > 0) size.height = rect.height;
 }
 
+/* ---------------- 每张卡的固定随机量 ----------------
+   只抽一次、按卡 id 存起来：换牌导致 depth 变化时，倾角与支点保持原样。
+   存的是 [-1, 1] 的随机系数而不是最终值，这样 randomRotationAmount 一类
+   的 prop 改动能立即按新幅度重算，无需重新抽签。 */
+interface CardRandomness {
+  /** 倾角系数，最终角度 = 系数 × randomRotationAmount */
+  rotation: number;
+  /** 支点横向偏移系数 */
+  originX: number;
+  /** 支点纵向偏移系数 */
+  originY: number;
+}
+
+const ORIGIN_BASE_X = 50;
+const ORIGIN_BASE_Y = 85;
+
+const randomness = new Map<string, CardRandomness>();
+
+function randomUnit(): number {
+  return Math.random() * 2 - 1;
+}
+
+function randomOf(id: string): CardRandomness {
+  let random = randomness.get(id);
+  if (!random) {
+    random = { rotation: randomUnit(), originX: randomUnit(), originY: randomUnit() };
+    randomness.set(id, random);
+  }
+  return random;
+}
+
+/** 后方卡的固定随机倾角（deg）；顶卡（depth 0）始终水平，不参与抽签 */
+function cardTilt(id: string, depth = 0): number {
+  if (depth === 0 || !props.randomRotation) return 0;
+  return randomOf(id).rotation * props.randomRotationAmount;
+}
+
+/** 这张卡的 transform-origin；关掉 randomRotationOriginOffset 时回到 50% 85% */
+function cardOrigin(id: string): string {
+  if (!props.randomRotationOriginOffset) {
+    return `${ORIGIN_BASE_X}% ${ORIGIN_BASE_Y}%`;
+  }
+  const random = randomOf(id);
+  const x = ORIGIN_BASE_X + random.originX * props.randomRotationOriginOffsetAmount;
+  const y = ORIGIN_BASE_Y + random.originY * props.randomRotationOriginOffsetAmount;
+  return `${x.toFixed(2)}% ${y.toFixed(2)}%`;
+}
+
+/** 换牌下压深度（em）：2em ≈ 把整张胶囊往牌堆里按下去一截 */
+const PRESS_DEPTH_EM = 2;
+
+/** 换牌时把当前顶卡向下压 2em；返回下压到最外端（首峰）所需时间（ms） */
+function pressCard(id: string): number {
+  const el = cardEls.get(id);
+  const fontSize = el ? parseFloat(getComputedStyle(el).fontSize) : NaN;
+  const em = Number.isFinite(fontSize) && fontSize > 0 ? fontSize : size.height / 2.1;
+  const impulse = impulseResponse(em * PRESS_DEPTH_EM, SPRING_STACK);
+  motionOf(id).press.kick(impulse.velocity);
+  return impulse.peakTime * 1000;
+}
+
 /** 换牌/重排时把每张卡的目标姿态同步到弹簧（instant 用于首帧与尺寸变化） */
 function applyTargets(instant = false): void {
   const cards = rendered.value;
   for (const { item, depth } of cards) {
     const el = cardEls.get(item.id);
-    if (el) el.style.zIndex = String(cards.length - depth);
+    if (el) {
+      el.style.zIndex = String(cards.length - depth);
+      // 支点跟着卡走而不是跟着 depth 走：同一张卡从顶到底，摆动支点不变
+      el.style.transformOrigin = cardOrigin(item.id);
+    }
     if (dragId === item.id && !instant) continue; // 拖拽中不夺走手指位置
     const motion = motionOf(item.id);
-    const pose = stackPose(depth, size.height);
+    const pose = stackPose(depth, size.height, cardTilt(item.id, depth));
     if (instant) {
       motion.x.set(pose.x);
       motion.y.set(pose.y);
       motion.rotate.set(pose.rotate);
       motion.scale.set(pose.scale);
       motion.opacity.set(pose.opacity);
+      motion.press.set(0);
     } else {
       motion.x.setTarget(pose.x);
       motion.y.setTarget(pose.y);
@@ -249,10 +353,16 @@ function onPointerMove(event: PointerEvent): void {
   lastY = event.clientY;
   velocity.sample(event.clientX, event.clientY, event.timeStamp);
 
-  if (!moved && Math.hypot(dx, dy) > DRAG_DEAD_ZONE) moved = true;
+  if (!moved && Math.hypot(dx, dy) > DRAG_DEAD_ZONE) {
+    moved = true;
+    // 真正进入拖拽：取消未提交的换牌，并清掉还在回弹的下压量，保证 1:1 跟手
+    cancelPendingAdvance();
+    motionOf(dragId).press.set(0);
+  }
 
   const motion = motionOf(dragId);
-  // 拖拽期间直接跟随手指（弹簧在松手时才接管），倾角与抬升保持物理直觉
+  // 拖拽期间直接跟随手指（弹簧在松手时才接管），倾角与抬升保持物理直觉。
+  // 顶卡静止时保持水平，倾角只由水平位移临时驱动，松手后回到 0°。
   motion.x.set(dx);
   motion.y.set(dy);
   motion.rotate.set(clamp(dx * 0.06, -10, 10));
@@ -296,7 +406,8 @@ function endDrag(event: PointerEvent | null): void {
     motion.y.kick(vy);
     motion.rotate.kick(vx * 0.03);
     motion.scale.kick(-Math.min(1400, Math.hypot(vx, vy)) * 0.00012);
-    advance(1, isCardFocused());
+    // 甩牌本身带着手指动量，直接换牌；不再叠加上一次下压前奏
+    commitAdvance(1, isCardFocused());
     void nextTick(() => applyTargets());
   } else {
     const pose = stackPose(0, size.height);
@@ -367,13 +478,25 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-/* ---------------- 换牌 ---------------- */
+/* ---------------- 换牌 ----------------
+   换牌分两拍：旧顶卡先以顶层姿态向下沉 2em；沉到最外端的瞬间才改 activeId
+   ——z-index 降为底层、开始虚化、整副牌重排，随后它在底层弹回牌堆尾部归位。
+   这样下压动作不会被新顶卡挡住，z-index 也不是「原地」切换。 */
 function isCardFocused(): boolean {
   const el = document.activeElement;
   return el instanceof HTMLElement && el.classList.contains('ft-card');
 }
 
-function advance(step = 1, keepFocus = false): void {
+let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** 取消尚未提交的换牌（真正开始拖拽时调用，避免延迟回调打断拖拽） */
+function cancelPendingAdvance(): void {
+  if (!pendingTimer) return;
+  clearTimeout(pendingTimer);
+  pendingTimer = undefined;
+}
+
+function commitAdvance(step: number, keepFocus: boolean): void {
   const { items } = props;
   if (items.length < 2) return;
   const found = items.findIndex((item) => item.id === props.activeId);
@@ -386,6 +509,22 @@ function advance(step = 1, keepFocus = false): void {
     void nextTick(() => cardEls.get(nextId)?.focus({ preventScroll: true }));
   }
   restartAutoplay();
+}
+
+function advance(step = 1, keepFocus = false): void {
+  const { items } = props;
+  if (items.length < 2 || pendingTimer) return;
+  // reduced-motion 下 kick 被弹簧忽略，直接换牌，不做无意义的等待
+  if (reducedMotion.value) {
+    commitAdvance(step, keepFocus);
+    return;
+  }
+  const peakMs = pressCard(props.activeId);
+  // 首峰时刻 = 卡片沉到最外端的时刻：此刻再降 z-index、换牌、开始虚化
+  pendingTimer = setTimeout(() => {
+    pendingTimer = undefined;
+    commitAdvance(step, keepFocus);
+  }, peakMs);
 }
 
 /* ---------------- 自动轮播（悬停/拖拽/聚焦/页面隐藏暂停） ---------------- */
@@ -447,9 +586,23 @@ watch(
   { flush: 'post' },
 );
 
+// 随机幅度/开关是公开 prop：改了就按新幅度重算即可（随机系数保持不变）
+watch(
+  [
+    () => props.randomRotation,
+    () => props.randomRotationAmount,
+    () => props.randomRotationOriginOffset,
+    () => props.randomRotationOriginOffsetAmount,
+  ],
+  () => {
+    if (measured) applyTargets();
+  },
+);
+
 onBeforeUnmount(() => {
   stopAutoplay();
   clearTimeout(suppressTimer);
+  clearTimeout(pendingTimer);
   observer?.disconnect();
   observer = null;
   document.removeEventListener('visibilitychange', onVisibility);
@@ -460,15 +613,18 @@ onBeforeUnmount(() => {
     motion.rotate.snap();
     motion.scale.snap();
     motion.opacity.snap();
+    motion.press.snap();
   }
   motions.clear();
   cardEls.clear();
+  randomness.clear();
 });
 
 /* ---------------- 模板辅助 ---------------- */
 function cardStyle(item: FeatureTagItem, depth: number): CSSProperties {
   return {
     '--card-tone': item.tone ?? 'var(--accent-2)',
+    '--ft-depth': depth,
     zIndex: rendered.value.length - depth,
   } as CSSProperties;
 }
@@ -553,6 +709,12 @@ function cardStyle(item: FeatureTagItem, depth: number): CSSProperties {
     0 10px 22px -14px color-mix(in srgb, var(--card-tone, var(--accent-2)) 70%, transparent);
   transform-origin: 50% 85%;
   will-change: transform, opacity;
+  /* 非顶卡逐层虚化：--ft-depth 由 cardStyle 写入，每深一层 +0.03em。
+     blur 直接吃 em（随身份行字号整体缩放），小屏大屏的景深比例一致；
+     换牌时 depth 变化交给过渡，卡片在飞向底层的过程中逐渐虚掉。
+     曲线与弹簧同风格（kexie 签名过冲曲线），虚化/清晰化都留一点余韵。 */
+  filter: blur(calc(var(--ft-depth, 0) * 0.03em));
+  transition: filter var(--dur-slow) cubic-bezier(0.34, 1.4, 0.5, 1);
   cursor: grab;
   -webkit-tap-highlight-color: transparent;
 }
@@ -601,6 +763,7 @@ function cardStyle(item: FeatureTagItem, depth: number): CSSProperties {
 @media (prefers-reduced-motion: reduce) {
   .ft-card {
     cursor: pointer;
+    transition: none;
   }
 }
 

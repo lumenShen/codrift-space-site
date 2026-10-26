@@ -9,16 +9,16 @@
  *   - 后方卡片按 depth 逐层缩小、下移、交替微旋，形成扇形牌堆；
  *   - 所有值最终交给 SpringValue，由 useSpring 的统一 rAF 管线推进。
  */
-import type { SpringConfig } from '@/effects/useSpring';
+import { SPRING_SNAPPY, type SpringConfig } from '@/effects/useSpring';
 
 /**
- * 牌堆专用弹簧（k=300 / c=28 / m=1）：
- *   ω0 = √300 ≈ 17.32 rad/s，ζ = 28 / (2√300) ≈ 0.808；
- *   介于 useSpring 的 SPRING_MICRO_OVERSHOOT（ζ≈0.671）与临界阻尼之间——
- *   换牌时各层目标深度变化，需要一点「到位后轻轻收住」的余韵，但不要在
- *   5 张卡同时重排时来回晃。
+ * 牌堆专用弹簧：直接复用 SPRING_SNAPPY（k=480 / c=27 / m=1）。
+ *   ω0 = √480 ≈ 21.9 rad/s，ζ = 27 / (2√480) ≈ 0.616；
+ *   ≈7.6% 过冲、≈179ms 到峰、≈270ms 回到 2% 带内（与 useSpring 的数值仿真一致）。
+ * 换牌时各层 depth 同时变化，牌要「弹过头一点再收住」才有实体卡的手感；
+ * 该预设仍在项目 5~8% 微超伸带内，5 张卡一起重排也不至于来回晃。
  */
-export const SPRING_STACK: SpringConfig = { stiffness: 300, damping: 28, mass: 1 };
+export const SPRING_STACK: SpringConfig = SPRING_SNAPPY;
 
 export interface StackPose {
   /** 水平位移（px），后方卡片左右交替微错位 */
@@ -42,14 +42,21 @@ const DEPTH_MAX_OFFSET_PX = 2.4;
  * 按深度算牌堆姿态。
  * `cardHeight` 用来把纵向错位换算成与胶囊成比例的 px（字号随视口 clamp 变化，
  * 固定 px 会让小屏堆不开、大屏挤成一坨）。
+ * `randomRotation` 是这张卡自己的固定随机倾角（deg），叠加在逐层交替的
+ * 扇形角上；由调用方按卡 id 保存，换牌重排时不重新抽签，牌才有「性格」。
+ * 顶卡（depth 0）的随机倾角应由调用方传 0：它和身份行文字同排，保持水平。
  */
-export function stackPose(depth: number, cardHeight: number): StackPose {
+export function stackPose(
+  depth: number,
+  cardHeight: number,
+  randomRotation = 0,
+): StackPose {
   const d = Math.max(0, depth);
   const side = d % 2 === 0 ? 1 : -1;
   return {
     x: side * Math.min(DEPTH_MAX_OFFSET_PX, d * 0.55),
     y: d * Math.max(1.1, cardHeight * 0.055),
-    rotate: side * d * DEPTH_ROTATE_STEP,
+    rotate: side * d * DEPTH_ROTATE_STEP + randomRotation,
     scale: Math.max(DEPTH_SCALE_MIN, 1 - d * DEPTH_SCALE_STEP),
     opacity: d === 0 ? 1 : Math.max(0.42, 0.88 - (d - 1) * 0.13),
   };
@@ -114,4 +121,51 @@ export class PointerVelocity {
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+export interface ImpulseResponse {
+  /** 单位初速下的首峰位移（px，用于标定校验） */
+  displacement: number;
+  /** 首峰出现的时间（秒） */
+  peakTime: number;
+  /** 让首峰达到指定位移所需的初速（px/s） */
+  velocity: number;
+}
+
+/**
+ * 把「一记冲量要让弹簧跑多远、跑到最外端要多久」翻译成初速与时间。
+ *
+ * 解析解首峰是 v/ωd · e^{-ζω0 t峰} · sin(ωd t峰)，但 SpringValue 走的是
+ * 1/240s 子步的 semi-implicit Euler，数值阻尼会让实际首峰比解析解小约 10%。
+ * 这里直接用同一套积分器模拟单位初速的自由振动，取真实首峰及其时刻，再反推
+ * 初速；刚度/阻尼预设变化时换算自动跟随，不必手调魔数。
+ *
+ * 用途：换牌时给顶卡的 press 弹簧一记向下 kick，让它沉到指定深度，并告诉调用方
+ * 何时到达最外端（此刻再降 z-index / 重排）。
+ */
+export function impulseResponse(displacement: number, config: SpringConfig): ImpulseResponse {
+  const mass = config.mass ?? 1;
+  const h = 1 / 240;
+  let x = 0;
+  let v = 1;
+  let peak = 0;
+  let peakTime = 0;
+  let time = 0;
+  // 模拟到首次回到 0（下沉结束、开始回弹）为止，记录最大下沉量及其时刻
+  for (let i = 0; i < 480; i += 1) {
+    const acceleration = (-config.stiffness * x - config.damping * v) / mass;
+    v += acceleration * h;
+    x += v * h;
+    time += h;
+    if (x > peak) {
+      peak = x;
+      peakTime = time;
+    }
+    if (i > 10 && x <= 0) break;
+  }
+  return {
+    displacement: peak,
+    peakTime,
+    velocity: peak > 0 ? displacement / peak : 0,
+  };
 }
