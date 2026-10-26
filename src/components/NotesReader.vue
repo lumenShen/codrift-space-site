@@ -713,7 +713,7 @@ function downloadHref(file: string): string {
 .side-meta {
   margin: var(--space-2) 0 0;
   color: var(--fg-2);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   line-height: 1.6;
 }
 
@@ -727,9 +727,9 @@ function downloadHref(file: string): string {
 
 .side-group {
   margin: var(--space-4) 0 var(--space-2);
-  padding: 0 10px;
+  padding: 0 var(--space-3);
   color: var(--fg-2);
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   line-height: 1.5;
@@ -744,7 +744,7 @@ function downloadHref(file: string): string {
   width: 100%;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -788,7 +788,7 @@ function downloadHref(file: string): string {
 
 .side-foot {
   flex: none;
-  padding: var(--space-4) var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-3) var(--space-5);
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--bg-0) 38%, transparent);
 }
@@ -796,7 +796,7 @@ function downloadHref(file: string): string {
 .side-foot-title {
   margin: 0 0 var(--space-3);
   color: var(--fg-2);
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -806,7 +806,7 @@ function downloadHref(file: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--fg-1);
@@ -833,7 +833,7 @@ function downloadHref(file: string): string {
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   color: var(--accent-strong);
-  font-size: 0.58rem;
+  font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-align: center;
@@ -845,12 +845,12 @@ function downloadHref(file: string): string {
   min-width: 0;
   flex-direction: column;
   gap: 1px;
-  font-size: 0.76rem;
+  font-size: 0.79rem;
 }
 
 .side-download-copy small {
   color: var(--fg-2);
-  font-size: 0.65rem;
+  font-size: 0.7rem;
 }
 
 .side-download svg {
