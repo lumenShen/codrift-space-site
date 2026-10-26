@@ -142,43 +142,43 @@ const reviewChapters: NoteChapter[] = [
 const cUnits: NoteChapter[] = [
   {
     id: 'c01',
-    group: '第 1 章 从源文件到可执行文件',
+    group: '第 1 章 起步：从源文件到能跑的程序',
     title: '从源文件到可执行文件：你的第一个 C 程序',
     file: 'units/c__chapters__ch01__01-from-source-to-program.md.html',
   },
   {
     id: 'c02',
-    group: '第 1 章 从源文件到可执行文件',
+    group: '第 1 章 起步：从源文件到能跑的程序',
     title: '编译器的脾气：诊断、警告与构建命令',
     file: 'units/c__chapters__ch01__02-diagnostics-and-warnings.md.html',
   },
   {
     id: 'c03',
-    group: '第 2 章 类型、表达式与求值',
+    group: '第 2 章 数据与表达式：类型、取值与运算',
     title: '类型与取值范围：整型、字符与浮点',
     file: 'units/c__chapters__ch02__01-types-and-ranges.md.html',
   },
   {
     id: 'c04',
-    group: '第 2 章 类型、表达式与求值',
+    group: '第 2 章 数据与表达式：类型、取值与运算',
     title: '整数的边界：提升、溢出、位运算与枚举',
     file: 'units/c__chapters__ch02__02-integer-promotion-and-overflow.md.html',
   },
   {
     id: 'c05',
-    group: '第 2 章 类型、表达式与求值',
+    group: '第 2 章 数据与表达式：类型、取值与运算',
     title: '表达式与求值：优先级、转换与顺序',
     file: 'units/c__chapters__ch02__03-expressions-and-evaluation.md.html',
   },
   {
     id: 'c06',
-    group: '第 3 章 分支、循环与函数',
+    group: '第 3 章 控制流与函数',
     title: '分支与循环：把流程写对',
     file: 'units/c__chapters__ch03__01-branches-and-loops.md.html',
   },
   {
     id: 'c07',
-    group: '第 3 章 分支、循环与函数',
+    group: '第 3 章 控制流与函数',
     title: '函数：声明、定义、调用栈与 static 局部变量',
     file: 'units/c__chapters__ch03__02-functions-and-call-stack.md.html',
   },
@@ -220,47 +220,171 @@ const cUnits: NoteChapter[] = [
   },
   {
     id: 'c14',
-    group: '第 6 章 文件与标准库',
+    group: '第 6 章 标准库与文件',
     title: '文件与 I/O：把结果留下来',
     file: 'units/c__chapters__ch06__01-files-and-io.md.html',
   },
   {
     id: 'c15',
-    group: '第 6 章 文件与标准库',
+    group: '第 6 章 标准库与文件',
     title: '标准库工具箱：字符串、解析、排序与数学',
     file: 'units/c__chapters__ch06__02-stdlib-toolbox.md.html',
   },
   {
     id: 'c16',
-    group: '第 7 章 预处理、多文件与调试',
+    group: '第 7 章 工程与工具：预处理、多文件与调试',
     title: '预处理与宏：符号在编译之前怎么变形',
     file: 'units/c__chapters__ch07__01-preprocessing-and-macros.md.html',
   },
   {
     id: 'c17',
-    group: '第 7 章 预处理、多文件与调试',
+    group: '第 7 章 工程与工具：预处理、多文件与调试',
     title: '多文件工程：头文件、编译单元与链接性',
     file: 'units/c__chapters__ch07__02-multiple-files-and-linkage.md.html',
   },
   {
     id: 'c18',
-    group: '第 7 章 预处理、多文件与调试',
+    group: '第 7 章 工程与工具：预处理、多文件与调试',
     title: '调试与排错：gdb、退出码与排错套路',
     file: 'units/c__chapters__ch07__03-debugging.md.html',
   },
   {
     id: 'c19',
-    group: '第 8 章 未定义行为与维护',
+    group: '第 8 章 未定义行为、优化与收尾',
     title: '未定义行为与优化边界：编译器有多大自由度',
     file: 'units/c__chapters__ch08__01-undefined-behavior-and-optimization.md.html',
   },
   {
     id: 'c20',
-    group: '第 8 章 未定义行为与维护',
+    group: '第 8 章 未定义行为、优化与收尾',
     title: '收尾：从会写 C 到能维护一个 C 程序',
     file: 'units/c__chapters__ch08__02-maintaining-c.md.html',
   },
 ];
+
+const cppUnits: NoteChapter[] = [
+  {
+    id: 'cpp01',
+    group: '第 1 章 起步：从 C 到 C++',
+    title: '工具链与第一个 C++ 程序：g++、std::print、编译链接',
+    file: 'units/cpp__chapters__ch01__01-toolchain-and-first-program.md.html',
+  },
+  {
+    id: 'cpp02',
+    group: '第 1 章 起步：从 C 到 C++',
+    title: '引用、const 与命名空间：C++ 的地基',
+    file: 'units/cpp__chapters__ch01__02-references-const-namespaces.md.html',
+  },
+  {
+    id: 'cpp03',
+    group: '第 2 章 对象生命周期',
+    title: '类与 RAII：构造、析构、拷贝构造',
+    file: 'units/cpp__chapters__ch02__01-classes-and-raii.md.html',
+  },
+  {
+    id: 'cpp04',
+    group: '第 2 章 对象生命周期',
+    title: '拷贝与移动：值类别、std::move 与 Rule of Five',
+    file: 'units/cpp__chapters__ch02__02-copy-and-move.md.html',
+  },
+  {
+    id: 'cpp05',
+    group: '第 2 章 对象生命周期',
+    title: '智能指针与所有权：unique_ptr、shared_ptr、weak_ptr',
+    file: 'units/cpp__chapters__ch02__03-smart-pointers-and-ownership.md.html',
+  },
+  {
+    id: 'cpp06',
+    group: '第 3 章 继承与多态',
+    title: '继承与虚函数：动态多态、对象切片',
+    file: 'units/cpp__chapters__ch03__01-inheritance-and-virtual.md.html',
+  },
+  {
+    id: 'cpp07',
+    group: '第 3 章 继承与多态',
+    title: '多态的设计代价：虚析构、接口类、组合优于继承',
+    file: 'units/cpp__chapters__ch03__02-polymorphism-cost.md.html',
+  },
+  {
+    id: 'cpp08',
+    group: '第 4 章 模板与泛型',
+    title: '模板入门：函数模板、类模板、实例化',
+    file: 'units/cpp__chapters__ch04__01-template-basics.md.html',
+  },
+  {
+    id: 'cpp09',
+    group: '第 4 章 模板与泛型',
+    title: 'concepts 与约束：从 SFINAE 到 requires',
+    file: 'units/cpp__chapters__ch04__02-concepts.md.html',
+  },
+  {
+    id: 'cpp10',
+    group: '第 4 章 模板与泛型',
+    title: '可变参数模板与完美转发：forward、折叠表达式',
+    file: 'units/cpp__chapters__ch04__03-variadic-and-forwarding.md.html',
+  },
+  {
+    id: 'cpp11',
+    group: '第 5 章 标准库容器与算法',
+    title: '序列容器：vector、string、deque、list 的取舍',
+    file: 'units/cpp__chapters__ch05__01-sequence-containers.md.html',
+  },
+  {
+    id: 'cpp12',
+    group: '第 5 章 标准库容器与算法',
+    title: '关联容器与哈希：map、set、unordered_*',
+    file: 'units/cpp__chapters__ch05__02-associative-containers.md.html',
+  },
+  {
+    id: 'cpp13',
+    group: '第 5 章 标准库容器与算法',
+    title: '迭代器、算法与 ranges：lambda、views、zip / enumerate',
+    file: 'units/cpp__chapters__ch05__03-iterators-algorithms-ranges.md.html',
+  },
+  {
+    id: 'cpp14',
+    group: '第 6 章 现代语言特性',
+    title: 'auto、decltype 与结构化绑定',
+    file: 'units/cpp__chapters__ch06__01-auto-decltype-structured-binding.md.html',
+  },
+  {
+    id: 'cpp15',
+    group: '第 6 章 现代语言特性',
+    title: 'lambda 与函数对象',
+    file: 'units/cpp__chapters__ch06__02-lambdas-and-function-objects.md.html',
+  },
+  {
+    id: 'cpp16',
+    group: '第 7 章 错误处理与资源',
+    title: '异常、noexcept 与异常安全',
+    file: 'units/cpp__chapters__ch07__01-exceptions-noexcept.md.html',
+  },
+  {
+    id: 'cpp17',
+    group: '第 7 章 错误处理与资源',
+    title: 'optional、variant 与 expected',
+    file: 'units/cpp__chapters__ch07__02-optional-variant-expected.md.html',
+  },
+  {
+    id: 'cpp18',
+    group: '第 8 章 编译期与系统 I/O',
+    title: 'constexpr 与 consteval',
+    file: 'units/cpp__chapters__ch08__01-constexpr-consteval.md.html',
+  },
+  {
+    id: 'cpp19',
+    group: '第 8 章 编译期与系统 I/O',
+    title: '文件、格式化与生成器',
+    file: 'units/cpp__chapters__ch08__02-files-format-generator.md.html',
+  },
+  {
+    id: 'cpp20',
+    group: '第 9 章 工程与收尾',
+    title: '多文件工程、ODR 与收尾',
+    file: 'units/cpp__chapters__ch09__01-multi-file-odr-and-wrap-up.md.html',
+  },
+];
+
 
 export const notesCollections: NoteCollection[] = [
   {
@@ -315,17 +439,46 @@ export const notesCollections: NoteCollection[] = [
     subject: '从源文件到可维护工程',
     tagline: '从编译器、内存与链接的视角，重学一遍 C。',
     description:
-      '以「能维护一个 C 程序」为目标：20 个单元覆盖类型、指针、内存、结构体、文件、预处理、多文件链接与未定义行为；代码清单过真编译、真运行闸门，面向 gcc/g++ 16 与 x86_64-w64-mingw32。',
-    status: '持续打磨',
+      '以「能维护一个 C 程序」为目标：8 章 20 个单元覆盖类型、指针、内存、结构体、文件、预处理、多文件链接与未定义行为；242 份清单全部过真编译、真运行闸门，正文输出由真实 stdout/stderr 回写。512 页 A4 PDF 与单文件 HTML 与站内单元出自同一套源文件。',
+    status: '完整版',
     keywords: ['编译器视角', '指针与内存', '链接', '未定义行为'],
     metrics: [
       { value: '8', label: '章' },
       { value: '20', label: '单元' },
-      { value: '17.7', label: '万汉字' },
+      { value: '23.0', label: '万汉字' },
     ],
-    meta: '20 个可独立阅读的单元 · 177,456 字',
+    meta: '20 个可独立阅读的单元 · 230,023 字 · 512 页 PDF',
     chapters: cUnits,
-    downloads: [],
+    downloads: [
+      { tag: 'PDF', label: '整册 PDF', file: 'c.pdf', note: '512 页 · A4' },
+      { tag: 'HTML', label: '单文件离线版', file: 'book-inline.html', note: '样式内联 · 双击即读' },
+      { tag: 'HTML', label: '合书 HTML', file: 'books/c.html', note: '站内阅读版' },
+    ],
+  },
+
+  {
+    id: 'cpp-engineering',
+    kind: '工程笔记',
+    title: 'C++ 语言 · 工程视角',
+    shortTitle: 'C++ 语言工程',
+    subject: 'C++23 · 核心与常用新特性',
+    tagline: '从 C 出发，把现代 C++ 写进真实工程。',
+    description:
+      '以「从 C 到 C++」为路线：9 章 20 个单元覆盖引用与 const、RAII、拷贝与移动、继承与多态、模板与 concepts、容器与 ranges、异常与 expected、编译期计算与系统 I/O，最后落到多文件工程。125 份清单全部过真编译、真运行闸门，正文输出由真实 stdout/stderr 回写。170 页 A4 PDF 与单文件 HTML 与站内单元出自同一套源文件。',
+    status: '完整版',
+    keywords: ['RAII', '移动语义', '模板与 concepts', 'ranges', 'C++23'],
+    metrics: [
+      { value: '9', label: '章' },
+      { value: '20', label: '单元' },
+      { value: '9.2', label: '万汉字' },
+    ],
+    meta: '20 个可独立阅读的单元 · 92,389 字 · 170 页 PDF',
+    chapters: cppUnits,
+    downloads: [
+      { tag: 'PDF', label: '整册 PDF', file: 'cpp.pdf', note: '170 页 · A4' },
+      { tag: 'HTML', label: '单文件离线版', file: 'book-inline.html', note: '样式内联 · 双击即读' },
+      { tag: 'HTML', label: '合书 HTML', file: 'books/cpp.html', note: '站内阅读版' },
+    ],
   },
 ];
 
@@ -341,10 +494,10 @@ export function noteDownloadName(file: string): string {
 
 export const notesTotals = {
   kinds: notesCollections.length,
-  units: 54,
-  chapters: 22,
-  chars: 435670,
-  pages: 566,
+  units: 74,
+  chapters: 31,
+  chars: 580742,
+  pages: 1248,
   examples: 216,
   graphs: 113,
 };

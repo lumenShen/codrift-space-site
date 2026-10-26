@@ -26,7 +26,7 @@ const router = createRouter({
       component: () => import('@/pages/NotesPage.vue'),
     },
     {
-      // 封面版式对照页：三种笔记 × 五套版式，选定后用 cover-data 的默认值切换
+      // 封面版式对照页：四种笔记 × 五套版式，选定后用 cover-data 的默认值切换
       path: '/notes/covers',
       name: 'notes-covers',
       component: () => import('@/pages/NotesCoverLabPage.vue'),

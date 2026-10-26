@@ -8,6 +8,7 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import BlogCard from '@/components/BlogCard.vue';
 import { selectBlogEntries } from '@/components/content';
+import { notesTotals } from '@/data/notes';
 
 const route = useRoute();
 const router = useRouter();
@@ -46,10 +47,13 @@ function setTag(tag: string): void {
 
     <RouterLink to="/notes" class="notes-banner" data-cursor="target">
       <div class="notes-banner-copy">
-        <span class="notes-banner-badge">开源笔记 · 03</span>
+        <span class="notes-banner-badge">开源笔记 · {{ String(notesTotals.kinds).padStart(2, '0') }}</span>
         <h2>知识笔记文档专区</h2>
         <p class="notes-banner-hl">AI驱动的知识笔记再优化，让晦涩难懂的语言更加易懂。</p>
-        <p class="notes-banner-meta">3 种笔记 · 54 个单元 · 43.6 万汉字 · 站内全屏阅读 / 高数 PDF 与单文件</p>
+        <p class="notes-banner-meta">
+          {{ notesTotals.kinds }} 种笔记 · {{ notesTotals.units }} 个单元 ·
+          {{ (notesTotals.chars / 10000).toFixed(1) }} 万汉字 · 站内全屏阅读 / 全套 PDF 与单文件
+        </p>
       </div>
       <span class="notes-banner-cta">进入笔记库 →</span>
     </RouterLink>

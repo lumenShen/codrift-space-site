@@ -4,8 +4,8 @@ import type { NoteCollection } from '@/data/notes';
  * 封面版式的公共取数与调色板。
  *
  * 封面是「印刷物」，配色不跟随站点主题：底色与墨色是纸面自身的一部分，
- * 只有强调色按笔记种类区分（蓝＝正课、绿＝复习、橙＝C 语言工程），
- * 使三本并排时像同一套丛书的三个分册。
+ * 只有强调色按笔记种类区分（蓝＝正课、绿＝复习、橙＝C 语言工程、紫＝C++ 语言工程），
+ * 使四本并排时像同一套丛书的分册。
  */
 export const COVER_VARIANTS = ['editorial', 'nocturne', 'index', 'swiss', 'spine'] as const;
 
@@ -15,12 +15,14 @@ const ACCENTS: Record<string, string> = {
   gaoshu: '#4f8cff',
   'gaoshu-review': '#46e2a0',
   'c-engineering': '#ff9a4d',
+  'cpp-engineering': '#a78bfa',
 };
 
 const GLYPHS: Record<string, string> = {
   gaoshu: '∫',
   'gaoshu-review': 'ε',
   'c-engineering': '{ }',
+  'cpp-engineering': '++',
 };
 
 /** 每本笔记的默认版式：站点内实际展示的那一套（站长选定「夜读极光」） */
@@ -28,6 +30,7 @@ const DEFAULT_VARIANTS: Record<string, CoverVariant> = {
   gaoshu: 'nocturne',
   'gaoshu-review': 'nocturne',
   'c-engineering': 'nocturne',
+  'cpp-engineering': 'nocturne',
 };
 
 export function coverAccent(collection: NoteCollection): string {

@@ -1,0 +1,1270 @@
+@charset "UTF-8";
+/* ==========================================================================
+ * theme.css — 《C / C++ / 算法 / 项目实战》版式系统（读代码专用）
+ *
+ * 这份文件解决一个问题：读者第一眼要能分清**五种东西**——
+ *   ① 源码块（.codeblock）   ② 终端输出（.term-output，深底）
+ *   ③ 编译诊断（.term-diagnostic，浅红+粗左条）  ④ 真机实测数字（.box-experiment 里的 strong）
+ *   ⑤ 老师的大白话（.box-plain，暖底+顶部虚线）
+ * 彩色屏幕上靠色相，灰度打印上靠**底色深浅 + 左边框样式 + 字重**三重冗余；每种块在灰度下
+ * 都有独一无二的「形状指纹」（见第 4 节开头的表），不靠颜色也能认出是哪种块。
+ *
+ * 结构：
+ *   0. 设计令牌（颜色 / 字体 / 尺度 / 高度预算）
+ *   1. 页面骨架（封面区、目录、页脚、站内导航、单元导航）
+ *   2. 标题层级
+ *   3. 正文元素（段落、列表、表格、引用、行内代码）
+ *   4. 语义块（12 种）
+ *   5. 代码块（行号列 / 行标注 / 旁注 / 折行 / 空白可见 / 续块）
+ *   6. 终端块（真实输出 / 编译诊断 / 会话记录）
+ *   7. 图元（树 / 调用树 / 内存 / 图 / 可见性；屏幕版动画 + 打印版静态帧）
+ *   8. 打印（A4、页码、命名页页眉、分页控制）
+ *   9. 屏幕适配与无障碍
+ *
+ * 三条不可动的约束（改版式前先读）：
+ *   a) 配色表与 build/splitcheck.py 的 HEADER_COLORS / BODY_COLORS 一一对应：
+ *      改这里的底色必须同步改那张表（见 build/TOOLCHAIN.md 第 6 节）。
+ *   b) @page 的 A4 与 margin: 19mm 17mm 20mm 17mm 不许改：splitcheck.py 按这三个值
+ *      算版心底边与页首采样点，改了体检数字就全错。
+ *   c) 分页策略 = 「内容高度预算 + 分页规则」双管齐下（第 8 节）：块整体不打断，
+ *      所以块的高度上限就是页尾空白的上限；超长内容必须在写作阶段拆块（第 5 节）。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 0. 设计令牌
+ * ========================================================================== */
+
+:root {
+  /* --- 墨色与纸色 --- */
+  --ink: #16181d;          /* 正文 */
+  --ink-soft: #333a46;     /* 次级正文 */
+  --ink-mute: #6b7280;     /* 辅助信息（页码、单位、提示） */
+  --rule: #d8dce3;         /* 细线 */
+  --rule-soft: #e8ebf0;    /* 更浅的线 */
+  --rule-strong: #aeb6c2;  /* 粗线 */
+  --paper: #ffffff;
+  --paper-soft: #f6f8fa;   /* 统一的「块头」灰（也用于表头、图元标题带） */
+  --paper-tint: #f2f5f9;   /* 目录底 */
+
+  /* --- 全书强调色（墨蓝）：链接、行内强调 --- */
+  --accent: #1b4b8f;
+  --accent-deep: #143a6e;
+  --accent-soft: #eaf0f8;
+
+  /* --- 字体 ---
+   * 正文：中文长时间阅读栈（黑体系，字号 10.5pt / 行高 1.72）。
+   * 代码：等宽栈。Consolas 与 Cascadia Mono 都没有中文字形，Chrome 会逐字回退，
+   *       所以中文字体必须显式排在 monospace 之前，中文注释才不会是方框（见 TOOLCHAIN 第 2 节）。
+   */
+  --font-sans: "Segoe UI", -apple-system, "Microsoft YaHei", "PingFang SC",
+    "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "SimSun", sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", "Courier New", "DejaVu Sans Mono",
+    "Noto Sans Mono CJK SC", "Microsoft YaHei", monospace;
+
+  /* --- 尺度 --- */
+  --fs-body: 9.5pt;        /* 中文正文（打印） */
+  --lh-body: 1.49;         /* 中文正文行高：舒适且不至于让块长胖 */
+  --fs-code: 8pt;          /* 代码字号：一行 96 列仍放得下（体检口径的宽度上限） */
+  --lh-code: 1.3;          /* 代码行高：每行 10.4pt ≈ 15.9px（110 DPI） */
+  --fs-h1: 1.72em;
+  --fs-h2: 1.26em;
+  --fs-h3: 1.08em;
+  --measure: 42em;         /* 屏幕正文最佳阅读宽度 */
+  --radius: 4px;
+  --radius-lg: 6px;
+
+  /* --- 高度预算（体检口径：110 DPI，1pt = 1.528px；版心 258mm = 1117px）---
+   * 这些值不是美术偏好，是**分页规则的反推结果**：块整体 break-inside: avoid，
+   * 于是「页尾空出来的最大高度 < 换页那一刻正在排的块的高度」。把块压在这些上限之内，
+   * 页尾空白就被摁在体检线（250px）附近（推导见第 8 节）。
+   */
+  --budget-box: 330px;     /* 语义块设计目标（当前字号下约 14 行正文；超过就拆成「（续）」两块） */
+  --budget-code: 22;       /* 代码块行数上限（≈ 22 × 15.9px + 块头 ≈ 380px） */
+  --budget-term: 18;       /* 终端 / 诊断 / 会话块：行数上限 */
+  --budget-frame: 260px;   /* 图元单帧（帧与帧之间允许分页，每帧自带标题） */
+
+  /* --- 语义块色板 ---
+   * 每个块三件套：--c-*（文字/图标主色）、--bg-*（块体底色）、--hd-*（标题带底色）。
+   * 底色与标题带都在 splitcheck.py 的颜色表里；任何一对颜色的 RGB 至少有一个通道
+   * 相差 ≥3，否则颜色近似匹配（容差 2）会混淆（TOOLCHAIN 第 8 节第 4 条）。
+   */
+  --c-goal: #2c4a6e;       --bg-goal: #f2f6fc;
+  --c-syntax: #1b4b8f;     --bg-syntax: #eef4fd;     --hd-syntax: #dbe8fa;
+  --c-trap: #a5241d;       --bg-trap: #fdeeec;       --hd-trap: #f8dcd6;
+  --c-compiler: #3f4a58;   --bg-compiler: #f1f4f8;   --hd-compiler: #dde3ea;
+  --c-standard: #8a5a00;   --bg-standard: #fdf7ea;   --hd-standard: #f6e6c2;
+  --c-experiment: #0f6f4a; --bg-experiment: #e9f7f0; --hd-experiment: #cfead9;
+  --c-practice: #5b3fa8;   --bg-practice: #f4f0fe;   --hd-practice: #e3dbf8;
+  --c-debug: #a3520b;      --bg-debug: #fdf2e6;      --hd-debug: #f8e1c6;
+  --c-plain: #8a6a1f;      --bg-plain: #fdf9ef;
+  --c-summary: #146c3a;    --bg-summary: #f0f8e6;    --hd-summary: #d9eedd;
+  --c-quiz: #8f2049;       --bg-quiz: #fdf1f6;       --hd-quiz: #f8d7e2;
+  --c-note: #45566b;       --bg-note: #ffffff;
+
+  /* --- 终端与代码 --- */
+  --term-bg: #0d1117;      /* 终端输出底色（深） */
+  --term-ink: #e6edf3;
+  --term-head: #161b22;
+  --diag-bg: #fff8f8;      --diag-hd: #f9dcdc;      --diag-ink: #8b1a1a;
+  --mark-bg: #fff5cc;      /* 被标注的代码行 */
+  --mark-rule: #d4a017;
+  --note-bg: #fdf1b8;      /* 行尾旁注小签 */
+  --viz-bg: #fcfcfd;
+}
+
+/* ==========================================================================
+ * 1. 页面骨架
+ * ========================================================================== */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  /* 打印底色关键：写在 html 上可继承，语义块/终端块的底色才打得出来（TOOLCHAIN 第 6 节） */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-size: var(--fs-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: var(--lh-body);
+  text-rendering: optimizeLegibility;
+}
+
+.doc {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.1rem 3rem;
+}
+
+@media screen {
+  body { font-size: 16.5px; background: #fff; }
+  .doc { padding-top: 1.2rem; }
+}
+
+/* --- 站内导航（屏幕可见，打印隐藏）--- */
+.sitenav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.05rem;
+  align-items: center;
+  padding: 0.5rem 1.1rem;
+  border-bottom: 1px solid var(--rule);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(1.4) blur(6px);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.sitenav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid transparent;
+}
+
+.sitenav a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.sitenav .nav-brand { margin-right: auto; font-weight: 700; color: var(--ink); }
+.sitenav .ico-svg { width: 1em; height: 1em; vertical-align: -0.12em; }
+
+/* --- 页首标题区（打印时的封面块：@page p-cover 无页眉无页码）--- */
+.doc-head {
+  padding: 1.4rem 0 0.9rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 1.2rem;
+}
+
+.doc-kicker {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-mute);
+}
+
+.doc-title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.28;
+  letter-spacing: 0.01em;
+}
+
+.doc-sub { margin: 0.5rem 0 0; font-size: 0.95rem; color: var(--ink-soft); }
+.doc-meta { margin: 0.7rem 0 0; font-size: 0.78rem; color: var(--ink-mute); }
+
+/* 首页的「怎么读这本书」小卡片：五种东西各有长相（读者第一页就要看到） */
+.legend {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  font-size: 0.86rem;
+  line-height: 1.62;
+}
+
+.legend-t { margin: 0 0 0.35rem; font-weight: 700; font-size: 0.9rem; }
+.legend ul { margin: 0; padding-left: 1.15em; }
+.legend li { margin: 0.12em 0; }
+.legend .sw {
+  display: inline-block;
+  width: 1.05em;
+  height: 0.86em;
+  margin-right: 0.32em;
+  vertical-align: -0.08em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+}
+.legend .sw-code { background: #fff; border-left: 3px solid #b9c0ca; }
+.legend .sw-out { background: var(--term-bg); border-color: var(--term-bg); }
+.legend .sw-diag { background: var(--diag-bg); border-left: 3px solid var(--c-trap); }
+.legend .sw-num { background: var(--bg-experiment); border-left: 3px solid var(--c-experiment); }
+.legend .sw-plain { background: var(--bg-plain); border-top: 2px dashed var(--c-plain); }
+
+/* --- 目录面板 --- */
+.toc {
+  margin: 0 0 1.5rem;
+  padding: 0.9rem 1.05rem 1rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  break-inside: avoid;
+}
+
+.toc-h {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.55rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.toc-h .ico-svg { width: 1em; height: 1em; color: var(--accent); }
+.toc-list { margin: 0; padding: 0; list-style: none; line-height: 1.62; }
+.toc-list li { margin: 0.08rem 0; }
+.toc-l3 { padding-left: 1.35em; }
+.toc-empty { margin: 0; color: var(--ink-mute); }
+.toc a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px dotted var(--rule-strong); }
+.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* --- 页脚 --- */
+.doc-foot {
+  margin-top: 2.2rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.76rem;
+  color: var(--ink-mute);
+}
+
+/* --- 单元导航（屏幕可见，打印隐藏）--- */
+.unit-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.6rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+}
+
+/* --- 合书时的章封面页与单元标题 ---
+ * 章封面页（.chapter-head）占整页、无页眉（页名由 render.js 注入），页脚页码照常。
+ * 本机实测：@page :first 对命名页不生效、@page <名字>:first 只匹配文档第 1 页，
+ * 所以「章首页不重复页眉」只能靠页名切换（探针与结论见 build/TOOLCHAIN.md）。 */
+.chapter-head { margin: 0 0 1.2rem; padding-bottom: 0.8rem; border-bottom: 2px solid var(--ink); }
+.chapter-title {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0;
+  border-bottom: 0;
+  font-size: 1.65em;
+  line-height: 1.3;
+  break-after: avoid;
+}
+.chapter-title .chapter-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.56em;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+.chapter-meta { margin: 0 0 0.7rem; font-size: 0.8rem; color: var(--ink-mute); }
+.chapter-units { margin: 0; padding-left: 1.5em; font-size: 0.92rem; }
+.chapter-units li { margin: 0.22em 0; }
+.chapter-units a { color: var(--ink-soft); border-bottom: 1px dotted var(--rule-strong); }
+.chapter-units .cu-note { margin-left: 0.5em; font-size: 0.86em; color: var(--ink-mute); }
+
+.unit-title {
+  margin: 1.6em 0 0.55em;
+  padding: 0.3em 0 0.3em 0.65em;
+  border-left: 4px solid var(--accent);
+  font-size: 1.04em;
+  font-weight: 700;
+  break-after: avoid;
+}
+
+.unit-title:first-of-type { margin-top: 1em; }
+
+/* ==========================================================================
+ * 2. 标题层级
+ * ========================================================================== */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--ink);
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+h2 {
+  margin: 1.25em 0 0.45em;
+  padding: 0.14em 0 0.14em 0.6em;
+  border-left: 4px solid var(--accent);
+  font-size: var(--fs-h2);
+  line-height: 1.4;
+}
+
+h3 {
+  margin: 0.9em 0 0.3em;
+  font-size: var(--fs-h3);
+  line-height: 1.45;
+}
+
+h3::before {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-right: 0.4em;
+  vertical-align: 0.06em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+h4 { margin: 0.9em 0 0.3em; font-size: 1em; color: var(--ink-soft); }
+
+/* 章内小节的编号（1.1 / 1.2.3）跟着标题走，不用另起样式 */
+.h-num { color: var(--accent); margin-right: 0.3em; font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+ * 3. 正文元素
+ * ========================================================================== */
+
+p {
+  margin: 0 0 0.38em;
+  orphans: 2;
+  widows: 2;
+}
+
+/* 中文着重号：术语用 <em>，底面加点（比斜体更符合中文排版习惯）。
+ * display: inline-block 是**修 bug 不是装饰**：下加点会扩张行盒，与同一行里下探的行内盒子
+ * （上下标、行内代码的行盒）互相放大，行距会裂开；行内块让着重号只在自己的行盒里结算。
+ * 这条沿用 gaoshu 的实测结论（gaoshu-notes/build/theme.css:401 的注释），本项目未复测。 */
+em {
+  font-style: normal;
+  text-emphasis: filled dot var(--accent);
+  -webkit-text-emphasis: filled dot var(--accent);
+  text-emphasis-position: under right;
+  display: inline-block;
+  max-width: 100%;
+}
+
+strong { font-weight: 700; color: #0d0f13; }
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+a:hover { border-bottom-color: var(--accent); }
+
+mark { background: #fdf0b8; padding: 0 0.15em; border-radius: 2px; }
+
+/* 行内代码：只在「正文里提到一个标识符/命令/文件名」时用。
+ * 底色**故意不**进 splitcheck 的颜色表：行内代码可能在页首行首出现，
+ * 若算作「块体底色」会把正常的正文页误判成续块（TOOLCHAIN 第 6 节的采样方式）。 */
+code, kbd, samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: #e9edf2;
+  border: 1px solid #e2e7ee;
+  border-radius: 3px;
+  padding: 0.02em 0.3em;
+  overflow-wrap: anywhere;
+}
+
+kbd { background: #fff; border-bottom-width: 2px; }
+
+blockquote {
+  margin: 0.8em 0;
+  padding: 0.1em 0 0.1em 0.85em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+ul, ol { margin: 0.35em 0 0.7em; padding-left: 1.5em; }
+li { margin: 0.1em 0; }
+li > ul, li > ol { margin: 0.2em 0 0.25em; }
+ul { list-style: none; }
+ul > li { position: relative; }
+ul > li::before {
+  content: "";
+  position: absolute;
+  left: -0.92em;
+  top: 0.62em;
+  width: 0.28em;
+  height: 0.28em;
+  background: var(--accent);
+  border-radius: 50%;
+}
+ul > li > ul > li::before { background: none; border: 1px solid var(--accent); }
+ol { list-style: decimal; }
+ol > li::marker { color: var(--accent); font-weight: 600; }
+
+table {
+  width: 100%;
+  margin: 0.7em 0 0.8em;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  break-inside: auto;
+}
+
+caption {
+  caption-side: top;
+  margin-bottom: 0.3em;
+  font-size: 0.82em;
+  color: var(--ink-mute);
+  text-align: left;
+}
+
+/* 表格可以跨页，但表头每页重复（thead 重复显示），行不许拆 —— 所以「表被拆」不是缺陷 */
+thead { display: table-header-group; }
+tbody tr { break-inside: avoid; }
+
+th, td {
+  padding: 0.26em 0.48em;
+  border: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: var(--paper-soft); font-weight: 700; border-bottom: 1.5px solid var(--rule-strong); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 裸 pre（缩进代码块、规范文档里展示围栏写法时用）：不带类名，所以不会碰到 .code / .term-body */
+pre:not([class]) {
+  margin: 0.8em 0;
+  padding: 0.6em 0.85em;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+}
+
+hr { height: 0; margin: 1.5em 0; border: 0; border-top: 1px solid var(--rule); }
+img, svg { max-width: 100%; }
+
+/* ==========================================================================
+ * 4. 语义块（12 种）
+ *
+ * 灰度可辨识的「形状指纹」——打印成黑白也认得出是哪种块：
+ *   goal        无底色左条 · 顶部 2px 虚线 · 标题无带
+ *   syntax      左侧 6px 实条 + 标题带
+ *   trap        左侧 8px 最粗条 + 标题带 + 标题加粗到 800
+ *   compiler    左侧 2px 双线 + 标题用等宽字体（像编译器在说话）
+ *   standard    四周细框 + 上下各 2px 双线（书页感）+ 内部左竖线引用
+ *   experiment  左侧 6px 实条 + 外圈 1px 点线 + 块内数字染绿并加粗
+ *   practice    全框圆角 + 标题带 + 标题前的小方点
+ *   debug       左侧 6px 实条 + 顶部 1px 线 + 块内等宽小字
+ *   plain       无框 · 顶部 3px 虚线 + 暖底 + 圆角（老师旁白）
+ *   summary     上下各 2px 实线夹住浅底
+ *   quiz        全框 + 圆角 + 每题前带序号圈
+ *   note        左侧 1px 细线 · 无底色 · 小一号
+ * ========================================================================== */
+
+.box {
+  position: relative;
+  margin: 0.48em 0 0.55em;
+  border-radius: var(--radius);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* 图标容器：**必须有全局尺寸**，不能只给某个块内部定尺寸。
+ * 实测踩过：`.ico` 若没有 width/height，里面 `width:100%` 的 svg 会撑满整行
+ * （viz.js 的图元标题、terminal 块头都带图标），一张图元因此变成一整页，
+ * 进而把分页挤出一大片空白。这条规则不要删。 */
+.ico {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.16em;
+  color: currentColor;
+}
+.ico .ico-svg { display: block; width: 100%; height: 100%; }
+
+.box > .box-h {
+  display: flex;
+  align-items: center;
+  gap: 0.42em;
+  margin: 0;
+  padding: 0.2em 0.65em 0.18em;
+  font-size: 0.86em;
+  line-height: 1.5;
+  font-weight: 700;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* 图标：跟随所在块的主色（灰度打印时随之变深变浅）；尺寸由上面的全局 .ico 负责 */
+.box-h .ico { color: currentColor; }
+.box-kind { flex: none; letter-spacing: 0.03em; }
+.box-h > .box-t::before { content: "·"; margin: 0 0.4em 0 0.08em; color: var(--ink-mute); font-weight: 400; }
+.box-t { font-weight: 700; color: var(--ink); }
+
+.box > .box-b { padding: 0.28em 0.68em 0.3em; }
+.box > .box-b > :first-child { margin-top: 0; }
+.box > .box-b > :last-child { margin-bottom: 0; }
+
+/* 块内的段距一律由**后一个元素**的 padding-top 承担：分页把块切开时 margin 会被丢掉、
+ * padding 不会（gaoshu-notes/build/theme.css:838 的实测）。本项目的块整体不打断，
+ * 所以这一条是冗余保险：真出现跨页时续页首行也不贴边。 */
+.box > .box-b > :not(h2, h3, h4) { margin-top: 0; margin-bottom: 0; }
+.box > .box-b > :not(h2, h3, h4) + :not(h2, h3, h4) { padding-top: 0.5em; }
+.box > .box-b > ul + :not(h2, h3, h4),
+.box > .box-b > ol + :not(h2, h3, h4) { padding-top: 0.6em; }
+.box > .box-b > table + :not(h2, h3, h4) { padding-top: 0.6em; }
+.box > .box-b > pre + :not(h2, h3, h4) { padding-top: 0.5em; }
+.box > .box-b > blockquote + :not(h2, h3, h4) { padding-top: 0.7em; }
+.box > .box-b li { margin-top: 0; margin-bottom: 0; }
+.box > .box-b li + li { padding-top: 0.16em; }
+.box > .box-b > ul, .box > .box-b > ol { padding-left: 1.4em; }
+/* 块内不许放大块（≥250px 的代码/输出/图元）——那会把整个块推成原子，页尾空出半页。
+ * 块内只放行内代码、短引用与列表（见风格规范《分页三律》）。 */
+.box > .box-b > .codeblock,
+.box > .box-b > .term { margin: 0.5em 0 0.1em; }
+
+/* --- 学习目标：无底色左条，顶部 2px 虚线 --- */
+.box-goal {
+  padding: 0.35em 0 0.1em;
+  border-top: 2px dotted var(--br-goal, #b9c8dc);
+  background: var(--bg-goal);
+  border-radius: 0;
+}
+.box-goal > .box-h { color: var(--c-goal); padding-left: 0.85em; }
+.box-goal > .box-b { padding-left: 0.85em; }
+.box-goal li + li { padding-top: 0.1em; }
+
+/* --- 语法规则：左侧 6px 实条 + 标题带 --- */
+.box-syntax { background: var(--bg-syntax); border-left: 6px solid var(--c-syntax); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-syntax > .box-h { background: var(--hd-syntax); color: var(--c-syntax); border-radius: 0 var(--radius) 0 0; }
+
+/* --- 陷阱：左侧 8px 最粗条 + 标题带（灰度下最粗的那条一定是陷阱）--- */
+.box-trap { background: var(--bg-trap); border-left: 8px solid var(--c-trap); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-trap > .box-h { background: var(--hd-trap); color: var(--c-trap); border-radius: 0 var(--radius) 0 0; font-weight: 800; }
+.box-trap > .box-b > p > strong:first-child { color: var(--c-trap); }
+
+/* --- 编译器视角：左侧 2px 双线 + 等宽标题（像编译器在说话）--- */
+.box-compiler { background: var(--bg-compiler); border-left: 2px double var(--c-compiler); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-compiler > .box-h {
+  background: var(--hd-compiler);
+  color: var(--c-compiler);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  letter-spacing: 0;
+  border-radius: 0 var(--radius) 0 0;
+}
+.box-compiler > .box-b { font-size: 0.96em; }
+
+/* --- 标准原文：四周细框 + 上下 2px 双线 + 内部引用感 --- */
+.box-standard { background: var(--bg-standard); border: 1px solid var(--rule-strong); border-top-width: 2px; border-bottom-width: 2px; border-radius: 0; }
+.box-standard > .box-h { background: var(--hd-standard); color: var(--c-standard); padding-left: 0.85em; }
+.box-standard > .box-b { padding: 0.5em 0.95em 0.55em; }
+.box-standard > .box-b > p { padding-left: 0.7em; border-left: 2px solid #e0cf9f; }
+.box-standard > .box-b > p:first-child { font-size: 0.97em; color: #4a3a10; }
+.box-standard .std-cite { display: block; font-size: 0.86em; color: var(--ink-mute); }
+
+/* --- 实验记录：左侧 6px 实条 + 外圈点线 + 块内数字染绿加粗（「真机实测数字」的样子）--- */
+.box-experiment {
+  background: var(--bg-experiment);
+  border: 1px dotted #8fc6ab;
+  border-left: 6px solid var(--c-experiment);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.box-experiment > .box-h { background: var(--hd-experiment); color: var(--c-experiment); border-radius: 0 var(--radius) 0 0; }
+.box-experiment .box-b strong { color: var(--c-experiment); font-weight: 800; font-variant-numeric: tabular-nums; }
+.box-experiment .box-b code { background: rgba(255, 255, 255, 0.8); }
+
+/* --- 工程惯例：全框圆角 + 标题带 + 标题前小方点 --- */
+.box-practice { background: var(--bg-practice); border: 1px solid #cfc2f0; border-radius: var(--radius-lg); }
+.box-practice > .box-h { background: var(--hd-practice); color: var(--c-practice); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.box-practice > .box-h::before { content: ""; flex: none; width: 0.42em; height: 0.42em; background: var(--c-practice); border-radius: 1px; }
+
+/* --- 调试实录：左侧 6px 实条 + 顶部 1px 线 + 块内等宽 --- */
+.box-debug { background: var(--bg-debug); border-left: 6px solid var(--c-debug); border-top: 1px solid #e2c49b; border-radius: 0 var(--radius) var(--radius) 0; }
+.box-debug > .box-h { background: var(--hd-debug); color: var(--c-debug); border-radius: 0 var(--radius) 0 0; }
+.box-debug > .box-b { font-family: var(--font-mono); font-size: 0.85em; line-height: 1.55; }
+.box-debug > .box-b p { font-family: var(--font-mono); }
+.box-debug code { background: rgba(255, 255, 255, 0.85); }
+
+/* --- 大白话：无框、顶部 3px 虚线、暖底、圆角（老师旁白）--- */
+.box-plain { background: var(--bg-plain); border-top: 3px dashed var(--c-plain); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.box-plain > .box-h { color: var(--c-plain); padding: 0.4em 0.85em 0.2em; }
+.box-plain > .box-b { padding: 0 0.9em 0.6em; font-size: 1.01em; }
+.box-plain > .box-b > p:first-child::first-letter { font-weight: 700; }
+
+/* --- 小结：上下 2px 实线夹住浅底 --- */
+.box-summary { background: var(--bg-summary); border-top: 2px solid var(--c-summary); border-bottom: 2px solid var(--c-summary); border-radius: 0; }
+.box-summary > .box-h { color: var(--c-summary); padding-left: 0.85em; }
+.box-summary > .box-b { padding: 0.1em 0.9em 0.6em; }
+.box-summary ul > li::before { background: var(--c-summary); }
+
+/* --- 自测题：全框圆角 + 每题序号圈 --- */
+.box-quiz { background: var(--bg-quiz); border: 1px solid #e7bccf; border-radius: var(--radius-lg); }
+.box-quiz > .box-h { background: var(--hd-quiz); color: var(--c-quiz); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.box-quiz > .box-b { padding: 0.45em 0.95em 0.6em; }
+.box-quiz ol { padding-left: 1.7em; }
+.box-quiz ol > li::marker { color: var(--c-quiz); font-weight: 700; }
+.box-quiz > .box-b > ol > li { padding-top: 0; }
+.box-quiz > .box-b > ol > li + li { padding-top: 0.28em; }
+
+/* --- 注：左侧 1px 细线、无底色、小一号（给答案、补充说明用）--- */
+.box-note { background: none; border-left: 1px solid var(--rule-strong); border-radius: 0; font-size: 0.95em; }
+.box-note > .box-h { color: var(--c-note); font-size: 0.84em; padding: 0.1em 0.8em 0.05em; }
+.box-note > .box-b { padding: 0 0.8em 0.15em; color: var(--ink-soft); }
+
+.box + .box { margin-top: 0.6em; }
+.box + h2, .box + h3 { margin-top: 1.2em; }
+
+/* ==========================================================================
+ * 5. 代码块：行号列 / 行标注 / 旁注 / 折行 / 空白可见 / 续块
+ *
+ * DOM 契约（render.js + shiki.js 产出，类名不要改，见 TOOLCHAIN 第 2.1 节）：
+ *   figure.codeblock > figcaption.cb-head(.cb-lang/.cb-file/.cb-lines/.cb-title)
+ *                    > div.cb-body > pre.code > span.cl[data-ln] > span.ln + span.code
+ *                    > ol.cb-notes > li > span.cb-note-ln
+ * ========================================================================== */
+
+.codeblock {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-left: 3px solid #b9c0ca;
+  border-radius: var(--radius);
+  background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.7em;
+  padding: 0.22em 0.75em;
+  background: var(--paper-soft);
+  border-bottom: 1px solid #cfd6de;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.76em;
+  color: #57606a;
+}
+
+.cb-lang {
+  flex: none;
+  padding: 0 0.4em;
+  border: 1px solid #c6ced8;
+  border-radius: 2px;
+  background: #fff;
+  color: #30363d;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cb-file { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: #30363d; }
+.cb-lines { flex: none; margin-left: auto; color: #6b7280; }
+/* 续块标题：拆分的第二块（含「（续）」）在块头里显式标出来 */
+.cb-title { flex: none; font-weight: 700; color: var(--accent); }
+
+.cb-body { padding: 0.32em 0; overflow: visible; }
+
+.codeblock .code {
+  margin: 0;
+  padding: 0 0.85em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  tab-size: var(--tab-size, 4);
+  /* 容器**不**保留空白：逐行 DOM 的 .cl 之间是换行符，pre-wrap 会把每个换行也渲染成一个空的
+   * line box，行距凭空翻倍（实测每行 25pt → 应为 12.2pt）。空白由行内 .code 自己保留。 */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 行号列：网格第一列；续行只出现在第二列内部，所以**续行不重复行号**。
+ * 行号栏右边一条细竖线：折行的续行对齐到代码列，一眼看得出哪几行是同一个逻辑行。 */
+.cl {
+  display: grid;
+  grid-template-columns: 2.8em 1fr;
+  column-gap: 0.55em;
+  border-left: 2px solid transparent;
+}
+.cl .ln {
+  color: #98a1ad;
+  text-align: right;
+  user-select: none;
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--rule-soft);
+  padding-right: 0.45em;
+}
+.cl .ln::before { content: attr(data-ln); }
+.cl .code {
+  white-space: pre-wrap;        /* 每一行**内部**的空白与缩进照原样保留 */
+  overflow-wrap: anywhere;      /* 长行折行，不出现横向滚动、不裁切（shot.py 的 overflow 检查） */
+  min-width: 0;
+}
+.cl.is-empty { min-height: calc(var(--lh-code) * 1em); }
+.cl.is-empty .ln { color: #c8cdd4; }
+
+/* 行标注：整行高亮 + 左侧色条 + 行尾旁注小签；行号同时出现在 mark= 与 notes= 里（校验器强制） */
+.cl.is-marked { background: var(--mark-bg); box-shadow: inset 3px 0 0 var(--mark-rule); }
+.cl.is-marked .ln { color: #8a6b12; font-weight: 700; }
+.k-note {
+  margin-left: 0.6em;
+  padding: 0 0.35em;
+  background: var(--note-bg);
+  border: 1px solid #e0c264;
+  border-radius: 3px;
+  font-family: var(--font-sans);
+  font-size: 0.86em;
+  color: #6b5200;
+  white-space: normal;
+}
+
+/* 块尾图例：把旁注再列一遍（读 PDF 时不用回头找） */
+.cb-notes {
+  margin: 0;
+  padding: 0.35em 0.9em 0.5em 1.1em;
+  border-top: 1px dashed var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  color: #57606a;
+  list-style: none;
+}
+.cb-notes li { margin: 0.1em 0; }
+.cb-note-ln {
+  display: inline-block;
+  min-width: 2.1em;
+  margin-right: 0.3em;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  text-align: right;
+}
+
+/* 空白可见化：ws=visible 时空格 = ·、Tab = →（只在讲空白问题时用） */
+.ws { color: #b0b7c0; }
+.ws-tab { color: #c2410c; font-weight: 700; }
+.code:not(.show-ws) .ws { display: none; }
+
+/* ==========================================================================
+ * 6. 终端块：真实输出 / 编译诊断 / 会话记录
+ *
+ * 三种终端块与源码块的区别必须一眼可见：
+ *   源码块 = 白底 + 灰块头 + 左侧细条（.codeblock）
+ *   终端输出 = **深底白字**（.term-output，打印出来是黑块，全页最深的一块）
+ *   编译诊断 = 浅红底 + 粗左条 + 红字（.term-diagnostic）
+ *   会话记录 = 浅灰底 + 等宽 + 「$」提示（.term-session，给 gdb / 命令输出用）
+ * ========================================================================== */
+
+.term {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-radius: var(--radius);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.term-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.6em;
+  padding: 0.28em 0.8em;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+}
+
+.term-kind { font-weight: 700; letter-spacing: 0.04em; }
+.term-title { color: inherit; opacity: 0.82; }
+.term-id { margin-left: auto; opacity: 0.68; font-size: 0.94em; }
+
+.term-body {
+  margin: 0;
+  padding: 0.35em 0.8em 0.4em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  white-space: normal;          /* 同上：空行/缩进由 .cl .code 自己保留 */
+  overflow-wrap: anywhere;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.term .cl { display: block; }
+.term .cl.is-text { padding-left: 0; }
+
+/* --- 真实运行输出：深底白字（PDF 里就是一块黑，最显眼） --- */
+.term-output { background: var(--term-bg); border-color: #0b0f14; }
+.term-output .term-head { background: var(--term-head); color: #c9d1d9; border-bottom: 1px solid #30363d; }
+.term-output .term-body { background: var(--term-bg); color: var(--term-ink); }
+.term-output .term-body .cl.is-text { color: var(--term-ink); }
+
+/* --- 编译诊断：浅红底 + 粗左条 + 红字 --- */
+.term-diagnostic { background: var(--diag-bg); border-color: #e0a0a0; border-left: 6px solid #b03a2e; border-radius: 0 var(--radius) var(--radius) 0; }
+.term-diagnostic .term-head { background: var(--diag-hd); color: #8b1a1a; border-bottom: 1px solid #e6b3b3; }
+.term-diagnostic .term-body { background: var(--diag-bg); color: var(--diag-ink); }
+
+/* --- 会话记录：浅灰底 + 等宽（gdb、命令行会话、流水线输出） --- */
+.term-session { background: #f3f5f8; border-color: #cdd5df; border-left: 3px solid #8b98a8; }
+.term-session .term-head { background: #e6eaf0; color: #3d4753; border-bottom: 1px solid #cdd5df; }
+.term-session .term-body { background: #f3f5f8; color: #23282f; }
+.term-session .term-body .cl.is-text { color: #23282f; }
+
+/* 「命令 + 输出」的区分：以 $ 开头的行是敲进去的命令 */
+.term-session .cl.is-cmd { color: #143a6e; font-weight: 700; }
+.term-diagnostic .cl.is-err { color: #8b1a1a; font-weight: 700; }
+
+/* ==========================================================================
+ * 7. 图元（一个图元，五处复用；屏幕动画 + 打印静态帧同一份数据源）
+ *    「五处复用」= 同一份围栏数据的五个消费点，定义见 docs/风格规范.md §5：
+ *      ① 单元单页 HTML  ② 合书 HTML  ③ 打印 PDF（.viz-print 逐帧静态图）
+ *      ④ 屏幕步进器（.viz-screen，零 JS）  ⑤ 挂载钩子（.viz-mount + template.html 的两个 mount 容器）
+ *
+ * 一份围栏内容 → 两个形态（由 build/viz.js 同时产出）：
+ *   屏幕版 .viz-screen：纯 CSS 步进器（radio + label 切帧，帧内节点错峰淡入），
+ *                       零外部依赖、零内联 JS；
+ *   打印版 .viz-print ：逐帧静态排开，每帧自带「第 N 步 · 标题」标题带，
+ *                       帧整体 break-inside: avoid，帧头 break-after: avoid（不断头）。
+ * 屏幕版在打印时 display: none，打印版在屏幕 display: none —— 两个形态永不重叠。
+ * ========================================================================== */
+
+.viz {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-radius: var(--radius);
+  background: var(--viz-bg);
+  break-inside: auto;      /* 容器本身可以跨页：帧才是原子单位（见下） */
+}
+
+.viz-title {
+  padding: 0.26em 0.8em;
+  background: var(--paper-soft);
+  border-bottom: 1px solid #cfd6de;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 0.9em;
+  font-weight: 700;
+  break-after: avoid;
+}
+
+.viz-title .viz-kind {
+  display: inline-block;
+  margin-right: 0.5em;
+  padding: 0 0.35em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.viz-hooks { display: none; }
+
+/* --- 共同部件：节点、边、步骤标题 --- */
+.vn-list { margin: 0; padding: 0.35em 0.75em 0.12em; font-family: var(--font-mono); font-size: var(--fs-code); line-height: 1.34; }
+.vn { display: flex; align-items: baseline; gap: 0.4em; }
+.vn .vn-tree { flex: none; color: #9aa4b1; white-space: pre; }
+.vn .vn-ico { flex: none; width: 1.05em; height: 1.05em; color: var(--ink-mute); align-self: center; }
+.vn .vn-ico .ico-svg { width: 100%; height: 100%; }
+.vn .vn-text { min-width: 0; overflow-wrap: anywhere; }
+.vn .vn-tag { flex: none; font-family: var(--font-sans); font-size: 0.8em; }
+.vn[data-new="lesson"] .vn-text { font-weight: 700; color: #146c3a; }
+.vn[data-new="lesson"] .vn-tag { color: #146c3a; }
+.vn[data-new="lesson"] .vn-tag::before { content: "← 本课新增"; }
+.vn[data-new="step"] .vn-text { font-weight: 700; color: var(--accent-deep); }
+.vn[data-new="step"] .vn-tag { color: var(--accent); }
+.vn[data-new="step"] .vn-tag::before { content: "← 本步新增"; }
+.vn[data-state="visited"] .vn-text { color: #0f6f4a; }
+.vn[data-state="active"] .vn-text { color: #8f2049; font-weight: 800; }
+.vn[data-state="pending"] .vn-text { color: var(--ink-mute); }
+
+.ve-list { margin: 0; padding: 0.1em 0.75em 0.35em; font-family: var(--font-mono); font-size: var(--fs-code); line-height: 1.34; }
+.ve { display: flex; align-items: baseline; gap: 0.42em; padding-left: calc(var(--depth, 0) * 1.15em); }
+.ve .ve-lbl { font-family: var(--font-sans); font-size: 0.88em; color: var(--ink-mute); }
+.ve .ve-arrow { color: var(--accent); font-weight: 700; }
+.ve[data-arrow="ret"] .ve-arrow { color: #a3520b; }
+.ve[data-arrow="both"] .ve-arrow { color: #5b3fa8; }
+
+.viz-step {
+  margin: 0;
+  padding: 0.24em 0.8em;
+  background: #eef1f6;
+  border-top: 1px solid #dfe4ec;
+  border-bottom: 1px solid #dfe4ec;
+  font-size: 0.82em;
+  font-weight: 700;
+  color: #3d4753;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.viz-step .viz-step-no {
+  display: inline-block;
+  min-width: 3.1em;
+  margin-right: 0.45em;
+  padding: 0 0.3em;
+  background: #fff;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  text-align: center;
+}
+
+/* --- 打印形态：逐帧静态排开 --- */
+.viz-print { padding-bottom: 0.1em; }
+.viz-print .viz-frame { break-inside: avoid; page-break-inside: avoid; }
+.viz-print .viz-frame + .viz-frame { margin-top: 0.1em; }
+.viz-print .viz-canvas { padding-bottom: 0.2em; }
+
+/* --- 屏幕形态：纯 CSS 步进器 --- */
+.viz-screen .vs-radio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.viz-screen .vs-bar { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.5rem 0.7rem; border-bottom: 1px dashed var(--rule); }
+.viz-screen .vs-tab {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.viz-screen .vs-tab:hover { border-color: var(--accent); color: var(--accent); }
+.viz-screen .vs-note { align-self: center; margin-left: auto; font-size: 0.76rem; color: var(--ink-mute); }
+.viz-screen .vs-frame { display: none; }
+.viz-screen .vn, .viz-screen .ve { animation: viz-node-in 0.26s ease-out both; }
+.viz-screen .vn:nth-child(1), .viz-screen .ve:nth-child(1) { animation-delay: 0ms; }
+.viz-screen .vn:nth-child(2), .viz-screen .ve:nth-child(2) { animation-delay: 40ms; }
+.viz-screen .vn:nth-child(3), .viz-screen .ve:nth-child(3) { animation-delay: 80ms; }
+.viz-screen .vn:nth-child(4), .viz-screen .ve:nth-child(4) { animation-delay: 120ms; }
+.viz-screen .vn:nth-child(5), .viz-screen .ve:nth-child(5) { animation-delay: 160ms; }
+.viz-screen .vn:nth-child(6), .viz-screen .ve:nth-child(6) { animation-delay: 200ms; }
+.viz-screen .vn:nth-child(n+7), .viz-screen .ve:nth-child(n+7) { animation-delay: 240ms; }
+
+@keyframes viz-node-in {
+  from { opacity: 0; transform: translateY(-0.28em); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 帧切换：第 N 个 radio 选中 → 显示第 N 帧、点亮第 N 个标签（纯 CSS，最多 12 帧） */
+.viz-screen .vs-radio:nth-of-type(1):checked ~ .vs-stage > .vs-frame[data-step="1"],
+.viz-screen .vs-radio:nth-of-type(2):checked ~ .vs-stage > .vs-frame[data-step="2"],
+.viz-screen .vs-radio:nth-of-type(3):checked ~ .vs-stage > .vs-frame[data-step="3"],
+.viz-screen .vs-radio:nth-of-type(4):checked ~ .vs-stage > .vs-frame[data-step="4"],
+.viz-screen .vs-radio:nth-of-type(5):checked ~ .vs-stage > .vs-frame[data-step="5"],
+.viz-screen .vs-radio:nth-of-type(6):checked ~ .vs-stage > .vs-frame[data-step="6"],
+.viz-screen .vs-radio:nth-of-type(7):checked ~ .vs-stage > .vs-frame[data-step="7"],
+.viz-screen .vs-radio:nth-of-type(8):checked ~ .vs-stage > .vs-frame[data-step="8"],
+.viz-screen .vs-radio:nth-of-type(9):checked ~ .vs-stage > .vs-frame[data-step="9"],
+.viz-screen .vs-radio:nth-of-type(10):checked ~ .vs-stage > .vs-frame[data-step="10"],
+.viz-screen .vs-radio:nth-of-type(11):checked ~ .vs-stage > .vs-frame[data-step="11"],
+.viz-screen .vs-radio:nth-of-type(12):checked ~ .vs-stage > .vs-frame[data-step="12"] { display: block; }
+
+.viz-screen .vs-radio:nth-of-type(1):checked ~ .vs-bar > .vs-tab[data-step="1"],
+.viz-screen .vs-radio:nth-of-type(2):checked ~ .vs-bar > .vs-tab[data-step="2"],
+.viz-screen .vs-radio:nth-of-type(3):checked ~ .vs-bar > .vs-tab[data-step="3"],
+.viz-screen .vs-radio:nth-of-type(4):checked ~ .vs-bar > .vs-tab[data-step="4"],
+.viz-screen .vs-radio:nth-of-type(5):checked ~ .vs-bar > .vs-tab[data-step="5"],
+.viz-screen .vs-radio:nth-of-type(6):checked ~ .vs-bar > .vs-tab[data-step="6"],
+.viz-screen .vs-radio:nth-of-type(7):checked ~ .vs-bar > .vs-tab[data-step="7"],
+.viz-screen .vs-radio:nth-of-type(8):checked ~ .vs-bar > .vs-tab[data-step="8"],
+.viz-screen .vs-radio:nth-of-type(9):checked ~ .vs-bar > .vs-tab[data-step="9"],
+.viz-screen .vs-radio:nth-of-type(10):checked ~ .vs-bar > .vs-tab[data-step="10"],
+.viz-screen .vs-radio:nth-of-type(11):checked ~ .vs-bar > .vs-tab[data-step="11"],
+.viz-screen .vs-radio:nth-of-type(12):checked ~ .vs-bar > .vs-tab[data-step="12"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.viz-screen .vs-stage { padding-bottom: 0.35em; }
+
+/* --- 五种用法的皮肤（同一份 DOM，只换外形） --- */
+
+/* 树：缩进 + 连接线（默认样式即树；缩进深度由 viz.js 写出 style="--depth:N"，
+ * CSS 的 attr() 不能用在自定义属性上，所以深度只能在生成期写死） */
+.viz[data-kind="tree"] .vn-list { padding-bottom: 0.35em; }
+
+/* 调用树：等宽 + 箭头的「进入/返回」用不同颜色 */
+.viz[data-kind="calltree"] .vn-list { counter-reset: none; }
+
+/* 内存：节点变成「盒子」，边变成指针箭头 */
+.viz[data-kind="memory"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.45em 0.7em; padding-bottom: 0.35em; }
+.viz[data-kind="memory"] .vn { padding-left: 0; }
+.viz[data-kind="memory"] .vn .vn-tree { display: none; }
+.viz[data-kind="memory"] .vn .vn-text {
+  padding: 0.15em 0.5em;
+  border: 1px solid #98a4b2;
+  border-top: 2px solid #6b7887;
+  border-radius: 3px;
+  background: #fff;
+  font-family: var(--font-mono);
+}
+.viz[data-kind="memory"] .vn[data-state="active"] .vn-text { border-color: #8f2049; background: #fdf1f6; }
+.viz[data-kind="memory"] .vn[data-state="visited"] .vn-text { border-color: #0f6f4a; background: #eef8f1; }
+.viz[data-kind="memory"] .ve { font-family: var(--font-mono); }
+
+/* 图：节点变成圆角药丸，边单独列出（BFS/DFS 的每一步只改标记，不改结构） */
+.viz[data-kind="graph"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.4em 0.55em; }
+.viz[data-kind="graph"] .vn { padding-left: 0; }
+.viz[data-kind="graph"] .vn .vn-tree { display: none; }
+.viz[data-kind="graph"] .vn .vn-text {
+  padding: 0.1em 0.6em;
+  border: 1px solid #8b98a8;
+  border-radius: 999px;
+  background: #fff;
+}
+.viz[data-kind="graph"] .vn[data-state="active"] .vn-text { border-color: #8f2049; background: #fdf1f6; color: #8f2049; font-weight: 800; }
+.viz[data-kind="graph"] .vn[data-state="visited"] .vn-text { border-color: #0f6f4a; background: #eef8f1; color: #0f6f4a; }
+.viz[data-kind="graph"] .vn[data-state="pending"] .vn-text { border-style: dashed; }
+
+/* 可见性：节点变成「卡片」（编译单元 / 头文件 / 库），边带标签 */
+.viz[data-kind="visibility"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.5em 0.7em; align-items: flex-start; }
+.viz[data-kind="visibility"] .vn { padding-left: 0; }
+.viz[data-kind="visibility"] .vn .vn-tree { display: none; }
+.viz[data-kind="visibility"] .vn .vn-text {
+  display: inline-block;
+  padding: 0.28em 0.6em;
+  border: 1px solid #9aa6b4;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 0 #dde2e9;
+  font-size: 0.96em;
+}
+.viz[data-kind="visibility"] .vn[data-state="active"] .vn-text { border-color: #1b4b8f; background: #eef4fd; }
+.viz[data-kind="visibility"] .ve .ve-lbl { color: #30363d; }
+
+/* 打印时两个形态的取舍：只留静态帧 */
+@media print {
+  .viz-screen { display: none !important; }
+}
+@media screen {
+  .viz-print { display: none; }
+}
+
+/* 减少动效：屏幕步进器不再逐节点淡入（帧切换仍然可用） */
+@media (prefers-reduced-motion: reduce) {
+  .viz-screen .vn, .viz-screen .ve { animation: none; }
+}
+
+/* ==========================================================================
+ * 8. 打印：A4、页码、命名页页眉、分页控制
+ *
+ * 页眉页脚写法（本机实测有效，见 build/TOOLCHAIN.md 第 6 节）：
+ *   - counter(page) / counter(pages) 在 @page 外边距框里正常输出；
+ *   - string-set + content: string(...) **取不到值**，页眉只能用「命名页 + 字面量」；
+ *   - 命名页写法：@page p-<名字> { @top-right { content: "字面量标题"; } }
+ *                 #id / .class { page: p-<名字>; }
+ *     本项目由 render.js 在构建期注入：
+ *       单元页  → @page p-u-<slug> { … } + body.type-unit .content { page: p-u-<slug>; }
+ *       合书    → @page p-<book>-<chapter> { … } + #ch-<book>-<chapter> { page: …; }
+ *   - 封面页固定用 p-cover（无页眉、无页码），章封面页用 render.js 注入的
+ *     p-<book>-<chapter>-head（只清 @top-right，页码照常）。这两处都**不依赖**
+ *     @page :first 的优先级 —— 本机实测（.scratch/probe/）：
+ *       ① @page :first 对命名页不生效（第 1 页走 p-cover 时 :first 里的内容不出现）；
+ *       ② @page <名字>:first 只匹配文档第 1 页，章首页照样出页眉；
+ *       ③ 命名页 + 字面量字符串有效；页名一变就断页，章从新页开始是白拿的。
+ * ========================================================================== */
+
+@page {
+  size: A4;
+  /* 三个值不许改：splitcheck.py 用它们算版心底边与页首采样点 */
+  margin: 19mm 17mm 20mm 17mm;
+  @bottom-center { content: "第 " counter(page) " 页 / 共 " counter(pages) " 页"; }
+}
+
+/* 封面页 / 章首页：不印页眉也不印页码（本契约里的 p-cover 命名页） */
+@page p-cover {
+  @top-right { content: ""; }
+  @bottom-center { content: ""; }
+}
+
+@media print {
+  /* 打印时一切动画与交互元素关掉：屏幕版步进器、站内导航、跳转链接、单元导航都不进纸面 */
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .sitenav,
+  .unit-nav,
+  .doc-foot,
+  .skip-link,
+  .viz-screen,
+  .viz-hooks { display: none !important; }
+
+  body { background: #fff; color: var(--ink); }
+
+  .doc { max-width: none; margin: 0; padding: 0; }
+
+  /* 封面块（标题 + 说明 + 目录）占第 1 页，正文从第 2 页起（命名页切换自动断页） */
+  .doc-head { break-after: auto; }
+  .doc-head, .toc { page: p-cover; }
+  .toc { break-inside: avoid; }
+  .content { break-before: auto; }
+
+  /* 整书：章封面页与正文页用不同的命名页（render.js 注入），页名一变就断页；
+   * 「章首页不重复页眉」由章封面页的命名页（只清 @top-right）负责，
+   * 不能用 @page :first / @page <名>:first —— 本机实测两者都管不到文档中段的章首页。 */
+  body.type-book .chapter-head { break-before: auto; }
+  body.type-book .chapter:first-of-type .chapter-head { break-before: auto; }
+
+  h1, h2, h3, h4, .unit-title, .chapter-title { break-after: avoid; page-break-after: avoid; }
+
+  /* ---- 分页三律的 CSS 一半：块是原子，块头不许与块体分家 ----
+   * 高度那一半在写作阶段（高度预算，见第 0 节令牌与风格规范《分页三律》）。
+   * 为什么块整体 avoid 而不是让它切开：块被分片后，续页顶端直接是块体底色，
+   * 页首第一行没有标题带 —— 这正是本项目验收线盯的「页首无标题续块」。
+   */
+  .box,
+  .term,
+  .viz-print .viz-frame,
+  .cb-notes { break-inside: avoid; page-break-inside: avoid; }
+
+  /* note 块白底、无块体底色：允许跨页不会在续页伪造「无标题块」，
+   * 自测答案这类长注释也就不必整块后移。 */
+  .box-note { break-inside: auto; page-break-inside: auto; }
+
+  /* 代码块按整行续排：白底不带语义块底色，续页不会伪装成「无标题块」；
+   * 每行 .cl 仍不拆，行号连续，读者能看出这是同一份清单的后半。 */
+  .codeblock { break-inside: auto; page-break-inside: auto; }
+  .codeblock .cl { break-inside: avoid; page-break-inside: avoid; }
+  .codeblock .cb-body { orphans: 2; widows: 2; }
+  .codeblock .cb-body > .cl:first-child,
+  .codeblock .cl.is-marked,
+  .codeblock .cl:has(+ .cl.is-marked) { break-before: avoid; page-break-before: avoid; }
+  .codeblock .cl.is-marked { break-after: avoid; page-break-after: avoid; }
+  .codeblock .cb-notes { break-before: avoid; page-break-before: avoid; }
+
+  .box > .box-h,
+  .cb-head,
+  .term-head,
+  .viz-title,
+  .viz-step { break-after: avoid; page-break-after: avoid; }
+
+  /* 段内换行允许（正文是页面填充的缓冲带：大块前面有一段能断开的正文字时，
+   * 换页点会落在正文里，页尾空白被压到一行以内 —— 见风格规范《分页三律》第 2 条） */
+  p, li { orphans: 2; widows: 2; }
+  p, li { text-wrap: pretty; }
+
+  /* C++ 试点单元：答案块不拆（只匹配这一份单元，不影响 C 分册）。
+   * 不强制自测题另起一页：题目可以留在上一页，答案整块跟着走，避免为了一道题留大半页空白。
+   * id 由 render.js 从单元路径生成：cpp-chapters-ch02-02-copy-and-move-md-h10。 */
+  #cpp-chapters-ch02-02-copy-and-move-md-h10 ~ .box-note { break-inside: avoid; page-break-inside: avoid; }
+
+  /* 表格允许跨页、表头每页重复、行不拆 */
+  table { break-inside: auto; }
+  tr { break-inside: avoid; }
+
+  /* 链接在纸上不要蓝色下划线（读者没法点） */
+  a { color: var(--ink); border-bottom: 0; }
+  .toc a { border-bottom: 0; }
+}
+
+/* ==========================================================================
+ * 9. 屏幕适配与无障碍
+ * ========================================================================== */
+
+@media screen and (max-width: 46rem) {
+  body { font-size: 16px; }
+  .doc { padding-left: 0.95rem; padding-right: 0.95rem; }
+  .doc-title { font-size: 1.46em; }
+  .sitenav { gap: 0.3rem 0.75rem; font-size: 0.78rem; }
+  .box > .box-b { padding-left: 0.7em; padding-right: 0.7em; }
+  .cb-head { font-size: 0.74em; }
+}
+
+@media screen and (min-width: 75rem) {
+  .doc { max-width: 44em; }
+}
+
+/* 屏幕深色偏好：只调纸色，语义块仍是浅底（保证与 PDF 观感一致） */
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e9ecf1;
+    --ink-soft: #c7cdd7;
+    --ink-mute: #9aa3b2;
+    --rule: #3a4150;
+    --rule-soft: #2f3540;
+    --rule-strong: #4d566a;
+    --paper: #14161a;
+    --paper-soft: #1b1f26;
+    --paper-tint: #1f242c;
+  }
+  body { background: var(--paper); }
+  .sitenav { background: rgba(20, 22, 26, 0.95); }
+  strong { color: #fff; }
+  code, kbd { background: #1e232b; border-color: #2c333d; }
+}
+
+/* 「跳到正文」：键盘用户第一个聚焦点，平时移出视口、聚焦时出现 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  padding: 0.5em 0.9em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0 0 var(--radius) 0;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.skip-link:focus { left: 0; outline: 3px solid var(--accent-deep); }
+
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible + label,
+[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 屏幕阅读器专用文字（图元的步骤说明会用它补一句「第 N 步」） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(1px, 1px, 1px, 1px);
+  white-space: nowrap;
+}

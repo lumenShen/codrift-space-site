@@ -1043,7 +1043,7 @@
 </div>
 </section>
 <h2 id="c-chapters-ch05-01-structs-and-alignment-md-h12">11.12 结构体进接口：五条纪律</h2>
-<p>结构体的定义一旦写进头文件，它就变成了<strong>接口</strong>的一部分。下面五条每一条都配了例子与证据，也都会说清代价。</p>
+<p>结构体的定义一旦写进头文件，它就变成了<strong>接口</strong>的一部分。下面五条都会给证据与代价；其中 ②③④⑤ 各配了一个能跑的例子（① 的证据是标准原文与本书全部例子的写法）。</p>
 <p><strong>① <code>typedef</code> 是惯例，不是必须。</strong> 你可以写 <code>typedef struct Point Point;</code>，之后就能写 <code>Point a;</code> 而不必写 <code>struct Point a;</code>。它为什么合法？因为 <code>struct</code> 的标签与普通标识符分属<strong>两个命名空间</strong>：</p>
 <section class="box box-standard" data-box-type="standard"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-openBook" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 4.2C7 3.3 5.6 3 4 3v9.2c1.6 0 3 .3 4 1.2 1-.9 2.4-1.2 4-1.2V3c-1.6 0-3 .3-4 1.2z"/><path d="M8 4.2v9.2"/></svg></span><span class="box-kind">标准原文</span><span class="box-t">标准原文：标签与普通标识符是两个命名空间</span></header>
 <div class="box-b">

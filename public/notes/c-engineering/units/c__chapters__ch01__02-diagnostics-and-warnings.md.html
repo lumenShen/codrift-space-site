@@ -425,6 +425,7 @@
 <p><strong>你会看到什么</strong>：在某些终端里，同一份代码、同一条命令，只得到一行 <code>collect2.exe: error: ld returned 5 exit status</code>——没有 <code>undefined reference</code>、没有文件名，连个列号都没有。</p>
 <p><strong>你会怎么误判</strong>：以为「本机的链接错误就这么短、这么没用」，于是放弃从诊断里找线索，直接开始瞎改代码。</p>
 <p><strong>真相是</strong>：那<strong>不是链接器想说的话，是它的话被环境吞了</strong>。我在同一台机器上实测过两种环境：默认 PATH 下只剩一行、<code>ld returned 5</code>；把 PATH 清成只剩 MSYS2 的几个目录（<code>/c/msys64/ucrt64/bin:/c/msys64/usr/bin:/c/Windows/System32</code>）再跑，就变成上面那三行、<code>ld returned 1</code>。同一个 gcc、同一个 <code>ld.exe</code>——连单独跑一句 <code>ld --version</code>，默认 PATH 下也会丢掉第一行（4 行 vs 5 行）。差别只在环境变量；具体是哪个 DLL 在捣乱我没有继续追，但<strong>现象是可复现的</strong>。</p>
+<p><strong>正文的三行诊断怎么保证每次都一样？</strong> 这个例子的清单里有一个 <code>env</code> 字段，把编译时的 PATH 钉成了上面那组干净值。环境变量和 <code>-save-temps</code> 一样，都是实验条件的一部分——不钉住，诊断就会随终端变样。</p>
 <p><strong>怎么办</strong>：看到只有 collect2 那一行时，换一个干净终端再编一次，别把「诊断短」当成「没有线索」。</p>
 </div>
 </section>
