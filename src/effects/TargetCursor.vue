@@ -27,8 +27,9 @@
  *    media query 变化实时启停；
  *  - 触屏 + 窄屏 或移动端 UA（上游 isMobile 判定）→ 不渲染、不监听；
  *  - 上游 Tailwind 任意值类（z-[9999]/border-[3px]/-translate-x-[150%] 等）改写 scoped
- *    CSS：角括号静息偏移用独立 transform 属性 translate（与上游 Tailwind v4 的
- *    translate 工具类同机制），飞行偏移写 inline transform —— 两者按规范叠加。
+ *    CSS：角括号静息偏移必须写在 transform 上（而非独立 translate 属性），飞行偏移
+ *    同写 inline transform —— 同属性才能覆盖；若用 translate 属性会与 inline
+ *    transform 叠加，hover 时角括号整体外扩错位。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -440,8 +441,8 @@ watch(
 }
 
 /* 上游：border-[3px] border-white w-3 h-3 + 各角缺两条边 + translate 类定位。
-   静息偏移走独立 transform 属性 translate（--rest-*），飞行偏移由脚本写 inline
-   transform，两者按规范叠加 —— 与上游 Tailwind v4 + gsap 的组合机制一致。 */
+   静息偏移必须用 transform（--rest-*）：飞行偏移由脚本写 inline transform，
+   同属性才能覆盖；用独立 translate 属性会与 inline transform 叠加（错位 + 回位跳变）。 */
 .tcursor__corner {
   position: absolute;
   top: 0;
@@ -449,7 +450,7 @@ watch(
   width: 12px;
   height: 12px;
   border: 3px solid var(--tcursor-color, var(--fg-0));
-  translate: var(--rest-x) var(--rest-y);
+  transform: translate3d(var(--rest-x), var(--rest-y), 0);
   will-change: transform;
 }
 
