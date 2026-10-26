@@ -16,4 +16,10 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# 本地构建 / 自测产物
+src/content-system/.selftest-out/
+
+# 本地设计对照稿（不发布，也不入库）
+preview/
+
 # NOTE: package-lock.json 故意不忽略——CI 必须用锁定的依赖版本（npm ci）。
