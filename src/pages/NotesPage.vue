@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { RouterLink } from 'vue-router';
+import { computed } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import NoteCover from '@/components/notes/NoteCover.vue';
 import NotesReader from '@/components/NotesReader.vue';
 import {
@@ -11,15 +11,40 @@ import {
   type NoteCollection,
 } from '@/data/notes';
 
+const route = useRoute();
+const router = useRouter();
+
 const gaoshu = notesCollections.find((item) => item.id === 'gaoshu')!;
 
-const activeCollectionId = ref(gaoshu.id);
-const readerOpen = ref(false);
-const initialIndex = ref(0);
-const initialAnchor = ref('');
+/* ---- 路由是阅读器状态的唯一真相 ----
+ *   /notes                            门户（阅读器关闭）
+ *   /notes/:collectionId              打开该笔记第一章
+ *   /notes/:collectionId/:chapterId   打开指定单元
+ *   ?section=<anchor>                 深链到单元内的锚点
+ *
+ * 这样从站外分享一个具体单元时，链接可以直接落进阅读器；章节切换用 replace
+ * 更新地址栏，分享按钮复制到的就是当前位置。 */
+const routeCollection = computed<NoteCollection | null>(() => {
+  const id = typeof route.params.collectionId === 'string' ? route.params.collectionId : '';
+  if (!id) return null;
+  return notesCollections.find((item) => item.id === id) ?? null;
+});
 
-const activeCollection = computed(
-  () => notesCollections.find((item) => item.id === activeCollectionId.value) ?? null,
+const readerOpen = computed(() => route.name === 'notes-reader' && routeCollection.value !== null);
+
+const activeCollection = computed<NoteCollection | null>(() => routeCollection.value);
+
+const initialIndex = computed(() => {
+  const collection = routeCollection.value;
+  if (!collection) return 0;
+  const chapterId = typeof route.params.chapterId === 'string' ? route.params.chapterId : '';
+  if (!chapterId) return 0;
+  const index = collection.chapters.findIndex((chapter) => chapter.id === chapterId);
+  return index >= 0 ? index : 0;
+});
+
+const initialAnchor = computed(() =>
+  typeof route.query.section === 'string' ? route.query.section : '',
 );
 
 const gaoshuReview = notesCollections.find((item) => item.id === 'gaoshu-review')!;
@@ -109,20 +134,55 @@ function chapterPreview(collection: NoteCollection): string {
 }
 
 function openReader(collection: NoteCollection, index = 0, anchor = ''): void {
-  activeCollectionId.value = collection.id;
-  initialIndex.value = index;
-  initialAnchor.value = anchor;
-  readerOpen.value = true;
+  const chapter = collection.chapters[index] ?? collection.chapters[0];
+  if (!chapter) return;
+  void router.push({
+    name: 'notes-reader',
+    params: { collectionId: collection.id, chapterId: chapter.id },
+    query: anchor ? { section: anchor } : undefined,
+  });
 }
 
 function selectCollection(id: string): void {
-  activeCollectionId.value = id;
-  initialIndex.value = 0;
-  initialAnchor.value = '';
+  const collection = notesCollections.find((item) => item.id === id);
+  const chapter = collection?.chapters[0];
+  if (!collection || !chapter) return;
+  void router.push({
+    name: 'notes-reader',
+    params: { collectionId: collection.id, chapterId: chapter.id },
+  });
+}
+
+/** 阅读器内部换章：同步地址栏但不新塞一条历史记录 */
+function onReaderNavigate(payload: {
+  collectionId: string;
+  index: number;
+  anchor: string;
+}): void {
+  const collection = notesCollections.find((item) => item.id === payload.collectionId);
+  const chapter = collection?.chapters[payload.index];
+  if (!collection || !chapter) return;
+  const section = payload.anchor || '';
+  if (
+    route.name === 'notes-reader' &&
+    route.params.collectionId === collection.id &&
+    route.params.chapterId === chapter.id &&
+    String(route.query.section ?? '') === section
+  ) {
+    return;
+  }
+  void router.replace({
+    name: 'notes-reader',
+    params: { collectionId: collection.id, chapterId: chapter.id },
+    query: section ? { section } : undefined,
+  });
 }
 
 function closeReader(): void {
-  readerOpen.value = false;
+  if (route.name !== 'notes-reader') return;
+  // 用 replace 而不是 push：深链从站外进来时，关掉阅读器后按浏览器后退
+  // 不应该又弹回同一个阅读器；地址落到门户即可。
+  void router.replace({ name: 'notes' });
 }
 
 function scrollToLibrary(): void {
@@ -423,10 +483,11 @@ function scrollToLibrary(): void {
       :open="readerOpen"
       :collection="activeCollection"
       :collections="notesCollections"
-      :initial-index="initialIndex"
-      :initial-anchor="initialAnchor"
+      :index="initialIndex"
+      :anchor="initialAnchor"
       @close="closeReader"
       @select-collection="selectCollection"
+      @navigate="onReaderNavigate"
     />
   </main>
 </template>

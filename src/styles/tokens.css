@@ -44,15 +44,6 @@
   --accent-2-text: #ff9a4d; /* 橙的文字安全档（暗色下即 --accent-2） */
   --accent-2-dim: rgba(255, 154, 77, 0.16);
 
-  /* ---- 瑞士板块（首页 hero 之下的板块区）----
-     板块区采用瑞士字体海报语言：一个强调色 + 一块反白。
-     强调色取暖红（比点题橙更硬），反白块随主题翻转。
-     hero 不消费这些令牌。 */
-  --swiss-accent: #ff4a1d; /* 图形/边线/大字强调 */
-  --swiss-accent-text: #ff6a45; /* 强调色的文字档（暗底 ≥6:1） */
-  --swiss-inv-bg: #f3f0e9; /* 反白块底（旗舰作品行） */
-  --swiss-inv-fg: #0a0a09; /* 反白块字 */
-
   /* ---- 实底色上的文字色 ---- */
   --on-accent: #071022; /* 实底主色（#4f8cff）上的深字 */
   --on-accent-strong: #071022; /* 实底主色 hover 强化态（#8ab4ff）上的深字 */
@@ -207,12 +198,6 @@ html[data-theme='light'] {
   --accent-2: #ff9a4d;
   --accent-2-text: #b35310; /* 橙的文字档（4.70:1，全尺寸 AA） */
   --accent-2-dim: rgba(255, 154, 77, 0.14);
-
-  /* ---- 瑞士板块：亮色下强调色压深，反白块翻成深底浅字 ---- */
-  --swiss-accent: #d9360f;
-  --swiss-accent-text: #b8300c; /* 亮底 6.4:1 */
-  --swiss-inv-bg: #0b1220;
-  --swiss-inv-fg: #f3f0e9;
 
   /* ---- 实底色上的文字色 ---- */
   --on-accent: #071022; /* #4f8cff 上 5.90:1（两主题同值） */

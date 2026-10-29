@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /*
- * SwissSections —— 首页 hero 之下的板块区（瑞士字体海报版式）。
+ * SwissSections —— 首页 hero 之下的板块区。
  *
+ * 沿用 12 栏栅格与两位编号，视觉语言与 hero 对齐：display 大字、极光柔光、
+ * 玻璃卡、胶囊控件，不再使用粗规线与反白海报块。
  * hero 不在本组件内、也不消费本组件的任何样式；这里只接管 `.sections` 原本要渲染的内容。
  * 内容仍来自内容系统（about/contact/skills/now）与页面数据（repos/latestPosts）。
  */

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=../#/notes" />
+    <title>知识笔记库 · Codrift</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        margin: 0;
+        background: #070c18;
+        color: #a8b8d8;
+        font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-size: 14px;
+      }
+      main {
+        text-align: center;
+      }
+      p {
+        margin: 6px 0;
+      }
+      a {
+        color: #8ab4ff;
+      }
+    </style>
+    <script>
+      /* /notes/ 是静态笔记目录（public/notes）的入口，本身没有 index。
+         站外直接访问 https://codrift.space/notes/ 时，把读者送到 SPA 的笔记门户。 */
+      location.replace('../#/notes');
+    </script>
+  </head>
+  <body>
+    <main>
+      <p>正在打开 Codrift 知识笔记库…</p>
+      <p><a href="../#/notes">如果没有自动跳转，点这里</a></p>
+    </main>
+  </body>
+</html>

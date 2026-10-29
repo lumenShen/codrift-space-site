@@ -133,7 +133,8 @@ V2 引入亮色主题是方向契约层面的变更（勘察 risks 第 7 条）�
 | --- | --- |
 | 首页 | `route.name === 'home'` |
 | 博客 | `route.name === 'blog-list' \|\| route.name === 'blog-post'`（等价于 hash path 前缀 `#/blog`） |
-| 笔记 | `route.name === 'notes'`（独立专区，**不**并入博客项） |
+| 笔记 | `route.name === 'notes' \|\| route.name === 'notes-reader' \|\| route.name === 'notes-covers'`（独立专区，**不**并入博客项） |
+| 实验室 | `route.name === 'lab'` |
 
 ### 1.3 状态
 
@@ -227,9 +228,9 @@ V2 引入亮色主题是方向契约层面的变更（勘察 risks 第 7 条）�
 
 **个人区**：高 60px 块，无边框。左：40px 圆角（--radius-md）mark 片（底 `--accent-dim`，drift 双弧 SVG 居中）；右两行：`lumenShen`（0.95rem/700 `--fg-0`）、`codrift.space`（0.78rem mono `--fg-2`）。块底 margin 12px + 1px `--line` 分隔线。
 
-**关键链接区**（Kimi「菜单项」位）：5 项（首页/博客/**笔记**/GitHub/联系我），每项高 40px、padding 0 12px、radius `--radius-md`(12px)、icon 18px + 文字 0.9rem，间距 12px：
+**关键链接区**（Kimi「菜单项」位）：6 项（首页/博客/**笔记**/组件实验室/GitHub/联系我），每项高 40px、padding 0 12px、radius `--radius-md`(12px)、icon 18px + 文字 0.9rem，间距 12px：
 - 默认：icon+字 `--fg-1`、透明底；hover：底 `--tab-hover` 字 `--fg-0`（`var(--dur-fast)`）；
-- 当前路由项：按 §1.2 末段的判定表（`route.name` computed，**不得**用 router-link-active；笔记是独立项 `route.name === 'notes'`）→ 底 `--accent-dim`、icon+字 `--accent-strong`；无竖条无粗边；
+- 当前路由项：按 §1.2 末段的判定表（`route.name` computed，**不得**用 router-link-active；笔记是独立项 `notes / notes-reader / notes-covers`，实验室是 `lab`）→ 底 `--accent-dim`、icon+字 `--accent-strong`；无竖条无粗边；
 - GitHub=外链（`target=_blank`，icon 用官方 mark）；联系我=mailto。
 
 **博客时间目录**（Kimi「分组列表」位）：

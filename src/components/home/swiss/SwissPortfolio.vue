@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /*
- * SwissPortfolio —— 作品集的瑞士版式：七行索引表。
- * 旗舰（Rein）整行反白，其余行用编号 / 名称 / 描述 / 元数据四栏。
+ * SwissPortfolio —— 作品集：旗舰玻璃媒体面板 + 索引卡列表。
+ * 旗舰（Rein）用极光玻璃卡放大呈现，其余项目用编号 / 名称 / 描述 / 元数据四栏。
  * 数据仍来自 HomePage 的 repos（不复制、不改写）。
  */
 import { computed } from 'vue';

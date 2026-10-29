@@ -46,7 +46,13 @@ const isHomeActive = computed(() => route.name === 'home');
 const isBlogActive = computed(
   () => route.name === 'blog-list' || route.name === 'blog-post',
 );
-const isNotesActive = computed(() => route.name === 'notes');
+const isNotesActive = computed(
+  () =>
+    route.name === 'notes' ||
+    route.name === 'notes-reader' ||
+    route.name === 'notes-covers',
+);
+const isLabActive = computed(() => route.name === 'lab');
 
 /* ---- 滚动两态（阈值 24px，与 FloatingActions 同法：passive scroll） ---- */
 const scrolled = ref(false);
@@ -168,6 +174,7 @@ defineExpose({ focusMenuButton });
         <RouterLink to="/" class="tab" :class="{ 'is-active': isHomeActive }">首页</RouterLink>
         <RouterLink to="/blog" class="tab" :class="{ 'is-active': isBlogActive }">博客</RouterLink>
         <RouterLink to="/notes" class="tab" :class="{ 'is-active': isNotesActive }">笔记</RouterLink>
+        <RouterLink to="/lab" class="tab" :class="{ 'is-active': isLabActive }">实验室</RouterLink>
       </nav>
 
       <div class="header-spacer" aria-hidden="true"></div>
@@ -371,6 +378,13 @@ defineExpose({ focusMenuButton });
 }
 
 /* ---- <640px（§1.6）：只留 菜单钮 / 品牌胶囊 / 主题钮，轴高 36px ---- */
+@media (max-width: 900px) {
+  /* 第四个 tab 占位后，640–900px 把 GitHub 圆钮收进 rail，避免页头挤爆 */
+  .gh-btn {
+    display: none;
+  }
+}
+
 @media (max-width: 639px) {
   .header-row,
   .brand-chip {

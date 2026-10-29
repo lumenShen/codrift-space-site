@@ -35,18 +35,26 @@ const panel = ref<HTMLElement | null>(null);
 
 /* ---- 关键链接区（§2.1）：激活判定与页头 tab 同一张表（§1.2 末段）， ----
    ---- 不用 router-link-active（/blog 与 /blog/:slug 是兄弟路由记录，命中不了） ---- */
-type LinkKey = 'home' | 'blog' | 'notes';
+type LinkKey = 'home' | 'blog' | 'notes' | 'lab';
 
 const navLinks: Array<{ key: LinkKey; label: string; to: string }> = [
   { key: 'home', label: '首页', to: '/' },
   { key: 'blog', label: '博客', to: '/blog' },
   { key: 'notes', label: '笔记', to: '/notes' },
+  { key: 'lab', label: '组件实验室', to: '/lab' },
 ];
 
 function isLinkActive(key: LinkKey): boolean {
   if (key === 'home') return route.name === 'home';
   if (key === 'blog') return route.name === 'blog-list' || route.name === 'blog-post';
-  return route.name === 'notes';
+  if (key === 'notes') {
+    return (
+      route.name === 'notes' ||
+      route.name === 'notes-reader' ||
+      route.name === 'notes-covers'
+    );
+  }
+  return route.name === 'lab';
 }
 
 /* ---- 博客时间目录（§2.1）：tag 'post' 条目按 date 降序、按年分组； ----
@@ -283,7 +291,7 @@ function closeOverlay(): void {
             <path d="M15 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
             <path d="M9 13h6M9 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
-          <svg v-else viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <svg v-else-if="link.key === 'notes'" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
             <path
               d="M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9z"
               fill="none"
@@ -292,6 +300,17 @@ function closeOverlay(): void {
               stroke-linejoin="round"
             />
             <path d="M15 3v6h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path
+              d="M9.5 3h5M10.5 3v6.2l-5.1 9.1A1.8 1.8 0 0 0 7 21h10a1.8 1.8 0 0 0 1.6-2.7l-5.1-9.1V3"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <path d="M7.8 15h8.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
           <span>{{ link.label }}</span>
         </RouterLink>

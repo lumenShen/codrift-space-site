@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /*
- * SwissPosts —— 博客速览的瑞士版式：阶梯式三条，标题做大字。
+ * SwissPosts —— 博客速览：三张等宽玻璃卡，标题做大字。
  * 数据取自内容系统最新三篇（entry.date / tags / summary / title）。
  */
 import { RouterLink } from 'vue-router';
@@ -37,6 +37,7 @@ function tagText(entry: ContentEntry): string {
             <RouterLink class="sw-post__a" :to="`/blog/${p.slug}`">{{ p.title }}</RouterLink>
           </h3>
           <p v-if="p.summary" class="sw-post__quote">「{{ p.summary }}」</p>
+          <span class="sw-post__arrow" aria-hidden="true">→</span>
         </div>
       </article>
     </div>

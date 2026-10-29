@@ -45,6 +45,8 @@
         <nav class="foot-col" aria-label="页脚站内导航">
           <RouterLink class="foot-link" to="/" data-cursor="target">首页</RouterLink>
           <RouterLink class="foot-link" to="/blog" data-cursor="target">博客</RouterLink>
+          <RouterLink class="foot-link" to="/notes" data-cursor="target">笔记</RouterLink>
+          <RouterLink class="foot-link" to="/lab" data-cursor="target">实验室</RouterLink>
         </nav>
 
         <div class="foot-col">

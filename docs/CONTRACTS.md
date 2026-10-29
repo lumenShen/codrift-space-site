@@ -44,6 +44,7 @@
 | `/blog/:slug` | `blog-post` | `src/pages/BlogPostPage.vue` | 文章页（`:slug` = 内容条目 slug，消费 §2 渲染入口） |
 
 - 路由表定义在 `src/router/index.ts`，**页面模块独占** `src/router/**`（可加路由，但上表 3 条的 path/name/文件不得变）。
+- 既有追加路由：`/notes`（`notes`，笔记门户）、`/notes/covers`（`notes-covers`，封面版式对照）、`/notes/:collectionId/:chapterId?`（`notes-reader`，笔记深链阅读器，`?section=` 到单元内锚点）、`/lab`（`lab`，前端组件实验室）。后两者不改上表 3 条的 path/name/文件。
 - 当前三个页面为**占位组件**，页面工程师直接重写其内容，不改文件名。
 - `src/App.vue` 为页面模块所有：保留 `<router-view />` 与 4 个动效层挂载注释（背景层/光标层/悬浮页头/悬浮按钮），动效组件由页面工程师挂到对应注释位置。
 

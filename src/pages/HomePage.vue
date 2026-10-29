@@ -291,7 +291,7 @@ const latestPosts = selectLatestPosts(3);
       </div>
     </section>
 
-    <!-- 板块区（瑞士版式）；hero 如上，完全不受板块区样式影响 -->
+    <!-- 板块区（与 hero 同语言的玻璃卡片版式）；hero 如上，完全不受板块区样式影响 -->
     <SwissSections :sections="contentSections" :repos="repos" :posts="latestPosts" />
   </main>
 </template>
@@ -447,7 +447,7 @@ const latestPosts = selectLatestPosts(3);
 }
 
 /* ---- 板块 ----
-   版式（栅格/字阶/反白）全部在 components/home/swiss/swiss.css 里；
+   版式（栅格/字阶/玻璃卡/极光光斑）全部在 components/home/swiss/swiss.css 里；
    这里只保留 hero 的样式，hero 不消费板块区的任何规则。 */
 
 @media (max-width: 640px) {

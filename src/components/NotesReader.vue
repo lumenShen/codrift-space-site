@@ -13,13 +13,16 @@ const props = defineProps<{
   open: boolean;
   collection: NoteCollection | null;
   collections: NoteCollection[];
-  initialIndex?: number;
-  initialAnchor?: string;
+  /** 当前单元下标（路由深链 / 父级状态） */
+  index?: number;
+  /** 单元内锚点（路由 ?section=） */
+  anchor?: string;
 }>();
 
 const emit = defineEmits<{
   close: [];
   'select-collection': [id: string];
+  navigate: [payload: { collectionId: string; index: number; anchor: string }];
 }>();
 
 interface SideGroup {
@@ -31,6 +34,8 @@ const currentIndex = ref(0);
 const currentAnchor = ref('');
 const loading = ref(true);
 const sidebarOpen = ref(false);
+const copied = ref(false);
+let copyTimer = 0;
 const frame = ref<HTMLIFrameElement | null>(null);
 const closeButton = ref<HTMLButtonElement | null>(null);
 const menuButton = ref<HTMLButtonElement | null>(null);
@@ -41,6 +46,13 @@ let bodyOverflow = '';
 let bodyPaddingRight = '';
 let locked = false;
 let loadToken = 0;
+/** 上一次由阅读器自己装载的 collection id：用来判断「换笔记」时是否要强制显示 loading */
+let loadedCollectionId = '';
+
+function clampIndex(index: number): number {
+  const max = Math.max(0, (props.collection?.chapters.length ?? 1) - 1);
+  return Math.max(0, Math.min(index, max));
+}
 
 const current = computed(() => props.collection?.chapters[currentIndex.value] ?? null);
 
@@ -80,10 +92,12 @@ watch(
   () => props.open,
   async (open) => {
     if (open) {
-      currentIndex.value = props.initialIndex ?? 0;
-      currentAnchor.value = props.initialAnchor ?? '';
+      currentIndex.value = clampIndex(props.index ?? 0);
+      currentAnchor.value = props.anchor ?? '';
+      loadedCollectionId = props.collection?.id ?? '';
       loading.value = true;
       sidebarOpen.value = false;
+      copied.value = false;
       loadToken += 1;
       lockScroll();
       window.removeEventListener('keydown', onKeydown);
@@ -98,8 +112,37 @@ watch(
   { immediate: true },
 );
 
+/* 路由深链是外部真相：浏览器前进/后退、或从站外直接落在某一章时，阅读器跟着走。
+   用户在阅读器里换章 → goTo 先改本地状态再 emit，父级 replace 成同一个地址后，
+   这里拿到的值已经相等，不会重复加载；换笔记时即使下标同为 0，也强制走一次 loading。 */
+watch(
+  () => [props.open, props.collection?.id, props.index, props.anchor] as const,
+  ([open, collectionId, index, anchor]) => {
+    if (!open || !props.collection) {
+      loadedCollectionId = '';
+      return;
+    }
+    const nextIndex = clampIndex(index ?? 0);
+    const nextAnchor = anchor ?? '';
+    const collectionChanged = collectionId !== loadedCollectionId;
+    if (
+      !collectionChanged &&
+      nextIndex === currentIndex.value &&
+      nextAnchor === currentAnchor.value
+    ) {
+      return;
+    }
+    loadedCollectionId = collectionId ?? '';
+    loadToken += 1;
+    currentIndex.value = nextIndex;
+    currentAnchor.value = nextAnchor;
+    loading.value = true;
+  },
+);
+
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  window.clearTimeout(copyTimer);
   unlockScroll();
 });
 
@@ -158,6 +201,7 @@ function goTo(index: number, anchor = ''): void {
       frame.value?.contentWindow?.scrollTo({ top: 0, behavior: 'smooth' });
     }
     loading.value = false;
+    // 同一单元内的锚点只滚动、不重载 iframe；地址栏保持当前深链。
     return;
   }
 
@@ -165,6 +209,7 @@ function goTo(index: number, anchor = ''): void {
   currentIndex.value = next;
   currentAnchor.value = anchor;
   loading.value = true;
+  emit('navigate', { collectionId: props.collection.id, index: next, anchor });
 }
 
 function goCollection(id: string): void {
@@ -270,6 +315,34 @@ function onDocumentClick(event: MouseEvent): void {
 function downloadHref(file: string): string {
   return props.collection ? noteFileUrl(props.collection, file) : '#';
 }
+
+/** 复制当前深链：地址栏已经由父级随章节同步，复制即可直接发给站外读者。 */
+async function copyCurrentLink(): Promise<void> {
+  const href = window.location.href;
+  try {
+    await navigator.clipboard.writeText(href);
+  } catch {
+    // 非安全上下文 / 权限被拒：临时 textarea + execCommand 兜底
+    const area = document.createElement('textarea');
+    area.value = href;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy');
+    } catch {
+      /* 复制失败也不打断阅读 */
+    }
+    area.remove();
+  }
+  copied.value = true;
+  window.clearTimeout(copyTimer);
+  copyTimer = window.setTimeout(() => {
+    copied.value = false;
+  }, 1800);
+}
 </script>
 
 <template>
@@ -315,7 +388,7 @@ function downloadHref(file: string): string {
 
           <div class="reader-actions">
             <button
-              class="reader-icon"
+              class="reader-icon reader-prev"
               type="button"
               title="上一单元"
               :disabled="currentIndex === 0"
@@ -333,7 +406,7 @@ function downloadHref(file: string): string {
               </svg>
             </button>
             <button
-              class="reader-icon"
+              class="reader-icon reader-next"
               type="button"
               title="下一单元"
               :disabled="!collection || currentIndex >= collection.chapters.length - 1"
@@ -345,6 +418,41 @@ function downloadHref(file: string): string {
                   fill="none"
                   stroke="currentColor"
                   stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              class="reader-icon reader-share"
+              type="button"
+              :data-copied="copied ? 'true' : undefined"
+              :title="copied ? '链接已复制' : '复制当前阅读位置链接'"
+              :aria-label="copied ? '链接已复制' : '复制当前阅读位置链接'"
+              @click="copyCurrentLink"
+            >
+              <svg v-if="!copied" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path
+                  d="M6.6 9.4a2.8 2.8 0 0 0 4 0l2.2-2.2a2.8 2.8 0 0 0-4-4L7.6 4.4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M9.4 6.6a2.8 2.8 0 0 0-4 0L3.2 8.8a2.8 2.8 0 0 0 4 4l1.2-1.2"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <svg v-else viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <path
+                  d="m3.4 8.4 3 3 6.2-6.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
@@ -399,6 +507,10 @@ function downloadHref(file: string): string {
             </button>
           </div>
         </header>
+
+        <Transition name="reader-toast">
+          <p v-if="copied" class="reader-toast" role="status">链接已复制，可直接分享</p>
+        </Transition>
 
         <div class="reader-body">
           <button
@@ -661,6 +773,39 @@ function downloadHref(file: string): string {
 .reader-close:hover {
   border-color: color-mix(in srgb, #e5484d 42%, var(--line)) !important;
   color: color-mix(in srgb, #e5484d 72%, var(--fg-0));
+}
+
+.reader-share[data-copied='true'] {
+  color: var(--accent-strong);
+}
+
+.reader-toast {
+  position: absolute;
+  top: 74px;
+  right: var(--space-4);
+  z-index: 5;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-full);
+  background: var(--bg-2);
+  box-shadow: var(--shadow-1);
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  pointer-events: none;
+}
+
+.reader-toast-enter-active,
+.reader-toast-leave-active {
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.18s ease-out;
+}
+
+.reader-toast-enter-from,
+.reader-toast-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .reader-menu {
@@ -1053,6 +1198,17 @@ function downloadHref(file: string): string {
   }
 }
 
+@media (max-width: 420px) {
+  .reader-prev,
+  .reader-next {
+    display: none;
+  }
+
+  .reader-toast {
+    top: 64px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reader-back,
   .reader-icon,
@@ -1072,6 +1228,11 @@ function downloadHref(file: string): string {
 
   .reader-spinner {
     animation: none;
+  }
+
+  .reader-toast-enter-active,
+  .reader-toast-leave-active {
+    transition: none;
   }
 }
 </style>
