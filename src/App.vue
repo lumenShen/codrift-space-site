@@ -246,9 +246,12 @@ onUnmounted(() => {
 }
 
 /* 底层内容容器：overlay 开启时右移缩退、露圆角（Kimi 抽屉签名动效，§2.3）；
-   bg-layer / 页头 / FAB / rail 不参与位移。will-change 仅打开期间挂。 */
+   bg-layer / 页头 / FAB / rail 不参与位移。will-change 仅打开期间挂。
+   overflow-x: clip 是页面层的横向防护：板块的极光光斑会越过内容列，需要在
+   页层裁掉；放在这里而不是内容列内，卡片外阴影才不会被一并切平。 */
 .page-shift {
   transform-origin: left center;
+  overflow-x: clip;
   transition: transform var(--dur-base) var(--ease-drawer);
 }
 

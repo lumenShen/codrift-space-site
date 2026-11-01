@@ -12,7 +12,7 @@ import type { ContentEntry } from '@/content-system';
 import type { HomeSection } from '@/components/content';
 import type { RepoItem } from './types';
 import SwissEntrySection from './SwissEntrySection.vue';
-import SwissPortfolio from './SwissPortfolio.vue';
+import PortfolioShowcase from './PortfolioShowcase.vue';
 import SwissPosts from './SwissPosts.vue';
 import './swiss.css';
 
@@ -32,8 +32,12 @@ const now = computed(() => props.sections.find((s) => s.id === 'now'));
 /* 其余 home 条目（将来新增板块）按顺序接在「现在」之后，编号顺延 */
 const extras = computed(() => props.sections.filter((s) => !KNOWN.includes(s.id)));
 
+/* 新板块的英文小标签：未登记的沿用通用 Section */
+const EXTRA_EN: Record<string, string> = {
+  links: 'Links',
+};
+
 const num = (n: number): string => String(n).padStart(2, '0');
-const workIndex = computed(() => num(5 + extras.value.length));
 const postIndex = computed(() => num(6 + extras.value.length));
 </script>
 
@@ -89,12 +93,12 @@ const postIndex = computed(() => num(6 + extras.value.length));
       :key="s.id"
       :mod="s.id"
       :index="num(5 + i)"
-      en="Section"
+      :en="EXTRA_EN[s.id] ?? 'Section'"
       :title="s.title"
       :entry="s.entry"
     />
 
-    <SwissPortfolio :repos="repos" :index="workIndex" />
+    <PortfolioShowcase :repos="repos" />
     <SwissPosts :posts="posts" :index="postIndex" />
   </div>
 </template>

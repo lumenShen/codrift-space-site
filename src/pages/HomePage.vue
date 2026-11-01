@@ -32,7 +32,11 @@ import {
 
 ensureExtendComponentsRegistered();
 
-/* 作品集数据（GitHub 调研定稿，简介如实保留；BlurLyric 卡片站长确认保留） */
+/*
+ * 作品集数据。带 showcase + image 的前五项进横向轨道，卡片正文压到两三行、
+ * 配真实界面截图与技术栈；其余仓库收进轨道下方的一行文字链接，信息不丢。
+ * BlurLyric 归属存疑的说明保留在数据里（站长确认保留该条目）。
+ */
 interface Repo {
   name: string;
   url: string;
@@ -44,6 +48,12 @@ interface Repo {
   badge?: string;
   highlight?: string;
   featured?: boolean;
+  showcase?: boolean;
+  image?: string;
+  imageAlt?: string;
+  imagePosition?: string;
+  lead?: string;
+  stack?: string;
 }
 
 const repos: Repo[] = [
@@ -51,29 +61,59 @@ const repos: Repo[] = [
     name: 'Rein',
     url: 'https://github.com/lumenShen/Rein',
     description:
-      '【旗舰】以 AI 为中枢的个人生活助理（桌面+安卓）：饮食、运动、待办、记账、课表、知识库整合在同一条时间线上，AI 可在对话中直接调用工具写数据（记一餐、记账、排日程）并沉淀为卡片；本地优先、数据留本地，支持端到端加密多设备同步与 Ed25519 验签自动更新。技术栈 Tauri 2 + Vue 3 + Rust + SQLite，界面为 Apple Liquid Glass 式玻璃质感（依据仓库 README）',
+      '以 AI 为中枢的个人生活助理：饮食、运动、待办、记账、课表与知识库收在同一条时间线上，聊天里就能把数据记下来；本地优先，多设备加密同步。',
     language: 'Vue',
     stars: 0,
     flagship: true,
+    showcase: true,
+    image: '/portfolio/rein.webp',
+    imageAlt: 'Rein 桌面端今日页：饮食、待办、番茄钟与记账卡片',
+    imagePosition: 'left center',
+    lead: 'Rein。',
+    stack: 'Tauri 2 · Vue 3 · Rust · SQLite',
   },
   {
     name: '开源知识笔记库',
     url: '/notes',
     description:
-      '四类开源知识笔记：同济《高等数学》第八版上册正课版（7 章 / 17 单元 / 144 节 / 216 例题 / 464 页 PDF）、与其逐章对应的复习版（143 节 / 102 页 PDF），从编译器、内存与链接视角重学的 C 语言工程笔记（8 章 / 20 单元 / 23.0 万汉字 / 512 页 PDF），以及从 C 出发的 C++ 工程笔记（9 章 / 20 单元 / 9.2 万汉字 / 170 页 PDF）。四种笔记均可在站内全屏阅读，高数两套与 C / C++ 另可下载 PDF 与单文件 HTML',
+      '高数正课与复习、C 语言、C++ 四套工程笔记，从同一条 Markdown 写作流水线长出来。站内全屏翻开，也能带走 PDF 与单文件 HTML。',
     language: 'Markdown',
     internal: true,
     featured: true,
     badge: '开源笔记 · 4 种',
     highlight: 'AI驱动的知识笔记再优化，让晦涩难懂的语言更加易懂',
+    showcase: true,
+    image: '/portfolio/notes.webp',
+    imageAlt: '知识笔记库门户：高数正课、高数复习、C 与 C++ 四套笔记封面',
+    lead: '开源知识笔记库。',
+    stack: '4 种笔记 · 74 个单元 · 1248 页 PDF',
+  },
+  {
+    name: 'EffiBuddy',
+    url: 'https://github.com/lumenShen/EffiBuddy',
+    description:
+      '本地优先的 AI Agent 桌面应用：35+ 工具、BM25 + 向量混合检索记忆、技能市场、语音转写与局域网 P2P 协作，让 Agent 在桌面端真正动手。',
+    language: 'Rust',
+    stars: 1,
+    flagship: false,
+    showcase: true,
+    image: '/portfolio/effibuddy.webp',
+    imageAlt: 'EffiBuddy 设置页：外观、主题模式、字体大小与跑马灯开关',
+    lead: 'EffiBuddy。',
+    stack: 'Tauri 2 · Vue 3 · Rust · 35+ 工具',
   },
   {
     name: '摆烂处方笺',
     url: '/daraku-rx/',
     description:
-      '日系清新风的随机处方生成器「だらく診療所」：写下一个当下的烦恼，看五秒「正在编写处方」，领到一张带主药、辅药、剂量与禁忌的情绪处方；另有可播放背景音乐的隐藏菜单。Vue 3 + Vite 单页应用，独立构建后以子路径挂在本站',
+      '写下当下的烦恼，看五秒「正在编写处方」，领到一张带主药、辅药、剂量与禁忌的情绪处方。日系清新风的互动小站，另藏一页可播放背景音乐的菜单。',
     language: 'Vue',
     badge: '互动小站',
+    showcase: true,
+    image: '/portfolio/daraku.webp',
+    imageAlt: '摆烂处方笺首页：和纸质感背景、烦恼选项与「医生，我到底怎么了」按钮',
+    lead: '摆烂处方笺。',
+    stack: 'Vue 3 · Vite · 单页应用',
   },
   {
     name: 'BlurLyric',
@@ -82,15 +122,6 @@ const repos: Repo[] = [
       '高颜值、高性能的网易云音乐第三方播放器（Electron + Vue 3，自研歌词滚动算法、几乎零延迟，响应式布局）。注意：lumenShen 名下无此仓库（API 404，其 7 个公开仓库中亦无），项目实际位于 Project-And-Factory 组织且已归档（2023-08 最后 push）；组织公开成员仅 g2nnyS、sider2vf，与 lumenShen 的归属关系无法核实。GitHub 搜索另见 gozaoo 账号下续作 BlurLyric-3.0（Vue，3★）与 BlurLyric_Old（2★）',
     language: 'JavaScript',
     stars: 79,
-    flagship: false,
-  },
-  {
-    name: 'EffiBuddy',
-    url: 'https://github.com/lumenShen/EffiBuddy',
-    description:
-      '本地优先的 AI Agent 桌面应用（EffiSuite）：35+ 工具集（文件读写、Shell、Web 搜索、代码库检索、子 Agent 委派等）、BM25+向量混合 RAG 记忆、技能市场、语音转写、局域网 P2P 端到端加密多设备协作；Tauri 2 + Vue 3 + Rust（rig 框架，MIT，v0.1.0 早期开发中）（依据仓库 README）',
-    language: 'Rust',
-    stars: 1,
     flagship: false,
   },
   {
