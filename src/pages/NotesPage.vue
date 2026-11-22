@@ -50,6 +50,7 @@ const initialAnchor = computed(() =>
 const gaoshuReview = notesCollections.find((item) => item.id === 'gaoshu-review')!;
 const cEngineering = notesCollections.find((item) => item.id === 'c-engineering')!;
 const cppEngineering = notesCollections.find((item) => item.id === 'cpp-engineering')!;
+const algoEngineering = notesCollections.find((item) => item.id === 'algo-engineering')!;
 
 const offlineItems = [
   {
@@ -121,6 +122,27 @@ const offlineItems = [
     note: '站内阅读版',
     collection: cppEngineering,
     file: 'books/cpp.html',
+  },
+  {
+    tag: 'PDF',
+    label: '算法 · 522 页',
+    note: 'A4 · 真编译真对拍',
+    collection: algoEngineering,
+    file: 'algo.pdf',
+  },
+  {
+    tag: 'HTML',
+    label: '算法 · 单文件',
+    note: '样式内联 · 双击即读',
+    collection: algoEngineering,
+    file: 'book-inline.html',
+  },
+  {
+    tag: 'HTML',
+    label: '算法 · 合书',
+    note: '站内阅读版',
+    collection: algoEngineering,
+    file: 'books/algo.html',
   },
 ];
 
@@ -202,7 +224,7 @@ function scrollToLibrary(): void {
       <div class="hero-copy">
         <p class="notes-eyebrow"><span aria-hidden="true"></span>开源知识笔记 · {{ notesTotals.kinds }} 种</p>
         <h1 class="notes-title">知识笔记库</h1>
-        <p class="notes-sub">高数正课 / 高数复习 / C 语言工程 / C++ 语言工程 · 在站内全屏翻开</p>
+        <p class="notes-sub">高数正课 / 高数复习 / C 语言工程 / C++ 语言工程 / 算法竞赛 · 在站内全屏翻开</p>
 
         <p class="notes-highlight">
           <span class="hl-ai">AI</span>驱动的知识笔记再优化，<br />
@@ -210,7 +232,7 @@ function scrollToLibrary(): void {
         </p>
 
         <p class="notes-lede">
-          四种笔记来自同一套 Markdown 写作流水线：模型先把晦涩的教材语言重写成人话，
+          五种笔记来自同一套 Markdown 写作流水线：模型先把晦涩的教材语言重写成人话，
           再由复核与机械验算把结论钉住。选一种，直接在站内翻开——没有跳转，没有另一套网页界面。
         </p>
 
@@ -229,7 +251,7 @@ function scrollToLibrary(): void {
             </svg>
           </button>
           <button type="button" class="notes-ghost" data-cursor="target" @click="scrollToLibrary">
-            先看四种笔记
+            先看五种笔记
           </button>
         </div>
 
@@ -257,7 +279,7 @@ function scrollToLibrary(): void {
         </p>
       </div>
 
-      <div class="cover-shelf" aria-label="四种笔记的封面">
+      <div class="cover-shelf" aria-label="五种笔记的封面">
         <button
           v-for="(item, index) in notesCollections"
           :key="item.id"
@@ -281,11 +303,11 @@ function scrollToLibrary(): void {
 
     <section id="notes-library" class="notes-library" aria-labelledby="library-title">
       <div class="section-head">
-        <p class="section-kicker">THE LIBRARY / 04</p>
-        <h2 id="library-title">四种笔记，按需翻开</h2>
+        <p class="section-kicker">THE LIBRARY / 05</p>
+        <h2 id="library-title">五种笔记，按需翻开</h2>
         <p>
-          不是四份重复的教材：正课版负责把每一步讲透，复习版只留概念与做题路径，
-          C 与 C++ 笔记分别从编译器 / 对象生命周期的视角讲工程。
+          不是重复的教材：正课版负责把每一步讲透，复习版只留概念与做题路径，
+          C 与 C++ 笔记分别从编译器 / 对象生命周期的视角讲工程，算法笔记用对拍把结论钉在随机数据上。
         </p>
       </div>
 
@@ -401,7 +423,7 @@ function scrollToLibrary(): void {
       <div class="section-head">
         <p class="section-kicker">THE PIPELINE</p>
         <h2 id="method-title">AI 驱动，但不是一键生成</h2>
-        <p>四套笔记共用一套流程：模型负责把语言变简单，构建与复核负责让结论仍然可靠。</p>
+        <p>五套笔记共用一套流程：模型负责把语言变简单，构建与复核负责让结论仍然可靠。</p>
       </div>
 
       <div class="method-grid">
@@ -416,14 +438,14 @@ function scrollToLibrary(): void {
           <span>02 / 复核</span>
           <h3>公式与代码逐条验算</h3>
           <p>
-            高数两版由独立复核员逐条重算，253 条机械验算守住可验证的结论；C 与 C++ 笔记把代码清单放进真编译、真运行闸门。
+            高数两版由独立复核员逐条重算，253 条机械验算守住可验证的结论；C 与 C++ 笔记把代码清单放进真编译、真运行闸门；算法笔记再要求每份结论被 200 组随机数据对拍。
           </p>
         </article>
         <article class="method-step">
           <span>03 / 质检</span>
           <h3>逐页检查版面</h3>
           <p>
-            同一份内容渲染成 HTML，再由 headless Chrome 打印为 A4；464 + 102 + 512 + 170 页逐页检测空白页、越界与页尾空白。
+            同一份内容渲染成 HTML，再由 headless Chrome 打印为 A4；464 + 102 + 512 + 170 + 522 页逐页检测空白页、越界与页尾空白。
           </p>
         </article>
       </div>
@@ -432,9 +454,9 @@ function scrollToLibrary(): void {
     <section class="notes-offline" aria-labelledby="offline-title">
       <div class="offline-copy">
         <p class="section-kicker">TAKE IT OFFLINE</p>
-        <h2 id="offline-title">四套笔记，都可以带走</h2>
+        <h2 id="offline-title">五套笔记，都可以带走</h2>
         <p>
-          正课 464 页、复习 102 页、C 语言 512 页、C++ 语言 170 页，各有一份 A4 PDF；
+          正课 464 页、复习 102 页、C 语言 512 页、C++ 语言 170 页、算法 522 页，各有一份 A4 PDF；
           高数、C 与 C++ 都有样式全部内联的单文件 HTML，C 与 C++ 另有一份合书 HTML。
           站内读的就是下载的，排版保持原样。
         </p>
@@ -469,7 +491,7 @@ function scrollToLibrary(): void {
     </section>
 
     <p class="notes-source">
-      四套笔记都以 Markdown 维护：高数经 markdown-it + KaTeX 渲染，C / C++ 经 markdown-it + Shiki
+      五套笔记都以 Markdown 维护：高数经 markdown-it + KaTeX 渲染，C / C++ / 算法经 markdown-it + Shiki
       与自建闸门生成，再由 headless Chrome 打印为 PDF。站内阅读器只负责把同一份纸面内容装进深色阅读面板：
       隐藏原来的站内导航、注入深色版式，正文、公式与锚点保持原样。
     </p>

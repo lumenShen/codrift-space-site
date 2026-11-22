@@ -386,6 +386,162 @@ const cppUnits: NoteChapter[] = [
 ];
 
 
+const algoUnits: NoteChapter[] = [
+  {
+    id: 'a01',
+    group: '第 1 章 起步：算法在竞赛里的工程形态',
+    title: '规模表与复杂度：从「能过」反推算法',
+    file: 'units/algo__chapters__ch01__01-scale-and-complexity.md.html',
+  },
+  {
+    id: 'a02',
+    title: '对拍工程：让结论被随机数据验证',
+    file: 'units/algo__chapters__ch01__02-stress-testing.md.html',
+  },
+  {
+    id: 'a03',
+    group: '第 2 章 线性结构：栈、队列、并查集、堆',
+    title: '数组模拟栈与单调栈：让每个元素至多进出一次栈',
+    file: 'units/algo__chapters__ch02__01-array-stack-mono-stack.md.html',
+  },
+  {
+    id: 'a04',
+    title: '单调队列：滑动窗口最大值、环形双端队列与窗口 DP',
+    file: 'units/algo__chapters__ch02__02-monotone-queue.md.html',
+  },
+  {
+    id: 'a05',
+    title: '并查集：把「连在一起」变成比较两个根',
+    file: 'units/algo__chapters__ch02__03-union-find.md.html',
+  },
+  {
+    id: 'a06',
+    title: '二叉堆与优先队列：把「谁最优先」变成父子下标的比较',
+    file: 'units/algo__chapters__ch02__04-binary-heap.md.html',
+  },
+  {
+    id: 'a07',
+    group: '第 3 章 排序与二分',
+    title: '排序：比较器、归并逆序对与基数排序',
+    file: 'units/algo__chapters__ch03__01-sorting.md.html',
+  },
+  {
+    id: 'a08',
+    title: '二分与三分：四种写法、二分答案与单峰极值',
+    file: 'units/algo__chapters__ch03__02-binary-search.md.html',
+  },
+  {
+    id: 'a09',
+    group: '第 4 章 前缀、差分与双指针',
+    title: '前缀和与差分：把区间问题变成端点问题',
+    file: 'units/algo__chapters__ch04__01-prefix-diff.md.html',
+  },
+  {
+    id: 'a10',
+    title: '双指针与滑动窗口：右端扩张、左端收缩的不变式',
+    file: 'units/algo__chapters__ch04__02-two-pointers.md.html',
+  },
+  {
+    id: 'a11',
+    group: '第 5 章 树状结构：树、树状数组、线段树',
+    title: '树与 LCA：DFS 序、欧拉序与倍增跳跃',
+    file: 'units/algo__chapters__ch05__01-tree-lca.md.html',
+  },
+  {
+    id: 'a12',
+    title: '树状数组：lowbit 把前缀拆成不重叠的管段',
+    file: 'units/algo__chapters__ch05__02-fenwick.md.html',
+  },
+  {
+    id: 'a13',
+    title: '线段树：把区间问题挂到一棵平衡划分树上',
+    file: 'units/algo__chapters__ch05__03-segment-tree.md.html',
+  },
+  {
+    id: 'a14',
+    group: '第 6 章 图论基础：存图、遍历、最短路、拓扑',
+    title: '存图与遍历：把图装进内存，再把它走一遍',
+    file: 'units/algo__chapters__ch06__01-graph-traversal.md.html',
+  },
+  {
+    id: 'a15',
+    title: '最短路：非负权交给堆，负权交给轮次',
+    file: 'units/algo__chapters__ch06__02-shortest-paths.md.html',
+  },
+  {
+    id: 'a16',
+    title: '拓扑排序：给依赖关系排出执行顺序',
+    file: 'units/algo__chapters__ch06__03-topological-sort.md.html',
+  },
+  {
+    id: 'a17',
+    group: '第 7 章 进阶图论：生成树、连通性、匹配与流',
+    title: '最小生成树：贪心挑边，两个证明护住它',
+    file: 'units/algo__chapters__ch07__01-mst.md.html',
+  },
+  {
+    id: 'a18',
+    title: '强连通、割点与桥：dfn/low 一张表看穿图的骨架',
+    file: 'units/algo__chapters__ch07__02-scc-and-bridges.md.html',
+  },
+  {
+    id: 'a19',
+    title: '匹配与网络流：从增广路到分层图',
+    file: 'units/algo__chapters__ch07__03-matching-and-flow.md.html',
+  },
+  {
+    id: 'a20',
+    group: '第 8 章 动态规划：线性、背包、区间、树形',
+    title: '线性 DP 与背包：状态、决策与循环方向',
+    file: 'units/algo__chapters__ch08__01-linear-dp-knapsack.md.html',
+  },
+  {
+    id: 'a21',
+    title: '区间 DP 与树形 DP：枚举断点，先儿子后自己',
+    file: 'units/algo__chapters__ch08__02-interval-tree-dp.md.html',
+  },
+  {
+    id: 'a22',
+    group: '第 9 章 动态规划进阶：状压、数位、优化',
+    title: '状压 DP 与数位 DP：把状态塞进一个整数里',
+    file: 'units/algo__chapters__ch09__01-bitmask-digit-dp.md.html',
+  },
+  {
+    id: 'a23',
+    title: 'DP 优化：把转移里的重复算一次算清',
+    file: 'units/algo__chapters__ch09__02-dp-optimization.md.html',
+  },
+  {
+    id: 'a24',
+    group: '第 10 章 字符串：哈希、KMP、Trie、AC 自动机',
+    title: '字符串哈希与 KMP：把比对变成整数与跳转',
+    file: 'units/algo__chapters__ch10__01-hash-kmp.md.html',
+  },
+  {
+    id: 'a25',
+    title: 'Trie 与 AC 自动机：把字符变成边，把失配变成跳转',
+    file: 'units/algo__chapters__ch10__02-trie-ac-automaton.md.html',
+  },
+  {
+    id: 'a26',
+    group: '第 11 章 数学与计算几何',
+    title: '数论与矩阵快速幂：把整除关系变成可计算的式子',
+    file: 'units/algo__chapters__ch11__01-number-theory.md.html',
+  },
+  {
+    id: 'a27',
+    title: '计算几何：叉积定方向，扫描线降维',
+    file: 'units/algo__chapters__ch11__02-geometry.md.html',
+  },
+  {
+    id: 'a28',
+    group: '第 12 章 赛时工程与收尾',
+    title: '赛时工程与收尾：把会的算法稳定地写出来',
+    file: 'units/algo__chapters__ch12__01-contest-engineering.md.html',
+  },
+];
+
+
 export const notesCollections: NoteCollection[] = [
   {
     id: 'gaoshu',
@@ -480,6 +636,30 @@ export const notesCollections: NoteCollection[] = [
       { tag: 'HTML', label: '合书 HTML', file: 'books/cpp.html', note: '站内阅读版' },
     ],
   },
+  {
+    id: 'algo-engineering',
+    kind: '工程笔记',
+    title: '算法 · 从能过题到能拿牌',
+    shortTitle: '算法竞赛',
+    subject: '竞赛算法 · C 手写原理 / C++ STL 应用',
+    tagline: '原理用 C 手写，应用用 STL，结论用随机数据对拍验证。',
+    description:
+      '12 章 28 个单元，从规模表与对拍工程起步，覆盖线性结构、排序二分、前缀差分、树与图论、各类 DP、字符串、数论与计算几何，最后落到赛时工程。每个算法都有复杂度表、正确性论证与至少 200 组随机数据对拍；186 份清单全部真编译、真运行、0 失败，正文输出由真实 stdout/stderr 回写。522 页 A4 PDF、单文件 HTML 与站内单元出自同一套源文件。',
+    status: '完整版',
+    keywords: ['复杂度', '对拍', '单调栈', '图论', '动态规划', 'AC 自动机'],
+    metrics: [
+      { value: '12', label: '章' },
+      { value: '28', label: '单元' },
+      { value: '32.5', label: '万汉字' },
+    ],
+    meta: '28 个可独立阅读的单元 · 324,851 字 · 522 页 PDF · 186 份清单全绿',
+    chapters: algoUnits,
+    downloads: [
+      { tag: 'PDF', label: '整册 PDF', file: 'algo.pdf', note: '522 页 · A4' },
+      { tag: 'HTML', label: '单文件离线版', file: 'book-inline.html', note: '样式内联 · 双击即读' },
+      { tag: 'HTML', label: '合书 HTML', file: 'books/algo.html', note: '站内阅读版' },
+    ],
+  },
 ];
 
 export const notesBase = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}notes/`;
@@ -494,10 +674,10 @@ export function noteDownloadName(file: string): string {
 
 export const notesTotals = {
   kinds: notesCollections.length,
-  units: 74,
-  chapters: 31,
-  chars: 580742,
-  pages: 1248,
+  units: 102,
+  chapters: 43,
+  chars: 905593,
+  pages: 1770,
   examples: 216,
   graphs: 113,
 };
