@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust 工具链与第一个程序</title>
+<meta name="description" content="第 1 单元 · 建议 60 分钟 · 从安装到跑通第一行代码，建立对工具链的直觉">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">Rust 工具链与第一个程序</h1><p class="doc-sub">第 1 单元 · 建议 60 分钟 · 从安装到跑通第一行代码，建立对工具链的直觉</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 01-toolchain-and-first-program.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-toolchain-and-first-program-1-1-先讲动机-为什么需要一条工具链">1.1 先讲动机：为什么需要一条工具链</a></li><li class="toc-l2"><a href="#rust-ch01-toolchain-and-first-program-1-2-rustc-把源码变成可执行文件">1.2 rustc：把源码变成可执行文件</a></li><li class="toc-l2"><a href="#rust-ch01-toolchain-and-first-program-1-3-cargo-项目管家与构建系统">1.3 cargo：项目管家与构建系统</a></li><li class="toc-l2"><a href="#rust-ch01-toolchain-and-first-program-1-4-rustfmt-与-clippy-让代码更地道">1.4 rustfmt 与 clippy：让代码更地道</a></li><li class="toc-l2"><a href="#rust-ch01-toolchain-and-first-program-1-5-workspace-初见">1.5 workspace 初见</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>说清 rustc 与 cargo 各自的职责，知道什么时候直接调用编译器、什么时候交给包管理器</li>
+<li>能用 <code>cargo new</code> 建项目、读懂目录结构、跑通 <code>cargo run</code> 与 <code>cargo check</code></li>
+<li>会用 rustfmt 统一格式、用 clippy 发现不够地道的写法</li>
+<li>对 workspace 有初步印象，知道多包项目大致长什么样</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-toolchain-and-first-program-1-1-先讲动机-为什么需要一条工具链">1.1 先讲动机：为什么需要一条工具链</h2>
+<p>写一个 Rust 程序，表面上看只是「把文本变成能运行的二进制」。但真正让人头疼的从来不是语法本身，而是依赖怎么管、不同机器怎么保持一致、代码风格怎么统一、常见错误能不能早点被发现。Rust 的答案是把这些问题交给一条配套的工具链，而不是让你自己拿一堆脚本去拼。</p>
+<p>对初学者来说，最大的认知负担往往来自「我到底该敲哪条命令」。rustc、cargo、rustfmt、clippy 这四个名字会反复出现，它们不是互相竞争的替代品，而是分工明确的协作者。先记住一句话：rustc 负责把源码编译成程序，cargo 负责组织项目和依赖，rustfmt 负责排版，clippy 负责挑刺。剩下都是细节。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>把写程序想成开一家小饭馆。rustc 是灶台，真正把食材做熟；cargo 是店长，管进货、排班、下单；rustfmt 负责把桌子擦得整整齐齐；clippy 像一位挑剔的美食评论家，专门提醒你「这样写能吃，但不够好」。你不用亲自当灶台，但要认识每位伙计。</p>
+
+</div>
+</section>
+<p>安装 Rust 时通常会用到 rustup，它是工具链的安装与切换器，负责把上面这些工具装到你的机器上，并让你在不同版本之间切换。注意 rustup 本身不是编译器，它只是「装工具的工具」。真正决定代码语义的是「edition（版本）」：Rust 从 2015 到 2021（再到更新的版本）经历过几次语言级演进，edition 用来标记一套语义规则。新项目几乎都该选 2021，这也是本系列默认使用的版本。</p>
+<p>为什么要在命令里显式写 edition？因为省略时，不同版本的 rustc 可能采用不同的默认 edition，导致同一份代码在不同机器上的行为有细微差别。编译期把这个选择写死，是一种很便宜的「可复现性」投资。尤其在团队里或者 CI（持续集成）环境中，可复现比「在我机器上能跑」重要得多。</p>
+<h2 id="rust-ch01-toolchain-and-first-program-1-2-rustc-把源码变成可执行文件">1.2 rustc：把源码变成可执行文件</h2>
+<p>rustc 是 Rust 的编译器，它接收一个 <code>.rs</code> 文件，输出可执行文件或库。最小的一段程序只需要一个 <code>main</code> 函数——它是程序执行的入口，程序从这里开始、在这里结束。注意 Rust 用 <code>println!</code> 结尾的感叹号表示这是一个宏（macro），而不是普通函数。宏在编译期展开，能做一些函数做不到的事，比如接受可变数量的参数、对格式字符串做静态检查。</p>
+<p>下面这段代码不依赖任何外部库，只用标准库 std，可以直接交给 rustc 编译。试着把它存成 <code>main.rs</code>，然后编译运行。标准库是随语言一起分发的，任何符合规范的 Rust 环境都自带它，不需要额外下载。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">6 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    println!(&quot;Hello, Rust!&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let a = 7;</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let b = 9;</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    println!(&quot;{a} + {b} = {}&quot;, a + b);</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">}</code></div></div></div>
+<p>编译和运行的过程如下。这里显式写 <code>--edition 2021</code>，是为了锁定语言版本；<code>-o hello</code> 指定输出文件名。如果不写 edition，rustc 会用默认的 edition（新版本工具链通常是 2021 或更高），显式声明能让行为更可预期。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o hello</code></div>
+<div class="cl is-text is-cmd"><code class="code">$ ./hello</code></div>
+<div class="cl is-text"><code class="code">Hello, Rust!</code></div>
+<div class="cl is-text"><code class="code">7 + 9 = 16</code></div></div></div>
+<p><code>{a}</code> 这种写法叫「格式化参数隐式捕获」，编译器会从当前作用域里找同名变量填进去，从 Rust 1.58 起就稳定可用。它比 <code>println!(&quot;{} {}&quot;, a, b)</code> 更好读，因为变量名直接写在字符串里，改代码时不容易对错位置。还有一个细节：格式字符串里的 <code>{}</code> 会在编译期被检查，如果占位符数量和传入参数对不上，编译器直接报错，而不是等到运行时才打出奇怪的结果。这种「把错误挡在编译期」的思路，是 Rust 一贯的风格。</p>
+<p>编译器的错误信息也值得专门提一句。Rust 的错误提示以详细著称，它不仅告诉你哪一行出错，还常常给出修改建议，甚至用彩色箭头标出问题位置。初学时不要害怕报错，把报错当成一对一的辅导老师：读懂它、按它说的改，往往比到处搜答案更快的提升方式。</p>
+<h2 id="rust-ch01-toolchain-and-first-program-1-3-cargo-项目管家与构建系统">1.3 cargo：项目管家与构建系统</h2>
+<p>单个文件用 rustc 足够，但项目一旦有依赖、有多个源文件、有测试和构建配置，手敲 rustc 命令就会迅速失控。你要记住每个依赖的版本、文件路径、编译参数，还要保证同事的机器上命令完全一致。cargo 是 Rust 的包管理器和构建系统，它约定了一套目录结构，你只要把文件放对位置，剩下的交给它。</p>
+<p>下面是四个工具的职责对照，建议先有个整体印象。</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>角色</th>
+<th>你最常敲的命令</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>rustc</td>
+<td>编译器，把源码变成二进制</td>
+<td><code>rustc --edition 2021 main.rs</code></td>
+</tr>
+<tr>
+<td>cargo</td>
+<td>包管理器与构建系统</td>
+<td><code>cargo new</code>、<code>cargo build</code>、<code>cargo run</code>、<code>cargo check</code></td>
+</tr>
+<tr>
+<td>rustfmt</td>
+<td>格式化工具，统一排版</td>
+<td><code>cargo fmt</code></td>
+</tr>
+<tr>
+<td>clippy</td>
+<td>静态检查，给出改进建议</td>
+<td><code>cargo clippy</code></td>
+</tr>
+</tbody></table>
+
+<p>用 <code>cargo new</code> 创建项目，cargo 会帮你生成目录和一个能跑的「Hello, world!」。注意项目名里如果带连字符，例如 <code>hello-rust</code>，生成的目标名会换成下划线 <code>hello_rust</code>，这是 Rust 标识符的规则所致。如果是在已有目录里初始化，用 <code>cargo init</code> 而不是 <code>cargo new</code>，区别只在于是否新建一层文件夹。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo new hello_rust</code></div>
+<div class="cl is-text"><code class="code">     Created binary (application) `hello_rust` package</code></div>
+<div class="cl is-text is-cmd"><code class="code">$ cd hello_rust</code></div>
+<div class="cl is-text is-cmd"><code class="code">$ cargo run</code></div>
+<div class="cl is-text"><code class="code">   Compiling hello_rust v0.1.0 (.../hello_rust)</code></div>
+<div class="cl is-text"><code class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s</code></div>
+<div class="cl is-text"><code class="code">     Running `target/debug/hello_rust`</code></div>
+<div class="cl is-text"><code class="code">Hello, world!</code></div></div></div>
+<p>上面 <code>cargo run</code> 的输出里，编译耗时和具体路径因机器而异，属于示意输出。目录结构里，<code>Cargo.toml</code> 是清单文件，记录项目名、版本和依赖；<code>Cargo.lock</code> 锁定依赖的具体版本，保证每次构建拿到同样的依赖树；<code>src/main.rs</code> 是二进制入口；<code>target/</code> 放编译产物，通常不用手动碰，也能随时删掉让 cargo 重新生成。<code>cargo check</code> 只做类型检查不生成二进制，日常开发里它比 <code>cargo build</code> 快得多，适合频繁调用；确认无误后再用 <code>cargo build</code> 或 <code>cargo run</code> 生成程序。</p>
+<p>依赖写在 <code>Cargo.toml</code> 的 <code>[dependencies]</code> 段落里，cargo 会从官方仓库拉取并解析版本。版本号遵循语义化版本规范，cargo 在兼容范围内选择最新可用版本，而 <code>Cargo.lock</code> 把最终选择固定下来。这套机制让「升级一个依赖可能悄悄破坏构建」的概率大大降低。</p>
+<h2 id="rust-ch01-toolchain-and-first-program-1-4-rustfmt-与-clippy-让代码更地道">1.4 rustfmt 与 clippy：让代码更地道</h2>
+<p>能编译不代表写得好。rustfmt 会按社区统一风格重排代码，clippy 则在上百条规则上给你建议，比如提醒你某个手写循环其实有更惯用的写法。两者都不改变语义，可以放心当作「免费体检」。统一风格的意义在团队里尤其明显：当所有人都用同一套排版，代码评审就能把注意力放在逻辑上，而不是花时间争论缩进和大括号位置。</p>
+<p>rustfmt 的开箱即用配置已经覆盖绝大多数场景，你几乎不需要调参数。运行 <code>cargo fmt</code> 会格式化整个包，运行 <code>cargo fmt --check</code> 则只检查不修改，常用于 CI 里强制风格。如果确实要定制，可以在项目根目录放一个 <code>rustfmt.toml</code>，但初学阶段不建议急着改——先接受社区默认值，往往比「我觉得这样更好看」更靠谱。</p>
+<p>clippy 的建议分等级：有些是 <code>warning</code>，不阻碍编译；有些在严格模式下会成为 <code>error</code>。初学阶段不必追求清零所有警告，但每条警告都值得读一遍，因为它往往对应着一个真实存在的坏习惯。比如下面这段程序用 <code>iter().sum()</code> 求和，而不是手写累加循环——这正是 clippy 会「建议你考虑」的惯用写法，它更短，也不容易在边界条件上出错。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn add(a: i32, b: i32) -&gt; i32 {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    a + b</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let numbers = [1, 2, 3, 4, 5];</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let sum: i32 = numbers.iter().sum();</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;{} + {} = {}&quot;, 7, 9, add(7, 9));</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    println!(&quot;数组 {:?} 的和是 {}&quot;, numbers, sum);</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">}</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo fmt</code></div>
+<div class="cl is-text is-cmd"><code class="code">$ cargo clippy</code></div>
+<div class="cl is-text"><code class="code">    Checking hello_rust v0.1.0 (.../hello_rust)</code></div>
+<div class="cl is-text"><code class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s</code></div></div></div>
+<p>一个实用的节奏是：写完一段就用 <code>cargo check</code> 快速确认类型没问题，阶段性完成后跑 <code>cargo clippy</code> 看看有没有更地道的写法，提交前用 <code>cargo fmt</code> 统一排版。把工具用成习惯，而不是等到「代码丑得看不下去」才想起来，收益会大得多。</p>
+<h2 id="rust-ch01-toolchain-and-first-program-1-5-workspace-初见">1.5 workspace 初见</h2>
+<p>当项目变大，你可能需要把代码拆成多个包（crate）。cargo 的 workspace 机制允许一组包共享同一个 <code>Cargo.lock</code> 和目标目录，统一构建。你不必现在就掌握它，只要知道长什么样：根 <code>Cargo.toml</code> 里列出 <code>members</code>，每个成员是独立的包，有自己的 <code>Cargo.toml</code> 和 <code>src/</code>。</p>
+<p>这种结构的好处是，修改一个公共库后，所有依赖它的成员能一起重新编译、一起测试，版本不会各自漂移。举个例子，一个项目里有「核心逻辑库」「命令行前端」「网页后端」三个成员，它们共享同一份依赖锁定文件；你在核心库里改了一个函数签名，一次 <code>cargo check --workspace</code> 就能把所有受影响的地方找出来，而不是等上线后才发现某个成员还在用旧签名。</p>
+<p>什么时候该拆 workspace？经验法则是：当一块代码被两个以上的成员复用，或者不同部分需要独立发布、独立测试时，拆分才划算。过早拆分会带来额外的目录与配置复杂度，反而拖慢开发。本单元只要建立印象即可，等后面讲到模块、可见性和包管理时，我们再回来细看其中的门道。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>rustc 和 cargo 分别在什么场景下使用？</li>
+<li><code>cargo new</code> 生成的两个关键文件/目录是什么，<code>Cargo.lock</code> 有什么用？</li>
+<li>rustfmt 和 clippy 各解决什么问题？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><span></span><a href="rust__chapters__ch01__variables-types-and-ownership.md.html">变量、类型与所有权 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

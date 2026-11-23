@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图论与倍增 LCA</title>
+<meta name="description" content="第 19 单元 · 建议 60 分钟 · 从邻接表到最短路，再到树上倍增查询">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">图论与倍增 LCA</h1><p class="doc-sub">第 19 单元 · 建议 60 分钟 · 从邻接表到最短路，再到树上倍增查询</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 19-graphs-and-lca.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-graphs-and-lca-19-1-邻接表建图与-bfs-dfs">19.1 邻接表建图与 BFS / DFS</a></li><li class="toc-l2"><a href="#rust-ch03-graphs-and-lca-19-2-dijkstra-binaryheap-与-reverse">19.2 Dijkstra：BinaryHeap 与 Reverse</a></li><li class="toc-l2"><a href="#rust-ch03-graphs-and-lca-19-3-拓扑排序">19.3 拓扑排序</a></li><li class="toc-l2"><a href="#rust-ch03-graphs-and-lca-19-4-倍增-lca-binary-lifting">19.4 倍增 LCA：binary lifting</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能用 <code>Vec&lt;Vec&lt;usize&gt;&gt;</code> 建邻接表，写出迭代版 BFS 与 DFS 并解释为何避免递归</li>
+<li>理解 Dijkstra 中 BinaryHeap 配 Reverse 的用法，以及&quot;过期堆项跳过&quot;的必要性</li>
+<li>能用 Kahn 算法做拓扑排序并用结果长度判断是否存在环</li>
+<li>掌握 binary lifting 的建表与查询流程，正确对齐深度并求 LCA</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-graphs-and-lca-19-1-邻接表建图与-bfs-dfs">19.1 邻接表建图与 BFS / DFS</h2>
+<p>树是一种特殊的稀疏图，所以下面所有建图与遍历技巧对树同样适用；把树问题先转成&quot;无向图 + 根节点&quot;，是求解 LCA 等问题的通用起点。图的存储首选邻接表：<code>Vec&lt;Vec&lt;usize&gt;&gt;</code>，第 u 个 <code>Vec</code> 存放 u 的所有邻居。无向图每条边要往两个方向各加一次，有向图只加一次。相比邻接矩阵，邻接表的空间是 O(n + m)，稀疏图下优势巨大。若边带权，把元素类型换成 <code>(usize, i64)</code> 的元组即可。读入边时如果题目给的是 1 基编号，一定要先整体减一转成 0 基，否则会访问越界并浪费 0 号位置；编号转换的 bug 往往在样例上就能暴露，但如果不看输出很容易漏掉。</p>
+<p>BFS 用 <code>VecDeque</code> 当队列，按层推进，<code>dist[v] = -1</code> 表示未访问。它在无权图上给出最短路径，也是很多图算法（拓扑排序、Dijkstra 的初始化）的基础。DFS 通常用递归写，但 Rust 主线程栈有限，深链会导致 stack overflow。稳妥做法是手写栈：用一个 <code>Vec&lt;usize&gt;</code> 模拟递归栈，配合 <code>seen</code> 数组保证每点只入栈一次。</p>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>结构</th>
+<th>复杂度</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>BFS</td>
+<td>VecDeque</td>
+<td>O(n + m)</td>
+<td>无权最短路、按层遍历</td>
+</tr>
+<tr>
+<td>DFS（迭代）</td>
+<td>Vec 当栈</td>
+<td>O(n + m)</td>
+<td>拓扑序、连通块</td>
+</tr>
+<tr>
+<td>Dijkstra</td>
+<td>BinaryHeap</td>
+<td>O((n + m) log n)</td>
+<td>非负权最短路</td>
+</tr>
+<tr>
+<td>拓扑排序</td>
+<td>入度 + 队列</td>
+<td>O(n + m)</td>
+<td>DAG 依赖顺序</td>
+</tr>
+</tbody></table>
+
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">49 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::collections::VecDeque;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn build_undirected(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;Vec&lt;usize&gt;&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let mut g = vec![Vec::new(); n];</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    for &amp;(u, v) in edges {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        g[u].push(v);</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        g[v].push(u);</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    g</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">fn bfs(g: &amp;[Vec&lt;usize&gt;], start: usize) -&gt; Vec&lt;i32&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    let mut dist = vec![-1i32; g.len()];</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    let mut q = VecDeque::new();</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    dist[start] = 0;</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    q.push_back(start);</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    while let Some(u) = q.pop_front() {</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        for &amp;v in &amp;g[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">            if dist[v] == -1 {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">                dist[v] = dist[u] + 1;</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">                q.push_back(v);</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    dist</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="27"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">fn dfs_iter(g: &amp;[Vec&lt;usize&gt;], start: usize) -&gt; Vec&lt;usize&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">    let mut seen = vec![false; g.len()];</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">    let mut order = Vec::with_capacity(g.len());</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">    let mut st = vec![start];</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    seen[start] = true;</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">    while let Some(u) = st.pop() {</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">        order.push(u);</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">        for &amp;v in &amp;g[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">            if !seen[v] {</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">                seen[v] = true;</code></div>
+<div class="cl"><span class="ln" data-ln="38"></span><code class="code">                st.push(v);</code></div>
+<div class="cl"><span class="ln" data-ln="39"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="40"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="41"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="42"></span><code class="code">    order</code></div>
+<div class="cl"><span class="ln" data-ln="43"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="44"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="45"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    let g = build_undirected(6, &amp;[(0, 1), (1, 2), (1, 3), (3, 4), (3, 5)]);</code></div>
+<div class="cl"><span class="ln" data-ln="47"></span><code class="code">    println!(&quot;dist = {:?}&quot;, bfs(&amp;g, 0));</code></div>
+<div class="cl"><span class="ln" data-ln="48"></span><code class="code">    println!(&quot;dfs  = {:?}&quot;, dfs_iter(&amp;g, 0));</code></div>
+<div class="cl"><span class="ln" data-ln="49"></span><code class="code">}</code></div></div></div>
+<p>注意 BFS 里&quot;入队时就置 dist&quot;：这样即使同一层的多个节点都指向 v，v 也只会被入队一次。如果等到出队才标记，就会重复入队，复杂度退化。DFS 的 <code>seen</code> 同理，在<strong>入栈时</strong>就标记，而不是出栈时。</p>
+<p><code>Vec&lt;Vec&lt;usize&gt;&gt;</code> 的内存并不连续：每个内层 Vec 各自分配一块，遍历时缓存命中率不如扁平数组。若图的边数达到百万级，可以用&quot;前向星&quot;式的扁平存储——一个 <code>to</code> 数组加一个 <code>head</code> / <code>next</code> 数组，把所有邻接边连续存放。对多数笔试题而言邻接表已经够用，但知道这个优化的存在有助于在卡性能时快速切换。另外上面的 BFS 和 DFS 都只从第 0 号点出发；若图不连通，要对每个未访问的点再跑一次，才能覆盖全部节点。迭代 DFS 的访问顺序与递归版本可能不同（因为栈是后进先出），但只要是合法的遍历顺序就不影响连通块计数这类与顺序无关的问题。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>图就是一张城市和道路的地图。邻接表等于给每个城市记一张&quot;能直接去哪&quot;的名单。BFS 像水波一圈圈往外荡，先到近处再到远处，所以能求最少几步；DFS 像钻地道，一条路走到黑再回头，适合把所有点走一遍或排先后。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-graphs-and-lca-19-2-dijkstra-binaryheap-与-reverse">19.2 Dijkstra：BinaryHeap 与 Reverse</h2>
+<p>Dijkstra 解决非负权图上的单源最短路。它每次从尚未确定的点里取当前距离最小的那个，用它去松弛邻居。标准库 BinaryHeap 是最大堆，而我们需要最小堆，于是用 <code>std::cmp::Reverse&lt;(i64, usize)&gt;</code> 把比较方向翻转。元组里放 <code>(距离, 点号)</code>，距离相同时按点号排，行为确定。</p>
+<p>关键细节是<strong>过期堆项</strong>：同一个点可能被多次压入堆（每次距离变小就压一次），弹出旧记录时它的 d 已经大于 <code>dist[u]</code>，必须 <code>continue</code> 跳过，否则会用过时距离去做松弛，得到错误结果。这个判断也可以写成 <code>if Reverse(d) != ...</code>，但直接比较 <code>d &gt; dist[u]</code> 最直观。无限大用 <code>i64::MAX / 4</code>，给加法留出余量，避免溢出成负数。</p>
+<p>为什么不能用 visited 数组代替跳过判断？因为 Dijkstra 的点在第一次弹出时距离确实已经确定，理论上可以标记 visited；但那需要在压堆前排除重复项，代码反而更绕。直接允许重复入堆、弹出时惰性丢弃，是更简洁也更常用的写法，代价只是堆里多几条记录。把这个模式记住，后面所有&quot;优先队列 + 松弛&quot;的算法都能套用。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">37 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::cmp::Reverse;</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::collections::BinaryHeap;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn dijkstra(n: usize, edges: &amp;[(usize, usize, i64)], src: usize) -&gt; Vec&lt;i64&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let mut g = vec![Vec::&lt;(usize, i64)&gt;::new(); n];</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    for &amp;(u, v, w) in edges {</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        g[u].push((v, w));</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        g[v].push((u, w));</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let inf = i64::MAX / 4;</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    let mut dist = vec![inf; n];</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let mut pq: BinaryHeap&lt;Reverse&lt;(i64, usize)&gt;&gt; = BinaryHeap::new();</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    dist[src] = 0;</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    pq.push(Reverse((0, src)));</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    while let Some(Reverse((d, u))) = pq.pop() {</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        if d &gt; dist[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">            continue; // 过期记录，跳过</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        for &amp;(v, w) in &amp;g[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">            let nd = d + w;</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">            if nd &lt; dist[v] {</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">                dist[v] = nd;</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">                pq.push(Reverse((nd, v)));</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    dist</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="30"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    let edges = [</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">        (0usize, 1usize, 4i64), (0, 2, 1), (2, 1, 2),</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">        (1, 3, 5), (2, 3, 8),</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">    ];</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">    println!(&quot;{:?}&quot;, dijkstra(4, &amp;edges, 0));</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">}</code></div></div></div>
+<p>Dijkstra 要求所有边权非负，这是因为它的贪心依赖&quot;距离一旦确定就不会再变小&quot;。若存在负权边，需改用 SPFA 或 Bellman-Ford。另外不要把&quot;取出最小值&quot;写成每次线性扫描 dist 数组，那样是 O(n²)，在 n 达十万级时会超时；堆把这一步降到 O(log n)。</p>
+<p>跑完算法后，仍为 inf 的点表示从源点不可达，输出时要按题目要求转成 -1 或忽略。堆里最多会积累 O(m) 个记录（每条边松弛成功一次就可能压入一项），所以空间复杂度是 O(n + m)，不必担心。对于边权全为 1 的特殊情况，BFS 就能给出最短路，比 Dijkstra 更快更简单；只有当权值不全相等时才需要动用堆。把这一点写进选择题的判断清单，能避免杀鸡用牛刀。</p>
+<h2 id="rust-ch03-graphs-and-lca-19-3-拓扑排序">19.3 拓扑排序</h2>
+<p>拓扑排序针对有向无环图（DAG），输出一个序列使得每条边 u → v 都满足 u 排在 v 前面。Kahn 算法从入度为 0 的点开始：把它们全部入队，依次弹出并记录，每弹出一个点就把它的所有后继入度减一，减到 0 的点再入队。若最终输出的点数不足 n，说明图中存在环。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">37 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::collections::VecDeque;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn topo(n: usize, edges: &amp;[(usize, usize)]) -&gt; Option&lt;Vec&lt;usize&gt;&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let mut g = vec![Vec::&lt;usize&gt;::new(); n];</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let mut indeg = vec![0usize; n];</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    for &amp;(u, v) in edges {</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        g[u].push(v);</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        indeg[v] += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let mut q = VecDeque::new();</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    for i in 0..n {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        if indeg[i] == 0 {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">            q.push_back(i);</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let mut order = Vec::with_capacity(n);</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    while let Some(u) = q.pop_front() {</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        order.push(u);</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        for &amp;v in &amp;g[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">            indeg[v] -= 1;</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">            if indeg[v] == 0 {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">                q.push_back(v);</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">    if order.len() == n {</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        Some(order)</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    } else {</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">        None</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="32"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">    let edges = [(0usize, 1usize), (0, 2), (1, 3), (2, 3), (3, 4)];</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">    println!(&quot;{:?}&quot;, topo(5, &amp;edges));</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">    println!(&quot;{:?}&quot;, topo(3, &amp;[(0, 1), (1, 2), (2, 0)]));</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">}</code></div></div></div>
+<p><code>indeg[v] -= 1</code> 在 <code>usize</code> 上是安全的，因为 v 出现在 u 的后继列表里，就说明它有一条来自 u 的入边尚未被扣减；而 u 只会被弹出一次，所以不会重复扣。返回 <code>Option&lt;Vec&lt;usize&gt;&gt;</code> 把&quot;有环&quot;这个失败状态编码进类型，比返回一个空 <code>Vec</code> 更不容易被误用。</p>
+<p>拓扑排序的结果通常不唯一：只要存在多个入度为 0 的点，它们的先后顺序就随意，题目若要求&quot;字典序最小的拓扑序&quot;，只需把普通队列换成 <code>BinaryHeap&lt;Reverse&lt;usize&gt;&gt;</code>。另一种实现是 DFS 后序遍历：每访问完一个点就把它压入结果栈，最后整体反转。DFS 版本代码更短，但递归深链有爆栈风险，迭代 Kahn 更稳妥。平行边（同一对 u、v 出现多次）会让 indeg 多加也多减，结果依然正确，无需去重。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</code></div>
+<div class="cl is-text"><code class="code">Some([0, 1, 2, 3, 4])</code></div>
+<div class="cl is-text"><code class="code">None</code></div></div></div>
+<h2 id="rust-ch03-graphs-and-lca-19-4-倍增-lca-binary-lifting">19.4 倍增 LCA：binary lifting</h2>
+<p>LCA 是最近公共祖先。朴素做法是一步步把较深的点往上抬，直到两点深度相同，再一起往上走，每次查询 O(n)。binary lifting 用预处理把&quot;往上走&quot;变成按 2 的幂跳跃：令 <code>up[k][v]</code> 表示 v 的第 2ᵏ 代祖先，<code>k</code> 最多 <code>log₂n</code> 层。预处理时 <code>up[k][v] = up[k-1][up[k-1][v]]</code>，即跳 2ᵏ 等于先跳 2ᵏ⁻¹ 再跳一次。</p>
+<p>查询分三步：先把深度较大的点 a 抬到与 b 同深——计算差值 diff，按二进制位逐次跳；若此时 a == b，答案就是它；否则从最大的 k 往下枚举，只要 <code>up[k][a] != up[k][b]</code>，就让两点同时跳 2ᵏ，最后它们的父节点就是 LCA。最后一步之所以不能直接返回 <code>up[0][a]</code>，是因为当两点同层且相邻时已经相等，需要先区分再取父节点。</p>
+<p>深度对齐用 <code>depth[a] - depth[b]</code> 时已经保证 a 更深（前面用 swap 换过），所以减法不会下溢。枚举二进制位用 <code>(diff &gt;&gt; k) &amp; 1</code> 而不是反复取模，既直观又高效。若根不一定是 0 号点，只需把 root 作为参数传入并把 <code>parent</code> 数组的哨兵设成一个合法范围外的值，其余代码无需改动。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">69 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn lca_all(</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    n: usize,</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    edges: &amp;[(usize, usize)],</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    root: usize,</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    queries: &amp;[(usize, usize)],</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">) -&gt; Vec&lt;usize&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let mut g = vec![Vec::&lt;usize&gt;::new(); n];</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    for &amp;(u, v) in edges {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        g[u].push(v);</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        g[v].push(u);</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let mut log = 1usize;</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    while (1usize &lt;&lt; log) &lt;= n {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        log += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let mut up = vec![vec![root; n]; log];</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    let mut depth = vec![0usize; n];</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    let mut parent = vec![n; n];</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    parent[root] = root;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    let mut st = vec![root];</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    while let Some(u) = st.pop() {</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">        for &amp;v in &amp;g[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">            if v == parent[u] {</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">                continue;</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">            parent[v] = u;</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">            depth[v] = depth[u] + 1;</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">            up[0][v] = u;</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">            st.push(v);</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">    for k in 1..log {</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">        for v in 0..n {</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">            up[k][v] = up[k - 1][up[k - 1][v]];</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="38"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="39"></span><code class="code">    let mut ans = Vec::with_capacity(queries.len());</code></div>
+<div class="cl"><span class="ln" data-ln="40"></span><code class="code">    for &amp;(mut a, mut b) in queries {</code></div>
+<div class="cl"><span class="ln" data-ln="41"></span><code class="code">        if depth[a] &lt; depth[b] {</code></div>
+<div class="cl"><span class="ln" data-ln="42"></span><code class="code">            std::mem::swap(&amp;mut a, &amp;mut b);</code></div>
+<div class="cl"><span class="ln" data-ln="43"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="44"></span><code class="code">        let diff = depth[a] - depth[b];</code></div>
+<div class="cl"><span class="ln" data-ln="45"></span><code class="code">        for k in 0..log {</code></div>
+<div class="cl"><span class="ln" data-ln="46"></span><code class="code">            if ((diff &gt;&gt; k) &amp; 1) == 1 {</code></div>
+<div class="cl"><span class="ln" data-ln="47"></span><code class="code">                a = up[k][a];</code></div>
+<div class="cl"><span class="ln" data-ln="48"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="49"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="50"></span><code class="code">        if a == b {</code></div>
+<div class="cl"><span class="ln" data-ln="51"></span><code class="code">            ans.push(a);</code></div>
+<div class="cl"><span class="ln" data-ln="52"></span><code class="code">            continue;</code></div>
+<div class="cl"><span class="ln" data-ln="53"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="54"></span><code class="code">        for k in (0..log).rev() {</code></div>
+<div class="cl"><span class="ln" data-ln="55"></span><code class="code">            if up[k][a] != up[k][b] {</code></div>
+<div class="cl"><span class="ln" data-ln="56"></span><code class="code">                a = up[k][a];</code></div>
+<div class="cl"><span class="ln" data-ln="57"></span><code class="code">                b = up[k][b];</code></div>
+<div class="cl"><span class="ln" data-ln="58"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="59"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="60"></span><code class="code">        ans.push(up[0][a]);</code></div>
+<div class="cl"><span class="ln" data-ln="61"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="62"></span><code class="code">    ans</code></div>
+<div class="cl"><span class="ln" data-ln="63"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="64"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="65"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="66"></span><code class="code">    let edges = [(0usize, 1usize), (1, 2), (1, 3), (3, 4), (3, 5)];</code></div>
+<div class="cl"><span class="ln" data-ln="67"></span><code class="code">    let q = [(2usize, 4usize), (0, 5), (4, 5)];</code></div>
+<div class="cl"><span class="ln" data-ln="68"></span><code class="code">    println!(&quot;{:?}&quot;, lca_all(6, &amp;edges, 0, &amp;q));</code></div>
+<div class="cl"><span class="ln" data-ln="69"></span><code class="code">}</code></div></div></div>
+<p>预处理 O(n log n)，单次查询 O(log n)。注意 <code>up</code> 表用 <code>vec![vec![root; n]; log]</code> 初始化，让根的祖先始终是根自己，这样跳到根以上也不会越界；这正是避免 <code>usize</code> 减法和越界检查的巧妙做法。第一次 DFS 写成迭代，依旧是为了规避深树爆栈——一条十万节点的链会让递归版直接崩溃。</p>
+<p>计算层数 log 时，<code>while (1usize &lt;&lt; log) &lt;= n</code> 要在 n 很大时确保移位不溢出；对常规 n ≤ 10⁶ 完全安全。若查询量特别大且树是静态的，还可以用欧拉序 + RMQ（稀疏表）把查询压到 O(1)，预处理变成 O(n log n)；但 binary lifting 代码更短、更不易错，是刷题时的默认选择。另一个常见变体是&quot;带权 LCA&quot;——在抬升过程中累加路径长度，只需多维护一个 <code>dist_up[k][v]</code> 表，就能顺带求出任意两点的树上距离：<code>dist(a) + dist(b) - 2 * dist(lca)</code>。把这几套模板放在同一份笔记里对照记忆，比孤立背诵效果好得多。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么 BFS 要在节点入队时就标记 dist，而不是出队时？</li>
+<li>Dijkstra 为什么要判断 <code>d &gt; dist[u]</code> 并跳过？这能省略吗？</li>
+<li>binary lifting 中，为什么最后返回 <code>up[0][a]</code> 而不是直接返回 a？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__prefix-diff-and-two-pointers.md.html">← 前缀和与差分、双指针</a><a href="rust__chapters__ch03__dynamic-programming.md.html">动态规划 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

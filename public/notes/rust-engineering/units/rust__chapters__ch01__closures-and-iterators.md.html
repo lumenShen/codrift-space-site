@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>闭包与迭代器</title>
+<meta name="description" content="第 7 单元 · 建议 60 分钟 · 把「怎么做」写成可传递的值，用迭代器组装数据流">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">闭包与迭代器</h1><p class="doc-sub">第 7 单元 · 建议 60 分钟 · 把「怎么做」写成可传递的值，用迭代器组装数据流</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 07-closures-and-iterators.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-1-闭包-可以当值传递的函数">7.1 闭包：可以当值传递的函数</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-按-怎么用-分类">7.2 Fn、FnMut、FnOnce：按「怎么用」分类</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-3-迭代器-惰性求值的数据流">7.3 迭代器：惰性求值的数据流</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-4-适配器-map-filter-fold">7.4 适配器：map、filter、fold</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-5-collect-与类型推断">7.5 collect 与类型推断</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>会定义闭包，理解它如何捕获环境变量以及类型推断的过程</li>
+<li>分清 Fn、FnMut、FnOnce 三个 trait 的约束强度与典型用法</li>
+<li>能用 <code>map</code>、<code>filter</code>、<code>fold</code> 等适配器组装惰性求值的数据流水线</li>
+<li>理解 <code>collect</code> 如何把迭代器变成集合，以及它是怎么知道目标类型的</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-closures-and-iterators-7-1-闭包-可以当值传递的函数">7.1 闭包：可以当值传递的函数</h2>
+<p>函数只能定义一次、名字固定；闭包（closure）则像「匿名函数 + 它能看见的周围环境」，可以存进变量、当作参数传递、从函数里返回。语法是 <code>|参数| 表达式</code>，参数类型通常可以省略，因为编译器会从调用方式推断出来。下面的 <code>add</code> 明确写了类型，而 <code>|n| n * 2</code> 则让编译器从 <code>iter()</code> 产出的元素类型推断出 <code>n</code> 是 <code>&amp;i32</code>。</p>
+<p>闭包最特别的能力是捕获（capture）：它可以引用定义时所在作用域里的变量。<code>let x = 10; let plus_x = |n| n + x;</code> 里的 <code>x</code> 并没有通过参数传进来，而是被闭包「顺手带走」了。捕获的方式取决于闭包体怎么用这个变量：只读就按引用捕获，要修改就按可变引用捕获，要拿走所有权就用 <code>move</code> 关键字。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>闭包像一个随身带着行李的小帮手。普通函数只能用它手里临时的东西，闭包却能把「当时桌上的东西」一起打包带走。迭代器则像一条传送带：你在传送带旁挂上几个工位（map、filter），东西只有被推到最后要用到时才真正加工——这叫惰性求值，好处是不用先造出一堆中间产物。</p>
+
+</div>
+</section>
+<p>下面的程序把三种场景放在一起：一个纯粹的二元闭包、一个捕获了 <code>x</code> 的闭包，以及闭包作为 <code>map</code> 参数的使用。最后一个 <code>collect()</code> 会把迭代器收集成 <code>Vec&lt;i32&gt;</code>，目标类型由变量注释决定。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">12 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let add = |a: i32, b: i32| a + b;</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    println!(&quot;3 + 4 = {}&quot;, add(3, 4));</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let x = 10;</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let plus_x = |n: i32| n + x;</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    println!(&quot;5 + x = {}&quot;, plus_x(5));</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    let nums = [1, 2, 3];</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let doubled: Vec&lt;i32&gt; = nums.iter().map(|n| n * 2).collect();</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    println!(&quot;{doubled:?}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">}</code></div></div></div>
+<p>闭包的类型是编译器为它匿名生成的，你写不出「闭包的类型名」。正因如此，接收闭包的函数必须写成泛型 <code>F: Fn...</code>，而不能写具体类型。这也是理解下一节三个 trait 的入口。</p>
+<p>编译器推断闭包参数类型的方式很实用：第一次调用时看到你传了整数，就确定参数是整数；如果一直不调用、上下文也没有类型信息，它就会报错，这时给参数补上类型即可。另外，<code>move</code> 关键字不只是「把变量搬进闭包」的语法糖——在把闭包交给另一个线程时，它几乎是必需的，因为新线程的生命周期可能超过当前栈帧，闭包不能依赖对局部变量的借用。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-按-怎么用-分类">7.2 Fn、FnMut、FnOnce：按「怎么用」分类</h2>
+<p>Rust 用三个 trait 描述闭包能怎样被调用，它们的约束强度依次递减：Fn 最宽松（可以重复调用，不消耗任何东西），FnMut 次之（可以重复调用，但需要可变引用来修改状态），FnOnce 最弱（只能调用一次，因为会消耗捕获的值）。</p>
+<table>
+<thead>
+<tr>
+<th>trait</th>
+<th>调用次数</th>
+<th>对捕获值的操作</th>
+<th>典型例子</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Fn</code></td>
+<td>任意多次</td>
+<td>只读借用</td>
+<td><code>|| x</code>，<code>|a, b| a + b</code></td>
+</tr>
+<tr>
+<td><code>FnMut</code></td>
+<td>任意多次</td>
+<td>可变借用、修改状态</td>
+<td>计数器 <code>|| { count += 1; count }</code></td>
+</tr>
+<tr>
+<td><code>FnOnce</code></td>
+<td>仅一次</td>
+<td>取得所有权并消耗</td>
+<td><code>move || drop(s)</code></td>
+</tr>
+</tbody></table>
+
+<p>这套分类的价值在于：函数在签名里声明 <code>F: Fn</code>，就向调用方保证「我不会拿走你的闭包，也不会修改它」；声明 <code>F: FnMut</code> 则需要把闭包声明成 <code>mut</code>。如果参数写成 <code>F: FnOnce</code>，调用函数时闭包本身会被消耗掉——它最适合那些「只跑一次」的回调场景。</p>
+<p>三者之间是包含关系：所有 <code>Fn</code> 闭包都自动是 <code>FnMut</code>，所有 <code>FnMut</code> 又都是 <code>FnOnce</code>。所以写 <code>F: FnOnce</code> 是对调用方最宽松的约束（几乎任何闭包都能传进来），而写 <code>F: Fn</code> 最严格。设计 API 时有个实用原则：按「你实际需要的最弱能力」来选——只要调用一次就够，就别要求 <code>Fn</code>；这样调用方能传进来的闭包类型更多。</p>
+<p>下面的程序分别写了三个接收者。<code>call_mut</code> 的形参必须写 <code>mut f</code>，否则调用 <code>f()</code> 时会报「不可变地借用可变闭包」的错误。<code>call_once</code> 里用 <code>move</code> 把 <code>String</code> 的所有权移进闭包，闭包被调用后 <code>s</code> 就被 drop 了。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">25 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn call_once&lt;F: FnOnce() -&gt; i32&gt;(f: F) -&gt; i32 {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    f()</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn call_mut&lt;F: FnMut() -&gt; i32&gt;(mut f: F) -&gt; i32 {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    f()</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">fn call&lt;F: Fn() -&gt; i32&gt;(f: F) -&gt; i32 {</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    f()</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    let s = String::from(&quot;hello&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    println!(&quot;FnOnce: {}&quot;, call_once(move || s.len() as i32));</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    let mut count = 0;</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    println!(&quot;FnMut: {}&quot;, call_mut(|| {</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        count += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        count</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    }));</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    let x = 7;</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    println!(&quot;Fn: {}&quot;, call(|| x));</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">}</code></div></div></div>
+<p>如果忘记给 <code>call_mut</code> 的 <code>f</code> 加 <code>mut</code>，会看到这样的报错（示意输出）：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main</code></div>
+<div class="cl is-text"><code class="code">error[E0596]: cannot borrow `f` as mutable, as it is not declared as mutable</code></div>
+<div class="cl is-text"><code class="code"> --&gt; main.rs:2:5</code></div>
+<div class="cl is-text"><code class="code">  |</code></div>
+<div class="cl is-text"><code class="code">2 |     f();</code></div>
+<div class="cl is-text"><code class="code">  |     ^ cannot borrow as mutable</code></div>
+<div class="cl is-text"><code class="code">help: consider changing this to be mutable</code></div>
+<div class="cl is-text"><code class="code">  |</code></div>
+<div class="cl is-text"><code class="code">1 | fn call_mut&lt;F: FnMut() -&gt; i32&gt;(mut f: F) -&gt; i32 {</code></div>
+<div class="cl is-text"><code class="code">  |                                 +++</code></div></div></div>
+<h2 id="rust-ch01-closures-and-iterators-7-3-迭代器-惰性求值的数据流">7.3 迭代器：惰性求值的数据流</h2>
+<p>迭代器（iterator）是对「一串可以逐个取出的值」的抽象。它的核心只有一个方法 <code>next()</code>，返回 <code>Option&lt;Item&gt;</code>——有元素就给 <code>Some(值)</code>，取完了给 <code>None</code>。<code>for</code> 循环其实就是迭代器的语法糖：<code>for x in v</code> 会把 <code>v</code> 转成迭代器，反复调用 <code>next()</code> 直到结束。</p>
+<p>迭代器最重要的性质是惰性（lazy）：光创建它不会做任何计算，只有真正调用 <code>next()</code>（或者被 <code>collect</code>、<code>sum</code> 这类消费器驱动）时才逐步产出值。这意味着你可以把多个步骤串成一条流水线，而中间结果不需要先存成完整的 <code>Vec</code>，既省内存又能早停。</p>
+<p>下面的程序先算一个「偶数平方和」，链上 <code>filter</code> 和 <code>map</code>，最后由 <code>sum()</code> 消费。第二半段用一个带打印的 <code>map</code> 演示惰性：创建之后什么都没打印，直到调用 <code>next()</code> 才看到输出。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let nums = [1, 2, 3, 4, 5, 6];</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let result: i32 = nums</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        .iter()</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        .filter(|&amp;&amp;n| n % 2 == 0)</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        .map(|&amp;n| n * n)</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        .sum();</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;偶数平方和 = {result}&quot;);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let mut lazy = nums.iter().map(|n| {</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        println!(&quot;正在计算 {n}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        n * 2</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    });</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    println!(&quot;此刻还没有任何计算发生&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    println!(&quot;第一个结果: {:?}&quot;, lazy.next());</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">}</code></div></div></div>
+<p>注意 <code>iter()</code> 产出的是引用 <code>&amp;i32</code>，所以 <code>filter</code> 的闭包收到 <code>&amp;&amp;i32</code>、<code>map</code> 的闭包收到 <code>&amp;i32</code>。用 <code>|&amp;n|</code> 这样的模式可以把引用解构掉，直接拿到值。如果你拿到的是迭代器本身而不是切片，比如 <code>.into_iter()</code> 产出的是 <code>i32</code>，闭包参数就不用带 <code>&amp;</code> 了。三种常见入口的区别值得记牢：<code>iter()</code> 借用集合，<code>iter_mut()</code> 可变借用（可以原地修改元素），<code>into_iter()</code> 消耗集合、把所有权逐个交出。选哪个取决于你之后还想不想继续使用原集合。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-4-适配器-map-filter-fold">7.4 适配器：map、filter、fold</h2>
+<p>适配器（adapter）是「接收一个迭代器、返回另一个迭代器」的方法，可以无限串联。<code>map</code> 做一对一转换，<code>filter</code> 按条件保留元素，<code>take(n)</code> 只取前 n 个，<code>enumerate()</code> 给元素配上下标。它们都是惰性的，不会立即遍历数据。</p>
+<p><code>fold</code> 则是消费器：它带一个初始累加值，把闭包依次应用到每个元素上，最后返回累加结果。下面的程序用 <code>fold</code> 实现字符串拼接，同时演示 <code>take</code> 和 <code>enumerate</code> 的惰性链条。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let nums = [1, 2, 3, 4, 5];</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let txt = nums</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        .iter()</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        .take(3)</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        .map(|n| n.to_string())</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        .fold(String::from(&quot;结果:&quot;), |acc, n| {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">            format!(&quot;{acc} {n}&quot;)</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        });</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    println!(&quot;{txt}&quot;);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    for (i, n) in nums.iter().enumerate() {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        println!(&quot;下标 {i} -&gt; 值 {n}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">}</code></div></div></div>
+<p>这里要提醒一点：<code>fold</code> 的闭包里用 <code>format!</code> 每次生成新字符串，数据量很大时会有额外分配。追求性能时可以改成可变累加器，或者用 <code>write!</code> 直接写入 <code>String</code>。这属于优化层面的考虑，初学阶段先用最直观的写法把逻辑写对更重要。先跑通，再优化，永远是比较稳妥的顺序。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-5-collect-与类型推断">7.5 collect 与类型推断</h2>
+<p><code>collect()</code> 把迭代器收集成集合，是迭代器世界里最常用的「出口」。它之所以能工作，是因为 <code>FromIterator</code> trait：<code>Vec</code>、<code>BTreeSet</code>、<code>HashMap</code> 等类型都实现了它，知道怎么从一个迭代器构造自己。正因为如此，<code>collect()</code> 的返回类型必须由上下文给出——变量注释、函数返回值或后续用法都可以，但如果完全没有类型信息，编译器就会报错。</p>
+<p>下面的程序把同一组单词分别收集成 <code>Vec</code>、<code>BTreeSet</code> 和 <code>HashMap</code>。注意 <code>Vec&lt;usize&gt;</code> 的注释是必需的；而 <code>BTreeSet</code> 会自动去重；<code>HashMap</code> 的构造稍微特殊，这里用 <code>entry</code> API 手动统计词频，展示迭代器与常规写法的配合。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::collections::{BTreeSet, HashMap};</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let words = [&quot;rust&quot;, &quot;go&quot;, &quot;rust&quot;, &quot;c&quot;];</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let lens: Vec&lt;usize&gt; = words.iter().map(|w| w.len()).collect();</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    println!(&quot;长度列表 {lens:?}&quot;);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    let unique: BTreeSet&lt;&amp;str&gt; = words.iter().copied().collect();</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    println!(&quot;去重后 {unique:?}&quot;);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let mut counts: HashMap&lt;&amp;str, i32&gt; = HashMap::new();</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    for &amp;w in &amp;words {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        *counts.entry(w).or_insert(0) += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    println!(&quot;词频 {counts:?}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">}</code></div></div></div>
+<p><code>collect()</code> 还有一个进阶用法：如果迭代器的元素本身是 <code>Result&lt;T, E&gt;</code>，你可以把它收集成 <code>Result&lt;Vec&lt;T&gt;, E&gt;</code>——遇到第一个 <code>Err</code> 就整体失败，否则得到装满成功值的向量。这在「批量解析、任一失败就报错」的场景里非常顺手，因为类型系统会自动帮你把错误冒泡出来。</p>
+<p>什么时候该用迭代器、什么时候写普通循环？一个简单判断：如果是在「对一串数据做连续的变换和筛选」，迭代器链通常更短、更不容易写出边界错误；如果逻辑里充满了提前返回、复杂状态机或需要修改多个外部变量，<code>for</code> 循环往往更清晰。两者不是高低之分，而是工具箱里的不同工具。迭代器链会消耗原始迭代器，收集完想再用一遍，记得重新调用 <code>iter()</code> 建一条新链，不能直接拿旧链重复收集。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>闭包捕获环境变量时，Fn、FnMut、FnOnce 分别意味着什么？</li>
+<li>为什么说迭代器是惰性的，<code>map</code> 之后不调用 <code>collect</code> 会发生什么？</li>
+<li><code>iter()</code>、<code>iter_mut()</code>、<code>into_iter()</code> 三者的区别是什么？</li>
+<li><code>collect()</code> 为什么经常需要写变量类型注释？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__structs-traits-and-generics.md.html">← 结构体、trait 与泛型</a><a href="rust__chapters__ch02__cargo-workspace-and-features.md.html">Cargo workspace 与 feature 工程化 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

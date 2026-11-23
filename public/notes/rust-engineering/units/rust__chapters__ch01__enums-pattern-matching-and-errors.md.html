@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枚举、模式匹配与错误处理</title>
+<meta name="description" content="第 5 单元 · 建议 60 分钟 · 用类型把「可能出错」这件事说清楚">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">枚举、模式匹配与错误处理</h1><p class="doc-sub">第 5 单元 · 建议 60 分钟 · 用类型把「可能出错」这件事说清楚</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 05-enums-pattern-matching-and-errors.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-enums-pattern-matching-and-errors-5-1-枚举-把状态变成类型">5.1 枚举：把状态变成类型</a></li><li class="toc-l2"><a href="#rust-ch01-enums-pattern-matching-and-errors-5-2-option-与-result-标准库里的两个明">5.2 Option 与 Result：标准库里的两个明星枚举</a></li><li class="toc-l2"><a href="#rust-ch01-enums-pattern-matching-and-errors-5-3-match-穷尽检查是最大的保护">5.3 match：穷尽检查是最大的保护</a></li><li class="toc-l2"><a href="#rust-ch01-enums-pattern-matching-and-errors-5-4-if-let-与-let-else-只关心一种情">5.4 if let 与 let else：只关心一种情况</a></li><li class="toc-l2"><a href="#rust-ch01-enums-pattern-matching-and-errors-5-5-运算符与自定义错误">5.5 ? 运算符与自定义错误</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>会定义带数据的枚举，理解它为什么比一堆布尔标志更安全</li>
+<li>熟练使用 <code>Option</code>、<code>Result</code> 与 <code>match</code>，享受编译器的穷尽检查</li>
+<li>知道 <code>if let</code> 与 <code>let else</code> 各自适合什么场合</li>
+<li>理解 <code>?</code> 如何传播错误，并能用「自定义错误枚举」的思路组织错误类型</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-enums-pattern-matching-and-errors-5-1-枚举-把状态变成类型">5.1 枚举：把状态变成类型</h2>
+<p>很多语言用一组布尔变量或整数常量表示状态：是不是在加载、加载成功了没有、失败的原因是什么。问题是这些标志可能同时为「真」，也可能全都漏掉，非法状态在类型系统里畅通无阻。Rust 的枚举（enum）把每一种可能的状态变成类型的变体（variant），一个值只能是其中一个变体，非法状态从源头就不存在。</p>
+<p>枚举的变体可以带数据，而且形式灵活：可以像 <code>Running(u32)</code> 那样带一个元组，可以像 <code>Done { code: i32 }</code> 那样带命名字段，也可以像 <code>Pending</code> 那样什么都不带。这让枚举同时承担了「状态」和「状态附带信息」两件事，不需要再额外维护几个可能不同步的变量。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>枚举像一个带标签的抽屉柜。每个抽屉上贴着不同的标签，有的抽屉是空的，有的里面装着东西。你从外面一眼就知道拿的是哪个抽屉，不可能出现「一半是 A 一半是 B」的怪东西。模式匹配就是打开抽屉取东西的动作——标签对上了才能取，取到的东西类型也确定。</p>
+
+</div>
+</section>
+<p>从内存角度看，枚举占用空间的大小由「最大的变体」加上一个用于区分变体的标签决定。比如上面的 <code>Status</code>，因为要容纳 <code>u32</code> 和带字段的结构，它的大小至少跟最大的那个变体相当。Rust 会做布局优化，但核心思想不变：用一份空间表达多种可能，且任何时刻只有一种可能成立。</p>
+<p>下面的程序定义了一个任务状态枚举，并用 <code>match</code> 给每个变体生成描述。<code>match</code> 的每一条分支叫一个「匹配臂」，用 <code>=&gt;</code> 连接模式和结果。这里用 <code>&amp;Status</code> 作为输入，匹配臂里的 <code>p</code> 和 <code>code</code> 会被自动解引用绑定，不需要手动写 <code>*p</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">24 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">enum Status {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    Pending,</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    Running(u32),</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    Done { code: i32 },</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">fn describe(s: &amp;Status) -&gt; String {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    match s {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        Status::Pending =&gt; &quot;等待中&quot;.to_string(),</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        Status::Running(p) =&gt; format!(&quot;运行中，进度 {p}%&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        Status::Done { code } =&gt; format!(&quot;完成，退出码 {code}&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let items = [</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        Status::Pending,</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        Status::Running(42),</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        Status::Done { code: 0 },</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    ];</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    for item in &amp;items {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">        println!(&quot;{}&quot;, describe(item));</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">}</code></div></div></div>
+<h2 id="rust-ch01-enums-pattern-matching-and-errors-5-2-option-与-result-标准库里的两个明">5.2 Option 与 Result：标准库里的两个明星枚举</h2>
+<p>Rust 没有 null。表示「可能没有」用标准库的 <code>Option&lt;T&gt;</code>，它只有两个变体：<code>Some(T)</code> 和 <code>None</code>。表示「可能失败」用 <code>Result&lt;T, E&gt;</code>，变体是 <code>Ok(T)</code> 和 <code>Err(E)</code>。它们本质就是普通枚举，编译器对它们一视同仁，没有任何魔法——但整个标准库和社区生态都围绕它们建立了统一的约定，所以你几乎到处都会遇到。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>变体</th>
+<th>表达的含义</th>
+<th>常见操作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Option&lt;T&gt;</code></td>
+<td><code>Some(T)</code> / <code>None</code></td>
+<td>可能有一个值，也可能没有</td>
+<td><code>unwrap_or</code>、<code>map</code>、<code>as_ref</code></td>
+</tr>
+<tr>
+<td><code>Result&lt;T, E&gt;</code></td>
+<td><code>Ok(T)</code> / <code>Err(E)</code></td>
+<td>可能成功，可能带着错误信息失败</td>
+<td><code>?</code>、<code>map_err</code>、<code>unwrap_or_else</code></td>
+</tr>
+</tbody></table>
+
+<p>为什么不用异常？因为异常让控制流变得隐式：一个函数会不会抛异常，光看签名常常看不出来。<code>Result</code> 把「会失败」写进返回类型，调用方必须面对它——要么处理，要么显式地 <code>unwrap</code>（意为「我确信不会失败，崩了算我的」）。这种「错误是值」的设计，让错误处理成为可静态检查的普通代码。</p>
+<p><code>Option</code> 和 <code>Result</code> 还能互相配合。比如在一个返回 <code>Option</code> 的函数里调用返回 <code>Result</code> 的操作，可以用 <code>.ok()</code> 把 <code>Result</code> 转成 <code>Option</code>，失败就变成 <code>None</code>；反过来 <code>Option</code> 也可以用 <code>ok_or</code> 转成 <code>Result</code>，并附带一个自定义错误。这种转换是标准库里大量存在的小工具，用熟了能少写很多 <code>match</code>。</p>
+<h2 id="rust-ch01-enums-pattern-matching-and-errors-5-3-match-穷尽检查是最大的保护">5.3 match：穷尽检查是最大的保护</h2>
+<p><code>match</code> 最有价值的地方不是「分支」，而是穷尽检查（exhaustiveness）：编译器会验证你有没有覆盖枚举的所有变体，漏掉一个就拒绝编译。这意味着将来给枚举新增一个变体时，所有 <code>match</code> 它的地方都会立刻报错，逼你逐个确认新情况该怎么处理——而不是等到线上遇上新状态才发现没写对应逻辑。</p>
+<p>当然，你也可以写一条 <code>_ =&gt; ...</code> 通配符分支来兜底，但那等于主动放弃穷尽检查。它适合「确实有几十种情况、只有少数需要特殊处理」的场合；如果枚举只有三五个变体，老老实实逐个写出来，未来新增变体时编译器才会提醒你。这个提醒的价值，往往超过省下那几行代码。</p>
+<p>如果漏写一个分支，报错大致如下（示意输出）：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main</code></div>
+<div class="cl is-text"><code class="code">error[E0004]: non-exhaustive patterns: `Status::Running(_)` and</code></div>
+<div class="cl is-text"><code class="code">  `Status::Done { .. }` not covered</code></div>
+<div class="cl is-text"><code class="code"> --&gt; main.rs:6:11</code></div>
+<div class="cl is-text"><code class="code">  |</code></div>
+<div class="cl is-text"><code class="code">6 |     match s {</code></div>
+<div class="cl is-text"><code class="code">  |           ^ patterns `Status::Running(_)` and `Status::Done { .. }`</code></div>
+<div class="cl is-text"><code class="code">  |             not covered</code></div>
+<div class="cl is-text"><code class="code">  = note: the matched value is of type `Status`</code></div></div></div>
+<p>下面的程序演示了 <code>Result</code> 的典型用法：解析端口字符串。这里用 <code>map_err</code> 把标准库的解析错误转换成自己的描述字符串，再用 <code>?</code> 提前返回（下一节细讲）。返回类型写成 <code>Result&lt;u16, String&gt;</code>，调用方只要 <code>match</code> 一下就能同时拿到成功值和失败原因。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">19 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn parse_port(s: &amp;str) -&gt; Result&lt;u16, String&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let n = s</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">        .parse::&lt;u16&gt;()</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        .map_err(|e| format!(&quot;解析失败: {e}&quot;))?;</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    if n == 0 {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        Err(&quot;端口不能为 0&quot;.to_string())</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    } else {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        Ok(n)</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    match parse_port(&quot;8080&quot;) {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        Ok(p) =&gt; println!(&quot;端口 {p}&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        Err(e) =&gt; println!(&quot;错误: {e}&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    let opt = Some(7);</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    println!(&quot;缺失时取默认值: {}&quot;, opt.unwrap_or(0));</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">}</code></div></div></div>
+<h2 id="rust-ch01-enums-pattern-matching-and-errors-5-4-if-let-与-let-else-只关心一种情">5.4 if let 与 let else：只关心一种情况</h2>
+<p>有时候你只想处理 <code>match</code> 里的某一种分支，其他情况一概忽略。这时 <code>if let</code> 更简洁：<code>if let Some(n) = opt { ... }</code> 读作「如果 opt 恰好是 Some，就把里面的值绑成 n」。它等价于一个只有一条有效分支、其他分支写 <code>_ =&gt; ()</code> 的 <code>match</code>，但省掉了噪音。</p>
+<p><code>let else</code> 则解决相反的需求：先解开一个模式，解不开就提前返回或跳出。写法是 <code>let Some(n) = opt else { return; };</code>，注意 <code>else</code> 块里的代码必须以发散表达式（如 <code>return</code>、<code>break</code>、<code>panic!</code>）结尾，因为类型系统要求它在模式匹配失败时也能「走下去」——而它选择的是直接不往下走。这个语法从 Rust 1.65 起稳定可用。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">24 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn first_even(v: &amp;[i32]) -&gt; Option&lt;i32&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    for &amp;x in v {</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">        if x % 2 == 0 {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">            return Some(x);</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    None</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    let nums = [1, 3, 4, 5];</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    if let Some(n) = first_even(&amp;nums) {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        println!(&quot;第一个偶数是 {n}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    } else {</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        println!(&quot;没有偶数&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    let nums2 = [1, 3, 5];</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    let Some(n) = first_even(&amp;nums2) else {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        println!(&quot;确实没有偶数&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">        return;</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    };</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    println!(&quot;居然有偶数 {n}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">}</code></div></div></div>
+<p>选择建议是：需要覆盖所有分支时用 <code>match</code>，只关心一种时用 <code>if let</code>，「拿不到就尽早退出」时用 <code>let else</code>。三者不是替代关系，而是同一套模式匹配能力在不同场景下的表达。</p>
+<table>
+<thead>
+<tr>
+<th>写法</th>
+<th>适合场景</th>
+<th>能否处理其他分支</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>match</code></td>
+<td>枚举变体都要分别处理</td>
+<td>能，且强制穷尽</td>
+</tr>
+<tr>
+<td><code>if let</code></td>
+<td>只关心某一种情况</td>
+<td>可选 <code>else</code></td>
+</tr>
+<tr>
+<td><code>let else</code></td>
+<td>匹配失败就提前退出</td>
+<td>失败时必须发散</td>
+</tr>
+</tbody></table>
+
+<p>一个容易踩的坑是 <code>if let</code> 的「遮蔽」错觉：模式里的变量名只在成功分支里有效，出了大括号就消失了。如果你需要在后面继续用，记得在分支里把它赋给一个更外层的变量，或者干脆改用 <code>match</code>。</p>
+<h2 id="rust-ch01-enums-pattern-matching-and-errors-5-5-运算符与自定义错误">5.5 ? 运算符与自定义错误</h2>
+<p><code>?</code> 只能用在返回 <code>Option</code> 或 <code>Result</code> 的函数里。它检查当前值：如果是 <code>Ok</code>，就把里面的值取出来继续；如果是 <code>Err</code>，就立刻从当前函数返回那个错误。这样你就不用层层写 <code>match</code>，错误会沿着调用链自动向上冒泡。<code>?</code> 还带有自动类型转换：只要错误类型之间定义了 <code>From</code> 转换，它就能帮你转好。</p>
+<p>下面的例子用标准库的 <code>ParseIntError</code> 作为错误类型，演示一次解析两个整数。<code>split(&#39;,&#39;)</code> 把字符串切开，<code>?</code> 在任一次解析失败时立即返回，调用方用 <code>match</code> 统一处理。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::num::ParseIntError;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn parse_pair(s: &amp;str) -&gt; Result&lt;(i32, i32), ParseIntError&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let mut parts = s.split(',');</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let a = parts.next().unwrap_or(&quot;&quot;).trim().parse::&lt;i32&gt;()?;</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let b = parts.next().unwrap_or(&quot;&quot;).trim().parse::&lt;i32&gt;()?;</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    Ok((a, b))</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    match parse_pair(&quot;3, 4&quot;) {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        Ok((a, b)) =&gt; println!(&quot;a={a}, b={b}&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        Err(e) =&gt; println!(&quot;出错: {e}&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">}</code></div></div></div>
+<p>写错误处理时有个实用原则：在底层保留足够的错误细节，在靠近用户的一层再把它翻译成人话。底层直接 <code>unwrap</code> 会让调用方失去判断的依据，而把所有错误都压成一句「操作失败」又丢掉了排查线索，两头都不是好选择。</p>
+<p>实际项目里，你往往需要自己的错误类型，把「文件读不到」「配置格式错」「网络超时」这些不同原因归到一个枚举里。手写时要为它实现 <code>Display</code> 和 <code>std::error::Error</code>，还要为底层错误实现 <code>From</code>，样板代码不少。社区里的 thiserror 思路正是为此而生：用派生宏自动帮你生成这些实现，你只要写出错误枚举和每个变体上的提示文本即可。这里只讲思路，不引入任何外部 crate——你完全可以先手写一个简化版体会其中的结构，等项目真的复杂起来再考虑用宏省事。</p>
+<p>最后提醒一个度的问题：<code>unwrap()</code> 和 <code>expect()</code> 在示例和测试里很方便，但在可能失败的生产路径上滥用，等于把错误又变回了「运行时崩溃」。能用 <code>?</code> 传上去就传上去，让错误在最有上下文的那一层被解释和处理。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>枚举相比一组布尔标志，安全性体现在哪里？</li>
+<li><code>match</code> 的穷尽检查在你新增变体时会带来什么好处？</li>
+<li><code>?</code> 在 <code>Ok</code> 和 <code>Err</code> 两种情况下分别做什么？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__lifetimes.md.html">← 生命周期</a><a href="rust__chapters__ch01__structs-traits-and-generics.md.html">结构体、trait 与泛型 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

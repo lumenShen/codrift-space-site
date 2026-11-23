@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>测试与文档工程</title>
+<meta name="description" content="第 10 单元 · 建议 60 分钟 · 用分层测试守住行为边界，让文档成为可执行的契约">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">测试与文档工程</h1><p class="doc-sub">第 10 单元 · 建议 60 分钟 · 用分层测试守住行为边界，让文档成为可执行的契约</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 10-testing-and-documentation.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-testing-and-documentation-10-1-测试分层-单元-集成与文档测试">10.1 测试分层：单元、集成与文档测试</a></li><li class="toc-l2"><a href="#rust-ch02-testing-and-documentation-10-2-assert-宏与表驱动测试">10.2 assert 宏与表驱动测试</a></li><li class="toc-l2"><a href="#rust-ch02-testing-and-documentation-10-3-可见性-目录约定与测试成本">10.3 可见性、目录约定与测试成本</a></li><li class="toc-l2"><a href="#rust-ch02-testing-and-documentation-10-4-rustdoc-与文档注释">10.4 rustdoc 与文档注释</a></li><li class="toc-l2"><a href="#rust-ch02-testing-and-documentation-10-5-基准测试概念与边界">10.5 基准测试概念与边界</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能区分单元测试、集成测试与文档测试各自能看见什么，并据此决定测试放在哪里</li>
+<li>能用表驱动测试压缩重复用例，合理选择 assert 宏与 should_panic</li>
+<li>能写出规范的文档注释，让 rustdoc 中的示例被自动执行</li>
+<li>理解基准测试与功能测试的目的差异，知道何时不该引入基准测试</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-testing-and-documentation-10-1-测试分层-单元-集成与文档测试">10.1 测试分层：单元、集成与文档测试</h2>
+<p>Rust 的测试天然分成三层，区别不在写法而在「可见性」。单元测试和被测试代码放在同一个文件里，通过 <code>#[cfg(test)]</code> 模块引入，能访问私有实现；集成测试放在包根目录的 <code>tests/</code> 下，每个文件都是独立的 crate，只能调用公开 API；文档测试藏在文档注释的代码片段里，由 rustdoc 编译并运行。</p>
+<p>三层各自解决不同问题。单元测试适合覆盖内部状态机与边界条件，成本最低；集成测试验证「从外部看这个库是否真的好用」，能捕捉公开 API 设计缺陷；文档测试保证示例代码不会随重构悄悄失效。一个常见误区是只写单元测试：它全绿并不代表用户能正确调用你的库。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>单元测试像检查发动机零件，集成测试像试驾，文档测试像照着说明书装家具。零件合格不等于车能开，车能开不等于说明书没写错，三样都过了才算交付。</p>
+
+</div>
+</section>
+<table>
+<thead>
+<tr>
+<th>测试类型</th>
+<th>位置</th>
+<th>可见范围</th>
+<th>主要目标</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>单元测试</td>
+<td>源码文件内的 <code>#[cfg(test)] mod tests</code></td>
+<td>可访问私有项</td>
+<td>算法与边界条件</td>
+</tr>
+<tr>
+<td>集成测试</td>
+<td><code>tests/*.rs</code></td>
+<td>仅公开 API</td>
+<td>跨模块组合与使用体验</td>
+</tr>
+<tr>
+<td>文档测试</td>
+<td>文档注释中的代码块</td>
+<td>仅公开 API</td>
+<td>示例不过期</td>
+</tr>
+</tbody></table>
+
+<p>测试默认并行运行，每个用例都在独立线程上执行。这要求测试之间不共享可变全局状态，也不能依赖执行顺序；需要串行化的场景应当重新设计，而不是靠睡眠碰运气。极少数耗时很长的用例可以标 <code>#[ignore]</code>，让它退出默认集合，再由 <code>cargo test -- --ignored</code> 单独运行。调试失败时用 <code>cargo test -- --nocapture</code> 让 <code>println!</code> 输出不被捕获，往往比反复加断点更快。</p>
+<h2 id="rust-ch02-testing-and-documentation-10-2-assert-宏与表驱动测试">10.2 assert 宏与表驱动测试</h2>
+<p><code>assert_eq!</code> 失败时会同时打印期望值与实际值，<code>assert!</code> 只给出布尔结果，因此比较值一律优先用前者。<code>assert_ne!</code>、<code>matches!</code> 在处理枚举状态时更贴切；预定会失败的用例用 <code>#[should_panic(expected = &quot;片段&quot;)]</code>，expected 写的是 panic 消息的子串，不要依赖完整文本。</p>
+<p>表驱动测试把「输入—期望」放进数组，用一个循环跑完所有用例。好处是新增场景只需加一行，失败信息里还能带上输入，定位速度远快于复制粘贴出的十个测试函数。下面这个例子同时演示了表驱动、<code>assert_eq!</code> 的自定义消息和 should_panic。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">33 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code)]</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn normalize(s: &amp;str) -&gt; String {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    s.trim().to_lowercase()</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">#[cfg(test)]</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">mod tests {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    use super::*;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    #[test]</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    fn trims_and_lowercases() {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        let cases = [</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">            (&quot;  Hello &quot;, &quot;hello&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">            (&quot;RUST&quot;, &quot;rust&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">            (&quot;\tGo\t&quot;, &quot;go&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">            (&quot;&quot;, &quot;&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        ];</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        for (input, want) in cases {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">            assert_eq!(normalize(input), want, &quot;输入: {:?}&quot;, input);</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    #[test]</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    #[should_panic(expected = &quot;boom&quot;)]</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">    fn panic_is_caught() {</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        panic!(&quot;boom&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="30"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    println!(&quot;请用 cargo test 运行测试&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">}</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo test</code></div>
+<div class="cl is-text"><code class="code">running 2 tests</code></div>
+<div class="cl is-text"><code class="code">test tests::trims_and_lowercases ... ok</code></div>
+<div class="cl is-text"><code class="code">test tests::panic_is_caught ... ok</code></div>
+<div class="cl is-text"><code class="code">test result: ok. 2 passed; 0 failed</code></div>
+<div class="cl is-text"><code class="code">（示意输出，计数与耗时随用例变化）</code></div></div></div>
+<p>浮点比较是个常见陷阱：由于精度误差，<code>assert_eq!(0.1 + 0.2, 0.3)</code> 会失败。正确做法是断言差值小于一个明确的 epsilon，或比较近似相等的整数倍。同理，涉及时间与随机数的测试要把「随机源」作为参数注入，才能在测试中传入固定值；否则今天全绿的套件明天就可能随机失败。</p>
+<p>断言要检查真正重要的性质，而不是照抄实现。例如测试排序函数时，断言「结果有序且是原集合的重排」比断言某个固定输出更抗重构；测试缓存时，断言「第二次没有重新计算」比断言最终值更能抓住回归。</p>
+<h2 id="rust-ch02-testing-and-documentation-10-3-可见性-目录约定与测试成本">10.3 可见性、目录约定与测试成本</h2>
+<p><code>tests/</code> 下每个 <code>.rs</code> 文件都会被编译成独立的测试 crate，因此它们之间不共享私有辅助函数；如果需要复用，把公共辅助代码放进 <code>tests/common/mod.rs</code> 并由各测试文件 <code>mod common;</code>。这个细节经常让初学者困惑：直接放在 <code>tests/</code> 根目录的 <code>common.rs</code> 会被当成一个独立的测试目标，而不是模块。</p>
+<p>测试成本也要纳入设计。启动进程、访问网络、依赖真实时钟的测试会拖慢反馈速度，应当限制数量，并保证可重复。把「纯逻辑」和「副作用」分开，让绝大多数用例落在纯逻辑层，是让测试套件长期保持可用的关键。集成测试尽量用临时目录与本地数据，不依赖外部服务状态。</p>
+<p>第三个 rust 块展示集成测试的常见写法：只依赖公开函数，并用 <code>Result</code> 的匹配来断言失败分支。这类测试对重构最友好，因为它不关心内部实现怎么变。</p>
+<p>测试命名也值得投入一点心思。像 <code>parse_positive_rejects_negative</code> 这样的名字能直接说明「被测对象 + 场景 + 期望结果」，失败时无需读代码就知道回归了什么。表驱动用例则应在消息里带上输入，正如前面的例子那样。一个维护良好的测试套件，读测试名就能大致画出模块的公开行为清单，这份清单比过时的设计文档可靠得多。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#[derive(Debug, PartialEq)]</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">pub enum ParseError { Empty, BadNumber }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">pub fn parse_positive(s: &amp;str) -&gt; Result&lt;u32, ParseError&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let t = s.trim();</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    if t.is_empty() { return Err(ParseError::Empty); }</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    t.parse::&lt;u32&gt;().map_err(|_| ParseError::BadNumber)</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">#[cfg(test)]</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">mod tests {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    use super::*;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    #[test]</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    fn public_api_contract() {</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        assert_eq!(parse_positive(&quot; 42 &quot;), Ok(42));</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        assert!(matches!(parse_positive(&quot;&quot;), Err(ParseError::Empty)));</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        assert!(matches!(parse_positive(&quot;-1&quot;), Err(ParseError::BadNumber)));</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">fn main() { println!(&quot;集成测试只需看到 parse_positive 与 ParseError&quot;); }</code></div></div></div>
+<h2 id="rust-ch02-testing-and-documentation-10-4-rustdoc-与文档注释">10.4 rustdoc 与文档注释</h2>
+<p>文档注释用 <code>///</code>，面向库的读者；普通注释用 <code>//</code>，面向维护者。rustdoc 会把 Markdown 渲染成网页，并把文档注释里的代码块当作文档测试执行。这意味着示例不是装饰，而是会被 CI 验证的契约：API 改名后，示例代码编译失败会直接让测试套件变红。</p>
+<p>好的模块文档先回答「这个模块解决什么问题」，再给出最小可运行示例，最后说明不适用场景。函数文档则写清参数含义、边界条件、失败方式与复杂度。值得注意的是 panic 与 unsafe 的文档义务：可能 panic 的函数应说明触发条件，unsafe 函数必须有 <code># Safety</code> 段落描述调用契约。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code)]</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">/// 把摄氏度转换为华氏度。</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">///</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">/// 公式为 `F = C * 9 / 5 + 32`。调用方需保证输入处于合理物理范围，</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">/// 本函数不做校验，也不处理非有限数。</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">///</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">/// 语义示例：`c_to_f(100.0)` 返回 `212.0`。</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">pub fn c_to_f(c: f64) -&gt; f64 {</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    c * 9.0 / 5.0 + 32.0</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    println!(&quot;100C = {}F&quot;, c_to_f(100.0));</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">}</code></div></div></div>
+<p><code>cargo doc --no-deps --open</code> 只构建当前项目的文档，适合本地检查排版；<code>cargo test --doc</code> 单独运行文档测试。CI 里两者都应执行：前者保障可读性，后者保障示例正确性。</p>
+<p>文档结构也有惯例可循：<code># Examples</code> 给出可运行示例，<code># Panics</code> 说明触发 panic 的条件，<code># Errors</code> 列出可能的失败与含义，<code># Safety</code> 则专属于 unsafe 函数。rustdoc 支持用 <code>[</code>Type<code>]</code> 这样的 intra-doc 链接指向其他项目，让类型说明互相可达。写出这类文档的成本不高，但它把「读源码才能理解」的隐性知识搬到了公开页面上，对库的采用率影响很大。</p>
+<h2 id="rust-ch02-testing-and-documentation-10-5-基准测试概念与边界">10.5 基准测试概念与边界</h2>
+<p>基准测试回答的是「性能有没有退化」，与功能测试回答的「行为对不对」是两件事。标准库提供 <code>#[bench]</code>，但它只在 nightly 通道可用；稳定版通常借助第三方基准框架，或干脆写独立的可执行程序手工计时。把基准测试与功能测试混在同一条流水线里，容易让耗时波动造成误报，因此基准更适合在专用环境按需运行。</p>
+<ul>
+<li>先有功能测试，再考虑基准；没有正确性保障的性能数字没有意义。</li>
+<li>基准要固定输入规模与编译配置，通常在 release 配置下测量。</li>
+<li>比较的是数量级与趋势，不要追逐个位数百分比的噪声。</li>
+<li>优化前记录基线，优化后在同一台机器上复测，并保留结论文档。</li>
+</ul>
+
+<p>需要强调：基准测试衡量的是「同样输入下耗时是否变化」，它不会告诉你算法是否选对。复杂度高一个数量级的实现，在小输入上可能反而更快；只看单点数字容易得出错误结论。稳妥做法是覆盖多个输入规模，观察增长趋势，并把结论连同硬件与编译配置一起记录。稳定的基准通常借助专门的框架完成统计分析，标准库自带的 nightly 设施只适合了解原理。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>集成测试为什么不能复用另一个集成测试文件里的私有辅助函数？</li>
+<li>文档测试 failing 时说明什么问题？它和功能测试覆盖的维度有何不同？</li>
+<li>为什么说「先有功能测试再谈基准测试」？在什么情况下基准数字是不可信的？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__error-handling-in-practice.md.html">← 错误处理实战</a><a href="rust__chapters__ch02__concurrency-and-async.md.html">并发与异步实战 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

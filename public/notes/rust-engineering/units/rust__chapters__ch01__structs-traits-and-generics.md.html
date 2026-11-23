@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>结构体、trait 与泛型</title>
+<meta name="description" content="第 6 单元 · 建议 60 分钟 · 用类型抽象共性，让代码既通用又受约束">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">结构体、trait 与泛型</h1><p class="doc-sub">第 6 单元 · 建议 60 分钟 · 用类型抽象共性，让代码既通用又受约束</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 06-structs-traits-and-generics.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-structs-traits-and-generics-6-1-结构体-给一组数据起名字">6.1 结构体：给一组数据起名字</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-and-generics-6-2-枚举也能有方法">6.2 枚举也能有方法</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-and-generics-6-3-trait-定义行为契约">6.3 trait：定义行为契约</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-and-generics-6-4-泛型与-trait-bound">6.4 泛型与 trait bound</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-and-generics-6-5-orphan-rule-谁能给谁实现-trait">6.5 orphan rule：谁能给谁实现 trait</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>会定义结构体与枚举的方法，理解 <code>impl</code> 块和关联函数的作用</li>
+<li>能定义 trait 并为具体类型实现它，理解 trait 作为「行为契约」的定位</li>
+<li>会写泛型函数与 trait bound，知道编译期单态化意味着什么</li>
+<li>建立 orphan rule 的直觉，知道什么时候能给类型实现 trait</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-structs-traits-and-generics-6-1-结构体-给一组数据起名字">6.1 结构体：给一组数据起名字</h2>
+<p>到目前为止我们用的大多是零散的值。真实项目里，数据往往成组出现：一个点有 x 和 y，一个用户有名字、年龄和邮箱。结构体（struct）把命名字段打包成一个新类型，让「这些字段属于同一个概念」这件事在类型系统里成立。和元组相比，结构体的字段有名字，读代码时不用猜 <code>.0</code> 是什么。</p>
+<p>定义结构体时，字段默认也是私有的（对其他模块而言）——不过在同一个模块里可以直接访问。加 <code>#[derive(Debug)]</code> 让编译器自动实现 <code>Debug</code> trait，这样你就能用 <code>{:?}</code> 打印整个结构体；这是派生宏最常见的一个用途，不需要手写格式化逻辑。<code>derive</code> 不是继承，也不是运行时反射，而是「编译期帮你生成一段实现代码」。</p>
+<p>结构体还有几种变体：元组结构体 <code>struct Point(i32, i32);</code> 没有字段名，适合包装单个值；单元结构体 <code>struct Marker;</code> 没有字段，常用来标记某种状态。当两个结构体大部分字段相同、只有少数不同时，还可以用结构体更新语法 <code>let b = Config { debug: true, ..base };</code> 复用旧值——不过要留意被复用的字段如果是 <code>String</code> 这类没有 <code>Copy</code> 的类型，所有权会被移走，旧结构体就不能整体再用了。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>结构体像一张表格的表头，规定了「每行有哪些列、每列叫什么」。trait 则像一份岗位说明书：它不告诉你这个人长什么样，只规定他必须会做什么。泛型是「先写好模板，等用到的时候再填类型」——像是可调节的模具，倒进去的是铁就是铁件，倒进去的是塑料就是塑料件。</p>
+
+</div>
+</section>
+<p>下面的程序定义了矩形，并在 <code>impl</code> 块里写了三个函数。<code>new</code> 没有 <code>self</code> 参数，是关联函数，用 <code>Rectangle::new(...)</code> 调用，扮演构造器的角色；<code>area</code> 和 <code>can_hold</code> 第一个参数是 <code>&amp;self</code>，是方法，用 <code>big.area()</code> 调用。<code>Self</code> 是 <code>impl</code> 块所针对类型的别名，写 <code>Self { ... }</code> 比重复 <code>Rectangle</code> 更耐改。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">27 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#[derive(Debug)]</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">struct Rectangle {</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    width: u32,</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    height: u32,</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">impl Rectangle {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    fn new(width: u32, height: u32) -&gt; Self {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        Self { width, height }</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    fn area(&amp;self) -&gt; u32 {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        self.width * self.height</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    fn can_hold(&amp;self, other: &amp;Rectangle) -&gt; bool {</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        self.width &gt;= other.width &amp;&amp; self.height &gt;= other.height</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    let big = Rectangle::new(30, 50);</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    let small = Rectangle::new(10, 20);</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    println!(&quot;面积: {}&quot;, big.area());</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    println!(&quot;能否装下: {}&quot;, big.can_hold(&amp;small));</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">    println!(&quot;{big:?}&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">}</code></div></div></div>
+<h2 id="rust-ch01-structs-traits-and-generics-6-2-枚举也能有方法">6.2 枚举也能有方法</h2>
+<p>上一单元定义了枚举，其实枚举同样能写 <code>impl</code> 块。方法内部用 <code>match self</code> 区分变体，为每个变体给出不同实现。这是 Rust 里表达「一组相关但行为不同的东西」的常见手法：与其写一堆散落的 <code>if</code>，不如把行为挂在类型上，让调用方只面对一个统一的方法名。</p>
+<p>下面的程序定义了 <code>Shape</code> 枚举，圆形用半径算面积，矩形用宽高算面积。调用方拿到的是 <code>&amp;Shape</code>，不需要知道内部是哪个变体，只要调用 <code>area()</code> 就好。将来新增三角形时，只需在 <code>match</code> 里补一条分支，编译器会帮你找出所有遗漏的地方。</p>
+<p>一个类型可以有多个 <code>impl</code> 块，只要它们不重复定义同一个方法。项目里常见的组织方式是：把构造器放一个块，把核心行为放一个块，把实现的 trait 各放一个块。这样每个块的职责清晰，读起来比把所有方法塞进一个大块舒服得多。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">enum Shape {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    Circle(f64),</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    Rect(f64, f64),</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">impl Shape {</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    fn area(&amp;self) -&gt; f64 {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        match self {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">            Shape::Circle(r) =&gt; std::f64::consts::PI * r * r,</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">            Shape::Rect(w, h) =&gt; w * h,</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let shapes = [Shape::Circle(2.0), Shape::Rect(3.0, 4.0)];</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    for s in &amp;shapes {</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        println!(&quot;面积 {:.2}&quot;, s.area());</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div></div></div>
+<h2 id="rust-ch01-structs-traits-and-generics-6-3-trait-定义行为契约">6.3 trait：定义行为契约</h2>
+<p>trait 描述「某种类型必须提供哪些能力」。它只给出方法签名，可以把实现留给具体类型；也可以提供默认实现，让实现者按需覆盖。trait 和接口（interface）的概念很像，但 Rust 的 trait 没有运行时查找的开销——调用在编译期就确定下来，这叫静态分发。</p>
+<p>下面的 <code>Summary</code> trait 要求实现者提供 <code>summarize</code>，同时给 <code>author</code> 提供了默认实现。<code>Article</code> 实现它时，只覆盖了 <code>author</code>，沿用了 <code>summarize</code> 之外的默认行为。<code>notify</code> 函数的参数写成 <code>&amp;T</code> 并加上 <code>T: Summary</code> 约束，意思是「任何实现了 Summary 的类型都能传进来」，而函数体内可以放心调用 trait 里的方法。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">33 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">trait Summary {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    fn summarize(&amp;self) -&gt; String;</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    fn author(&amp;self) -&gt; &amp;str {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        &quot;匿名&quot;</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">struct Article {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    title: String,</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    author: String,</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">impl Summary for Article {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    fn summarize(&amp;self) -&gt; String {</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        format!(&quot;《{}》&quot;, self.title)</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    fn author(&amp;self) -&gt; &amp;str {</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        &amp;self.author</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">fn notify&lt;T: Summary&gt;(item: &amp;T) {</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    println!(&quot;新摘要: {} by {}&quot;, item.summarize(), item.author());</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    let a = Article {</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">        title: &quot;Rust 入门&quot;.to_string(),</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">        author: &quot;张三&quot;.to_string(),</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">    };</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    notify(&amp;a);</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">}</code></div></div></div>
+<p>如果忘了给 <code>Article</code> 实现 <code>Summary</code> 却传给 <code>notify</code>，编译器会给出 trait bound 未满足的报错（示意输出）：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main</code></div>
+<div class="cl is-text"><code class="code">error[E0277]: the trait bound `Article: Summary` is not satisfied</code></div>
+<div class="cl is-text"><code class="code">  --&gt; main.rs:24:11</code></div>
+<div class="cl is-text"><code class="code">   |</code></div>
+<div class="cl is-text"><code class="code">24 |     notify(&amp;a);</code></div>
+<div class="cl is-text"><code class="code">   |     ^^^^^ the trait `Summary` is not implemented for `Article`</code></div>
+<div class="cl is-text"><code class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</code></div></div></div>
+<p>这类报错的潜台词总是「你用了泛型接口，但具体类型没满足约束」，按提示补上实现即可。</p>
+<p>默认实现还有一个妙用：它能让 trait 渐进式演进。发布后给 trait 新增一个带默认实现的方法，已有的实现者无需改代码也能继续编译；如果新增的是没有默认实现的方法，所有实现者都会被迫更新。设计公共 API 时，这是个很实际的兼容性考量。trait 也可以作为类型使用（trait object），像 <code>Box&lt;dyn Summary&gt;</code> 这样，代价是运行时动态分发——不过这属于进阶话题，本单元先记住「泛型是编译期确定，dyn 是运行时确定」的区别就够了。</p>
+<h2 id="rust-ch01-structs-traits-and-generics-6-4-泛型与-trait-bound">6.4 泛型与 trait bound</h2>
+<p>泛型让函数或类型摆脱对具体类型的绑定。下面的 <code>largest</code> 接受任意类型的切片，返回其中最大的元素。<code>T: PartialOrd + Copy</code> 是 trait bound：前者保证值之间能用 <code>&gt;</code> 比较，后者保证按值返回时是复制而不是 move（如果换成 <code>String</code> 这种没有 <code>Copy</code> 的类型，函数体里的 <code>best = item</code> 就会触发所有权问题）。多个约束用 <code>+</code> 连接。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn largest&lt;T: PartialOrd + Copy&gt;(list: &amp;[T]) -&gt; T {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let mut best = list[0];</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    for &amp;item in list {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        if item &gt; best {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">            best = item;</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    best</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    println!(&quot;最大整数 {}&quot;, largest(&amp;[1, 9, 3]));</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    println!(&quot;最大字符 {}&quot;, largest(&amp;['a', 'z', 'm']));</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">}</code></div></div></div>
+<p>泛型在运行时没有额外开销：编译器会为用到的每种具体类型生成一份 specialized 代码，这叫单态化（monomorphization）。代价是编译时间变长、生成物变大，但运行时和普通代码一样快。这和某些语言用装箱、虚表实现的泛型不同——理解这一点，你就明白为什么 Rust 社区把泛型称为零成本抽象。</p>
+<p>泛型不只属于函数，结构体和枚举也能带泛型参数，比如标准库的 <code>Vec&lt;T&gt;</code> 和 <code>Option&lt;T&gt;</code>。定义 <code>struct Wrapper&lt;T&gt; { value: T }</code> 后，特定实例的类型就写成 <code>Wrapper&lt;i32&gt;</code>。调用泛型函数时，类型参数通常由编译器推断，但偶尔需要显式指定，写法是 <code>largest::&lt;i32&gt;(&amp;v)</code>——两个连续冒号加尖括号，社区里戏称「涡轮鱼」（turbofish）。</p>
+<p>trait bound 也可以写在 <code>where</code> 子句里，当约束较多时可读性更好，例如 <code>fn f&lt;T&gt;(x: T) where T: Summary + Clone { }</code>。两种写法语义相同，纯粹是排版选择。真正要留意的是约束的松紧：要求越多，函数能接受的类型越少，但函数体内能用的能力也越多。按需加约束，是泛型设计的基本功。</p>
+<h2 id="rust-ch01-structs-traits-and-generics-6-5-orphan-rule-谁能给谁实现-trait">6.5 orphan rule：谁能给谁实现 trait</h2>
+<p>Rust 有一条 orphan rule（孤儿规则）：实现 <code>impl Trait for Type</code> 时，trait 和类型至少有一个必须定义在你自己的 crate 里。换句话说，你不能给外部库的类型实现外部库的 trait。这条规则的目的，是保证任意两个 trait 实现不会「撞车」——如果大家都去给 <code>String</code> 实现外部的 <code>Display</code>，编译器就不知道该选哪一个。</p>
+<p>直觉上可以这样记：trait 和类型就像插头和插座，至少有一头是你家生产的，你才能合法地接线。想给第三方类型加能力，常见做法是定义一个自己的新类型把它包起来（newtype 模式），再为这个新类型实现 trait；反之，想给自己的类型加上第三方 trait 的能力，直接实现即可。</p>
+<p>举个具体场景：你用外部库提供的 <code>Point</code>，又想让它支持自己定义的 <code>Printable</code> trait。因为 trait 是你自己的，可以直接写 <code>impl Printable for Point</code>。但如果是外部库的 trait 和外部库的类型，你就得包一层 <code>struct MyPoint(Point);</code>，再为 <code>MyPoint</code> 实现那个 trait。多写这一层看似麻烦，却换来了「实现不会在互不知晓的两个库之间冲突」的确定性。</p>
+<p>struct、enum、trait、泛型四者各有分工，用一张表对照会更清楚。</p>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>描述什么</th>
+<th>关键写法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>struct</td>
+<td>有名字的字段集合</td>
+<td><code>struct Point { x: i32, y: i32 }</code></td>
+</tr>
+<tr>
+<td>enum</td>
+<td>互斥的若干种变体</td>
+<td><code>enum Status { Ok, Err(String) }</code></td>
+</tr>
+<tr>
+<td>trait</td>
+<td>类型必须提供的行为</td>
+<td><code>trait Draw { fn draw(&amp;self); }</code></td>
+</tr>
+<tr>
+<td>泛型</td>
+<td>对具体类型不绑定的模板</td>
+<td><code>fn f&lt;T&gt;(x: T)</code>、<code>Vec&lt;T&gt;</code></td>
+</tr>
+</tbody></table>
+
+<p>什么时候该引入 trait？经验法则是：当你发现多个类型都有「同一件事的不同做法」，而调用方并不关心具体是哪种类型时，就把这件事抽成 trait。相反，如果只有一个类型会用，老老实实写方法就好，过早抽象只会增加理解成本。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li><code>new</code> 和 <code>area</code> 在 <code>impl</code> 块里有什么区别？</li>
+<li>trait bound 的作用是什么，<code>T: PartialOrd + Copy</code> 分别在保证什么？</li>
+<li>orphan rule 要求 trait 和类型满足什么条件才能给你实现？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__enums-pattern-matching-and-errors.md.html">← 枚举、模式匹配与错误处理</a><a href="rust__chapters__ch01__closures-and-iterators.md.html">闭包与迭代器 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

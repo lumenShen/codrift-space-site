@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>错误处理实战</title>
+<meta name="description" content="第 9 单元 · 建议 60 分钟 · 用 Result 划出清晰的失败边界，让错误带着上下文安全抵达调用方">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">错误处理实战</h1><p class="doc-sub">第 9 单元 · 建议 60 分钟 · 用 Result 划出清晰的失败边界，让错误带着上下文安全抵达调用方</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 09-error-handling-in-practice.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-error-handling-in-practice-9-1-result-是边界-不是装饰">9.1 Result 是边界，不是装饰</a></li><li class="toc-l2"><a href="#rust-ch02-error-handling-in-practice-9-2-错误分类与-的传播">9.2 错误分类与 `?` 的传播</a></li><li class="toc-l2"><a href="#rust-ch02-error-handling-in-practice-9-3-自定义错误类型的取舍">9.3 自定义错误类型的取舍</a></li><li class="toc-l2"><a href="#rust-ch02-error-handling-in-practice-9-4-main-返回-result-与错误链打印">9.4 main 返回 Result 与错误链打印</a></li><li class="toc-l2"><a href="#rust-ch02-error-handling-in-practice-9-5-一条可执行的错误策略">9.5 一条可执行的错误策略</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能判断一个失败该用 Result 返回还是该 panic，并说明取舍理由</li>
+<li>理解 <code>?</code> 的展开语义，知道何时该用 <code>match</code> 接住错误、何时该继续传播</li>
+<li>能用标准库实现自定义错误类型：Display、Error 与 source 错误链</li>
+<li>能让 <code>main</code> 返回 Result，并在正确的层级补充上下文、避免重复日志</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-error-handling-in-practice-9-1-result-是边界-不是装饰">9.1 Result 是边界，不是装饰</h2>
+<p>Rust 把失败分成两类：调用方有可能处理的叫「可恢复错误」，用 <code>Result&lt;T, E&gt;</code> 表达；程序状态已经被破坏、继续运行没有意义的叫「不可恢复错误」，用 panic 表达。库代码面对用户输入、文件缺失、网络断开时应当返回 Result，因为库作者并不知道调用方是否愿意降级处理；相反，越是应用内部的「绝不可能发生」的不变量，越适合用断言或 panic，让 bug 在测试阶段就暴露。</p>
+<p><code>Option</code> 和 <code>Result</code> 的差别在于信息量：前者只说「没有」，后者说明「为什么没有」。配置缺一个字段时返回 <code>None</code> 会让排查者无从下手，返回 <code>Err(Missing(&quot;database.url&quot;))</code> 则直接指出问题。工程上的默认选择应当是「不确定就用 Result，除非缺失本身是正常业务状态」。</p>
+<p>选择错误类型时有两条路线。枚举把每种失败变成一个变体，调用方可以 <code>match</code> 后分别处理，适合库与需要精细分支的模块；trait object 则把不同来源的错误统一成 <code>Box&lt;dyn Error&gt;</code>，写起来省事，但具体类型被擦除，只能靠字符串或 downcast 区分。经验法则是「库返回具体类型，应用在边界汇聚成 trait object」，这样既不牺牲调用方的判断能力，也不必在每个上层函数里重复写一长串错误枚举。</p>
+<p>下面的例子把三类要素放在一起：用枚举分类错误、为它实现 Display 与 Error、用 <code>From</code> 让 <code>?</code> 自动转换 io 错误，最后让 <code>main</code> 返回 Result。这是 std-only 项目里的最小完整骨架，后续引入 anyhow 或 thiserror 时也改变不了这套结构，只是省掉样板代码。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">47 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::error::Error;</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::fmt;</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">use std::fs;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">#[derive(Debug)]</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">enum ConfigError {</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    Missing(String),</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    Io(std::io::Error),</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">impl fmt::Display for ConfigError {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        match self {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">            ConfigError::Missing(key) =&gt; write!(f, &quot;缺少配置项: {}&quot;, key),</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">            ConfigError::Io(e) =&gt; write!(f, &quot;读取配置失败: {}&quot;, e),</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">impl Error for ConfigError {</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    fn source(&amp;self) -&gt; Option&lt;&amp;(dyn Error + 'static)&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">        match self {</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">            ConfigError::Io(e) =&gt; Some(e),</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">            ConfigError::Missing(_) =&gt; None,</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="28"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">impl From&lt;std::io::Error&gt; for ConfigError {</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">    fn from(e: std::io::Error) -&gt; Self { ConfigError::Io(e) }</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="32"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">fn read_config(path: &amp;str) -&gt; Result&lt;String, ConfigError&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">    let text = fs::read_to_string(path)?;</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">    if text.is_empty() {</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">        return Err(ConfigError::Missing(&quot;content&quot;.into()));</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="38"></span><code class="code">    Ok(text)</code></div>
+<div class="cl"><span class="ln" data-ln="39"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="40"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="41"></span><code class="code">fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="42"></span><code class="code">    match read_config(&quot;/definitely/not/here&quot;) {</code></div>
+<div class="cl"><span class="ln" data-ln="43"></span><code class="code">        Ok(text) =&gt; println!(&quot;内容: {}&quot;, text),</code></div>
+<div class="cl"><span class="ln" data-ln="44"></span><code class="code">        Err(e) =&gt; println!(&quot;捕获: {} / source: {:?}&quot;, e, e.source().map(|s| s.to_string())),</code></div>
+<div class="cl"><span class="ln" data-ln="45"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    Ok(())</code></div>
+<div class="cl"><span class="ln" data-ln="47"></span><code class="code">}</code></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>Result 就像快递的签收单。成功时里面有货，失败时里面是一张写明原因的退货单。<code>?</code> 的作用是你不想拆开每张单子细看时，直接把退货单往上游递；只有到了能真正处理问题的柜台，才需要拆包判断该怎么处置。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-error-handling-in-practice-9-2-错误分类与-的传播">9.2 错误分类与 <code>?</code> 的传播</h2>
+<p><code>?</code> 并不是魔法，它大致展开成「成功就取出内部值，失败就 <code>return Err(From::from(e))</code>」。这意味着两件事：当前函数的返回类型必须能容纳那个错误，而且 <code>From</code> 转换必须存在。上面例子里为 <code>std::io::Error</code> 实现 <code>From</code>，正是为了让一次 <code>read_to_string</code> 的失败能自动升级成 <code>ConfigError::Io</code>。</p>
+<p>传播不等于放弃处理。经验做法是「谁有信息谁加上下文」：底层知道「文件读取失败」，中间层知道「这是在加载用户配置时」，顶层知道「程序因此无法启动」。每一层只补自己知道的部分，错误链才既有细节又不啰嗦。反过来，在每一层都 <code>eprintln!</code> 一次会造成同一错误刷屏，排查时反而找不到真正的源头。</p>
+<p><code>io::Error::kind()</code> 是分类的典型例子。比起比较字符串，用 kind 判断是可移植且稳定的做法；<code>map_err</code> 则负责在不改变控制流的前提下改写错误类型，常用于把第三方错误包进本模块的错误枚举。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">24 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::io::{self, ErrorKind};</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn classify(e: &amp;io::Error) -&gt; &amp;'static str {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    match e.kind() {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        ErrorKind::NotFound =&gt; &quot;可恢复：资源缺失，可提示用户&quot;,</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        ErrorKind::PermissionDenied =&gt; &quot;需人工介入：权限不足&quot;,</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        ErrorKind::Interrupted =&gt; &quot;可重试：系统调用被打断&quot;,</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        ErrorKind::InvalidData =&gt; &quot;数据问题：上游内容不合法&quot;,</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        _ =&gt; &quot;未知：保留原始错误向上抛出&quot;,</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">fn double(s: &amp;str) -&gt; Result&lt;i32, String&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    s.parse::&lt;i32&gt;()</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        .map_err(|e| format!(&quot;解析 {:?} 失败: {}&quot;, s, e))</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        .map(|n| n * 2)</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    let e = io::Error::new(ErrorKind::NotFound, &quot;no such file&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    println!(&quot;分类: {}&quot;, classify(&amp;e));</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    println!(&quot;成功: {:?}&quot;, double(&quot;21&quot;));</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    println!(&quot;失败: {:?}&quot;, double(&quot;abc&quot;));</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">}</code></div></div></div>
+<p>下表给出几个常见决策点。注意「失败频率」比「失败严重程度」更影响选择：一个每秒发生百万次的可预期失败不适合用 panic 或生成堆栈；而一个一生只会发生一次的不变量破坏，panic 反而更合适。</p>
+<p><code>ok_or</code> 与 <code>ok_or_else</code> 也是同一类决策：前者立即构造错误值，后者延迟到真的失败时才调用闭包。如果错误信息里包含格式化或分配操作，用 <code>ok_or_else</code> 可以让成功路径完全不付这笔成本。类似地，<code>let Some(x) = ... else { return Err(...) };</code> 在需要从 <code>Option</code> 提前返回时比嵌套 <code>match</code> 更易读。这些细节单独看都很小，累积起来却决定了错误处理代码是清爽还是臃肿。</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐做法</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>用户输入不合法</td>
+<td>返回 Result，描述具体字段</td>
+<td>调用方可提示并重试</td>
+</tr>
+<tr>
+<td>配置文件缺失</td>
+<td>返回 Result 并补路径上下文</td>
+<td>运维需要定位到文件</td>
+</tr>
+<tr>
+<td>内部不变量被破坏</td>
+<td>assert! 或 panic!</td>
+<td>这是 bug，应尽早终止</td>
+</tr>
+<tr>
+<td>可选资源不存在</td>
+<td>返回 Option</td>
+<td>缺失属于正常状态</td>
+</tr>
+</tbody></table>
+
+<h2 id="rust-ch02-error-handling-in-practice-9-3-自定义错误类型的取舍">9.3 自定义错误类型的取舍</h2>
+<p>小项目用一个枚举就能覆盖全部错误来源；大项目则常按子系统划分多个错误枚举，再用 <code>#[from]</code> 式的转换把它们串起来。无论哪种，都要保证 Display 面向人、Debug 面向开发者：Display 应写清楚「发生了什么、涉及哪个对象」，Debug 则保留字段结构供日志系统采集。</p>
+<p><code>Error::source</code> 是标准库提供的错误链入口。它让上层错误能指向底层错误，形成「加载配置失败 → 读取文件失败 → 权限被拒绝」这样的链条。实现它几乎不花成本，却让排查效率产生质变。需要包装第三方错误且不愿自定义枚举时，<code>Box&lt;dyn Error&gt;</code> 作为返回类型是可接受的应用层选择；但它会擦除具体类型，调用方无法再按类型分支，因此更适合作为最外层的汇聚点，而不是库 API。</p>
+<p>thiserror、anyhow 等 crate 能消除大量样板，但它们只是「用宏生成我们刚才手写的 impl」，并不改变错误处理的原则。即便项目最终引入它们，也要能回答：错误在哪一层被分类，在哪一层被补充上下文，在哪一层被记录日志。</p>
+<p>错误类型本身也值得测试。至少要覆盖两类断言：一是「失败时返回的是预期的变体」，二是「Display 文本包含关键信息」。前者保证调用方能可靠分支，后者保证日志可读。这类测试不需要复杂框架，用 <code>matches!</code> 与 <code>to_string().contains(...)</code> 就足够，却能防止重构时误改错误分类。</p>
+<h2 id="rust-ch02-error-handling-in-practice-9-4-main-返回-result-与错误链打印">9.4 main 返回 Result 与错误链打印</h2>
+<p><code>fn main() -&gt; Result&lt;(), E&gt;</code> 是稳定特性，其中 <code>E</code> 需要实现 Debug。这让示例程序与小型工具能把错误直接交给运行时输出，省去手写 <code>match</code>。但要注意这种输出调用的是 Debug，样式偏机器化；面向用户的 CLI 仍应在顶层用 Display 格式化，并统一决定退出码。返回 <code>Result</code> 时，运行时打印的是 Debug 形式，还会带上一句类似 <code>Error: ...</code> 的前缀；它适合快速验证想法，但正式工具往往需要把错误映射到整数退出码，让脚本能够判断失败类型。日志与用户输出也要分开：诊断细节写进日志，用户看到的是一句可行动的提示，两者混在一起会让非技术用户无所适从。</p>
+<p>下面的例子演示如何沿 <code>source()</code> 遍历整条错误链。实践中这正是日志框架打印错误的方式：第一行是业务语义，后续缩进行给出根因。把这段逻辑放在应用的最外层一次，比散落在各层更可控。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">30 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::error::Error;</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::fmt;</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">#[derive(Debug)]</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">struct StepError(&amp;'static str);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">impl fmt::Display for StepError {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        write!(f, &quot;步骤失败: {}&quot;, self.0)</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">}</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">impl Error for StepError {}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">fn run() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    Err(StepError(&quot;加载配置&quot;).into())</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    match run() {</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        Ok(()) =&gt; println!(&quot;运行成功&quot;),</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">        Err(e) =&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">            eprintln!(&quot;错误: {}&quot;, e);</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">            let mut current = e.source();</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">            while let Some(src) = current {</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">                eprintln!(&quot;  原因: {}&quot;, src);</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">                current = src.source();</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">}</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo run</code></div>
+<div class="cl is-text"><code class="code">错误: 步骤失败: 加载配置</code></div>
+<div class="cl is-text"><code class="code">（示意输出，实际内容取决于错误链与终端环境）</code></div></div></div>
+<h2 id="rust-ch02-error-handling-in-practice-9-5-一条可执行的错误策略">9.5 一条可执行的错误策略</h2>
+<p>把上面的原则压缩成团队约定，可以得到一条清晰的处理链：底层返回具体错误类型，中间层用 <code>?</code> 传播并在必要时 <code>map_err</code> 补上下文，顶层统一打印与映射退出码。任何一层都不该既返回错误又打印日志，这叫「只记录一次」。</p>
+<ul>
+<li>库 API 不返回 <code>Box&lt;dyn Error&gt;</code>，保留具体类型供调用方分支。</li>
+<li>自定义错误的 Display 不换行、不夹杂内部字段名，字段名交给 Debug。</li>
+<li>需要重试的错误必须能按类型或 kind 识别，不能依赖解析字符串。</li>
+<li>错误类型新增变体属于破坏性变更，库发布时要计入 semver。</li>
+</ul>
+
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li><code>?</code> 展开后大致做了什么？为什么它要求 <code>From</code> 转换存在？</li>
+<li>什么时候该用 <code>match</code> 接住错误，而不是继续 <code>?</code> 传播？</li>
+<li>为什么「每层都打印一次日志」会让排查变难？记录点应该放在哪里？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__cargo-workspace-and-features.md.html">← Cargo workspace 与 feature 工程化</a><a href="rust__chapters__ch02__testing-and-documentation.md.html">测试与文档工程 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

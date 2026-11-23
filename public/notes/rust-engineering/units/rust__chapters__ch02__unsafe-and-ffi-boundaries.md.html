@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>unsafe 与 FFI 边界</title>
+<meta name="description" content="第 12 单元 · 建议 60 分钟 · 把 unsafe 当作需要书面契约的例外，而不是绕开规则的捷径">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">unsafe 与 FFI 边界</h1><p class="doc-sub">第 12 单元 · 建议 60 分钟 · 把 unsafe 当作需要书面契约的例外，而不是绕开规则的捷径</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 12-unsafe-and-ffi-boundaries.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-1-unsafe-是契约-不是开关">12.1 unsafe 是契约，不是开关</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-2-裸指针与-unsafe-块-最小包围">12.2 裸指针与 unsafe 块：最小包围</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-3-unsafe-fn-与-safety-文档">12.3 unsafe fn 与 `# Safety` 文档</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-4-ffi-与-extern-c">12.4 FFI 与 extern "C"</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-4">12.4</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-boundaries-12-5-常见-ub-陷阱清单">12.5 常见 UB 陷阱清单</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能说清 unsafe 实际解除的是哪几条限制，以及它绝不解除的东西</li>
+<li>能用 unsafe 块把裸指针操作限制到最小范围，并写出可被审查的 SAFETY 注释</li>
+<li>能定义带 <code># Safety</code> 契约的 unsafe fn，理解调用方承担的义务</li>
+<li>能解释 extern &quot;C&quot;、repr(C) 与 FFI 边界上的常见 UB 陷阱</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-1-unsafe-是契约-不是开关">12.1 unsafe 是契约，不是开关</h2>
+<p><code>unsafe</code> 并不关闭借用检查器，它只额外允许五件事：解引用裸指针、调用 unsafe 函数、访问可变静态变量、实现 unsafe trait、读取 union 字段。类型系统的其余部分照常工作。因此「编译器报错就加 unsafe」是彻底的误解——unsafe 不能修复类型错误，它只是把一部分安全责任从编译器转移到人。</p>
+<p>真正的风险在于未定义行为（UB）。一旦触发 UB，编译器对程序的任何假设都不再成立，优化器可能把看似无关的分支优化掉，问题往往在远离现场的地方才暴露。写 unsafe 的正确姿势是把它当成一个需要书面合同的特权操作：谁调用、满足了什么前提、为什么这段实现成立，都必须写清楚。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>unsafe 像医院里的特殊药品。它不会让你变成医生，只是允许你在有明确处方时使用；处方上必须写适用条件和剂量，否则出了事没人能帮你追溯。安全 Rust 是「编译器替你守门」，unsafe 是「你亲自签名守门」。</p>
+
+</div>
+</section>
+<p>未定义行为的危险之处在于它不留痕迹。触发 UB 的代码可能在测试环境完全正常，却在优化后的发布版本里产生错误结果；编译器有权基于「程序不会 UB」这一前提做激进优化。因此 unsafe 代码的审查标准是「能否在纸上证明契约」，而不是「跑起来没崩」。这也是为什么标准库里的 unsafe 实现往往配有大量注释：它们记录的是证明过程，而不是操作说明。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-2-裸指针与-unsafe-块-最小包围">12.2 裸指针与 unsafe 块：最小包围</h2>
+<p>裸指针 <code>*const T</code> / <code>*mut T</code> 与引用不同：它不保证非空、不保证对齐、不保证指向有效内存、也不参与生命周期检查。这些保证全部由程序员承担。<code>as_ptr()</code> 从切片或数组得到裸指针是安全的，但一旦解引用就需要 unsafe。</p>
+<p>工程原则是「最小包围」：unsafe 块只包住真正需要特权的那一行，把空指针检查、长度计算、边界判断留在安全代码里。这样审查者只需盯住极短的一段，并能对照紧邻的 SAFETY 注释验证契约。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code)]</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">/// 对一段连续的 i32 求和。</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">/// 调用方必须保证 ptr 指向至少 len 个已初始化的 i32，且期间不被并发写入。</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn sum_slice(ptr: *const i32, len: usize) -&gt; i64 {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    if len == 0 { return 0; }</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    assert!(!ptr.is_null(), &quot;ptr 不能为空&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    assert!(ptr.align_offset(std::mem::align_of::&lt;i32&gt;()) == 0, &quot;指针未对齐&quot;);</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    let mut total = 0i64;</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    for i in 0..len {</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        // SAFETY: 调用方契约保证 ptr..ptr+len 已初始化且有效</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        unsafe { total += *ptr.add(i) as i64; }</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    total</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    let data = [1i32, 2, 3, 4];</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    println!(&quot;sum = {}&quot;, sum_slice(data.as_ptr(), data.len()));</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div></div></div>
+<p><code>align_offset</code> 在这里用于演示概念；实际代码更常见的是直接让类型系统保证对齐（例如从 <code>&amp;[i32]</code> 取指针），而不是运行时补救。记住：检查能挡住一部分错误，但挡不住「指针指向已经释放的内存」这类时序问题。</p>
+<p>裸指针还涉及「来源」（provenance）：一个由已释放的 <code>Vec</code> 得到的指针，即使数值地址看起来仍合理，也不再可用于访问。安全的做法是在函数参数里直接接收 <code>&amp;[T]</code>，让借用检查器替你保证有效期；只有在与硬件或外部库交互时才退回到裸指针。另一个常被忽视的点是 <code>usize</code> 与指针的整数转换：把指针转成整数再转回来，语言并不保证在所有平台上保持有效，跨 FFI 时尤其要小心。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-3-unsafe-fn-与-safety-文档">12.3 unsafe fn 与 <code># Safety</code> 文档</h2>
+<p>把裸指针逻辑包进 unsafe fn，可以把契约集中到一处，让调用点只需证明一次。函数文档里的 <code># Safety</code> 段落是行业惯例，rustdoc 会把它渲染成醒目的警告区，clippy 的 <code>missing_safety_doc</code> lint 也会检查它。契约应写成可验证的条件，而不是「使用时小心」这种空话。</p>
+<p>下面的 <code>first_byte</code> 即使内部做了空指针与长度检查，仍标记为 unsafe：因为仅凭一个裸指针无法证明它指向的内存有效可读。调用方必须来自可信来源，例如有效切片的 <code>as_ptr()</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code)]</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">/// 读取缓冲区的首字节。</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">///</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">/// # Safety</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">/// `ptr` 必须是非空、正确对齐、且至少可读 `len` 个字节的指针；</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">/// 调用期间该内存不得被其他线程写入。</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">unsafe fn first_byte(ptr: *const u8, len: usize) -&gt; Option&lt;u8&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    if ptr.is_null() || len == 0 {</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        return None;</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    // SAFETY: 调用方已保证指针有效且 len &gt; 0</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    Some(unsafe { *ptr })</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    let buf = b&quot;rust&quot;;</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    let byte = unsafe { first_byte(buf.as_ptr(), buf.len()) };</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    println!(&quot;{:?}&quot;, byte);</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div></div></div>
+<p>理想目标是把 unsafe 收敛进薄薄一层安全封装，对外只暴露普通的安全 API。例如用 <code>&amp;[u8]</code> 作参数，内部再转裸指针；这样调用方不需要写 unsafe，也不再有机会违反契约。这也是标准库自身的组织方式。</p>
+<p>与之相对的是 unsafe trait，例如 <code>Send</code>、<code>Sync</code> 或自行定义的「实现者必须满足某不变量」的 trait。实现它们意味着你向整个类型系统作出承诺，编译器会据此在别处省略检查。因此除非你完全掌控类型的内部表示并能证明该承诺，否则不要手写实现；遇到编译器提示「类型不满足 Send」时，优先修正设计（换用 <code>Mutex</code> 或原子类型），而不是加一行 impl 让错误消失。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-4-ffi-与-extern-c">12.4 FFI 与 extern &quot;C&quot;</h2>
+<p>跨语言调用必须统一 ABI（调用约定、参数传递、名称修饰）。<code>extern &quot;C&quot;</code> 表示使用 C 的 ABI，是 FFI 的默认选择；Rust 自身的 ABI 不稳定，绝不能跨语言边界使用。结构体跨越边界时要用 <code>#[repr(C)]</code> 固定字段布局，否则编译器可以自由重排字段，另一端的 C 代码会读到错误偏移。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code)]</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">#[repr(C)]</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">pub struct CPair {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    pub x: i32,</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    pub y: i32,</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">/// 导出给 C 侧调用的函数，使用 C ABI 与未修饰符号名。</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">#[no_mangle]</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">pub extern &quot;C&quot; fn c_add(a: i32, b: i32) -&gt; i32 {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    a.wrapping_add(b)</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let pair = CPair { x: 2, y: 3 };</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    println!(&quot;size={} sum={}&quot;, std::mem::size_of::&lt;CPair&gt;(), c_add(pair.x, pair.y));</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">}</code></div></div></div>
+<p>从 Rust 调用 C 函数时写法是 <code>unsafe extern &quot;C&quot; { fn name(...); }</code>，因为编译器无法验证外部函数的契约。字符串与集合尤其危险：Rust 的 <code>String</code>、<code>Vec</code> 布局不保证与 C 一致，应转换成 <code>*const c_char</code> 加长度，或由 C 侧分配的缓冲区，并明确谁负责释放。注意 edition 2024 起 <code>#[no_mangle]</code> 需要写成 <code>#[unsafe(no_mangle)]</code>，本单元统一用 2021。</p>
+<p>字符串是最容易出错的边界。C 侧期待的是以零结尾的字节序列，Rust 的 <code>String</code> 不保证这一点；标准库提供了 <code>std::ffi::CString</code> 用于构造、<code>CStr</code> 用于借用查看，对应类型是 <code>c_char</code>。反过来，从 C 拿回字符串时不能凭空造出 <code>&amp;str</code>：必须验证 UTF-8 有效性、知道长度，并明确缓冲区由谁释放。分配器也必须一致——在一侧 <code>malloc</code> 的内存要在同一侧 <code>free</code>，跨边界传递所有权前先写清协议。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-4">12.4</h2>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 -W unsafe_code main.rs</code></div>
+<div class="cl is-text"><code class="code">warning: usage of an `unsafe` block</code></div>
+<div class="cl is-text"><code class="code">  --&gt; main.rs:12:9</code></div>
+<div class="cl is-text"><code class="code">   |</code></div>
+<div class="cl is-text"><code class="code">12 |         unsafe { total += *ptr.add(i) as i64; }</code></div>
+<div class="cl is-text"><code class="code">   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</code></div>
+<div class="cl is-text"><code class="code">   |</code></div>
+<div class="cl is-text"><code class="code">   = note: requested on the command line with `-W unsafe-code`</code></div>
+<div class="cl is-text"><code class="code">（示意输出，行号与措辞随编译器版本变化）</code></div></div></div>
+<p>工具层面也有几个值得纳入流水线的检查：启用 <code>unsafe_op_in_unsafe_fn</code> lint 可以强制在 unsafe 函数内部显式写出 unsafe 块，让特权操作一目了然；<code>-Z sanitizer</code> 与 Miri 能在开发阶段捕捉一部分越界与别名违规，虽然它们不能完全证明正确性，却能拦住大量低级失误。把这些检查与人工审查结合，才是面对 unsafe 代码时务实的态度。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-boundaries-12-5-常见-ub-陷阱清单">12.5 常见 UB 陷阱清单</h2>
+<p>审查 unsafe 代码时，可以按下面的清单逐条核对。它们不是危言耸听，而是优化器真正依赖的前提；任何一条被违反，程序行为都不再受语言规范约束。</p>
+<table>
+<thead>
+<tr>
+<th>陷阱</th>
+<th>后果</th>
+<th>正确做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>解引用空指针或悬垂指针</td>
+<td>立即 UB</td>
+<td>用引用或有效切片做参数</td>
+</tr>
+<tr>
+<td>越过已分配范围读写</td>
+<td>内存破坏</td>
+<td>长度由可信来源提供并校验</td>
+</tr>
+<tr>
+<td>同时存在多个可变别名</td>
+<td>数据竞争</td>
+<td>用 Mutex 或把写入串行化</td>
+</tr>
+<tr>
+<td>未初始化内存当作有效值</td>
+<td>UB，布尔与引用尤其危险</td>
+<td>使用 MaybeUninit 并显式完成初始化</td>
+</tr>
+<tr>
+<td>FFI 结构体缺 repr(C)</td>
+<td>字段偏移错位</td>
+<td>跨边界类型固定布局</td>
+</tr>
+<tr>
+<td>跨边界传递 Rust 集合</td>
+<td>布局与分配器不匹配</td>
+<td>转成裸指针加长度或 C 兼容表示</td>
+</tr>
+</tbody></table>
+
+<p>最后一条边界策略值得单独强调：unsafe 代码的价值不在于「写得多」，而在于「让安全代码无需关心它」。把 unsafe 集中到少数几个模块、为每个模块写清契约、用安全 API 把它包起来，再配合 Miri 或 sanitizer 做专项验证，是长期可维护的做法。审查时可以采用一个简单流程：先列出这段代码依赖的所有前提，再逐条追问「谁保证它成立、在哪一行被破坏」，最后确认这些前提不会因为重构而失效。如果某条前提无法写清楚，就说明抽象层次选错了，应当回到安全 API 的设计上重新考虑。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>unsafe 实际解除了哪些限制？它是否关闭了借用检查器？</li>
+<li>SAFETY 注释应该写在哪一层？为什么「使用时小心」不算合格的契约？</li>
+<li>为什么跨语言边界必须用 extern &quot;C&quot; 与 repr(C)？Rust 集合为什么不能直接传过去？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__concurrency-and-async.md.html">← 并发与异步实战</a><a href="rust__chapters__ch02__shipping-and-ci.md.html">发布与 CI 工程 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

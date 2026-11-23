@@ -397,6 +397,30 @@ html.cr-embed[data-notes-reader-mode="c-engineering"] .cb-notes {
   color: var(--ink-soft) !important;
 }
 
+/* Rust 笔记的源码块是逐行 DOM（没有 Shiki 反相层），只做轻量深色适配 */
+html.cr-embed[data-notes-reader-mode="rust-engineering"] .codeblock {
+  background: var(--paper-soft) !important;
+  border-color: var(--rule) !important;
+  border-left-color: rgba(244, 118, 76, 0.5) !important;
+}
+
+html.cr-embed[data-notes-reader-mode="rust-engineering"] .cb-head {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-bottom-color: var(--rule) !important;
+}
+
+html.cr-embed[data-notes-reader-mode="rust-engineering"] .cb-body {
+  background: transparent !important;
+}
+
+html.cr-embed[data-notes-reader-mode="rust-engineering"] .cl .code {
+  background: transparent !important;
+}
+
+html.cr-embed[data-notes-reader-mode="rust-engineering"] .cl .ln {
+  background: transparent !important;
+}
+
 html.cr-embed[data-notes-reader-mode="c-engineering"] .viz {
   background: var(--viz-bg) !important;
   border-color: var(--rule) !important;

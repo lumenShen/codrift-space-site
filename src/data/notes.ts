@@ -542,6 +542,132 @@ const algoUnits: NoteChapter[] = [
 ];
 
 
+const rustUnits: NoteChapter[] = [
+  {
+    group: '第一部分 · Rust 语法',
+    id: 'r01',
+    title: 'Rust 工具链与第一个程序',
+    file: 'units/rust__chapters__ch01__toolchain-and-first-program.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r02',
+    title: '变量、类型与所有权',
+    file: 'units/rust__chapters__ch01__variables-types-and-ownership.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r03',
+    title: '借用与引用',
+    file: 'units/rust__chapters__ch01__borrowing-and-references.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r04',
+    title: '生命周期',
+    file: 'units/rust__chapters__ch01__lifetimes.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r05',
+    title: '枚举、模式匹配与错误处理',
+    file: 'units/rust__chapters__ch01__enums-pattern-matching-and-errors.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r06',
+    title: '结构体、trait 与泛型',
+    file: 'units/rust__chapters__ch01__structs-traits-and-generics.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r07',
+    title: '闭包与迭代器',
+    file: 'units/rust__chapters__ch01__closures-and-iterators.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    group: '第二部分 · Rust 工程',
+    id: 'r08',
+    title: 'Cargo workspace 与 feature 工程化',
+    file: 'units/rust__chapters__ch02__cargo-workspace-and-features.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r09',
+    title: '错误处理实战',
+    file: 'units/rust__chapters__ch02__error-handling-in-practice.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r10',
+    title: '测试与文档工程',
+    file: 'units/rust__chapters__ch02__testing-and-documentation.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r11',
+    title: '并发与异步实战',
+    file: 'units/rust__chapters__ch02__concurrency-and-async.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r12',
+    title: 'unsafe 与 FFI 边界',
+    file: 'units/rust__chapters__ch02__unsafe-and-ffi-boundaries.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r13',
+    title: '发布与 CI 工程',
+    file: 'units/rust__chapters__ch02__shipping-and-ci.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    group: '第三部分 · 算法 Rust 版',
+    id: 'r14',
+    title: '复杂度与 Rust 算法工程约定',
+    file: 'units/rust__chapters__ch03__complexity-and-rust-idioms.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r15',
+    title: '栈、队列与单调结构',
+    file: 'units/rust__chapters__ch03__stacks-queues-and-monotone.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r16',
+    title: '并查集与堆',
+    file: 'units/rust__chapters__ch03__union-find-and-heap.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r17',
+    title: '排序与二分',
+    file: 'units/rust__chapters__ch03__sorting-and-binary-search.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r18',
+    title: '前缀和与差分、双指针',
+    file: 'units/rust__chapters__ch03__prefix-diff-and-two-pointers.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r19',
+    title: '图论与倍增 LCA',
+    file: 'units/rust__chapters__ch03__graphs-and-lca.md.html',
+    meta: '建议 60 分钟',
+  },
+  {
+    id: 'r20',
+    title: '动态规划',
+    file: 'units/rust__chapters__ch03__dynamic-programming.md.html',
+    meta: '建议 60 分钟',
+  },
+];
+
 export const notesCollections: NoteCollection[] = [
   {
     id: 'gaoshu',
@@ -660,6 +786,30 @@ export const notesCollections: NoteCollection[] = [
       { tag: 'HTML', label: '合书 HTML', file: 'books/algo.html', note: '站内阅读版' },
     ],
   },
+  {
+    id: 'rust-engineering',
+    kind: '工程笔记',
+    title: 'Rust · 从语法到工程与算法',
+    shortTitle: 'Rust 工程',
+    subject: 'Rust 2021 edition · 标准库 · 真编译校验',
+    tagline: '语法打底，工程落地，算法用 Rust 重写一遍。',
+    description:
+      '一份把 Rust 当工程语言来学的笔记：三编 20 个单元，第一编讲所有权、借用、生命周期、trait 与迭代器；第二编讲 Cargo workspace、错误处理、测试、并发、unsafe 与发布流水线；第三编用标准库重写复杂度约定、单调栈、并查集与堆、排序二分、前缀差分、图论、LCA 与动态规划。71 份代码清单全部经 rustc --edition 2021 真编译校验，正文不出现跑不通的示例。',
+    status: '完整版',
+    keywords: ['所有权', '生命周期', 'Cargo workspace', 'trait', 'unsafe', '算法 Rust 版'],
+    metrics: [
+      { value: '3', label: '编' },
+      { value: '20', label: '单元' },
+      { value: '4.6', label: '万汉字' },
+    ],
+    meta: '20 个可独立阅读的单元 · 45,671 汉字 · 71 份清单全部真编译通过 · 82 页 PDF',
+    chapters: rustUnits,
+    downloads: [
+      { tag: 'PDF', label: '整册 PDF', file: 'rust.pdf', note: '82 页 · A4' },
+      { tag: 'HTML', label: '单文件离线版', file: 'book-inline.html', note: '样式内联 · 双击即读' },
+      { tag: 'HTML', label: '合书 HTML', file: 'books/rust.html', note: '站内阅读版' },
+    ],
+  },
 ];
 
 export const notesBase = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}notes/`;
@@ -674,10 +824,10 @@ export function noteDownloadName(file: string): string {
 
 export const notesTotals = {
   kinds: notesCollections.length,
-  units: 102,
-  chapters: 43,
-  chars: 905593,
-  pages: 1770,
+  units: 122,
+  chapters: 46,
+  chars: 951264,
+  pages: 1852,
   examples: 216,
   graphs: 113,
 };

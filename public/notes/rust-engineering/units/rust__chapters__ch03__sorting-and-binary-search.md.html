@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>排序与二分</title>
+<meta name="description" content="第 17 单元 · 建议 60 分钟 · 从比较器到四种边界写法，把「有序」真正用起来">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">排序与二分</h1><p class="doc-sub">第 17 单元 · 建议 60 分钟 · 从比较器到四种边界写法，把「有序」真正用起来</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 17-sorting-and-binary-search.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-sorting-and-binary-search-17-1-rust-排序-api-与比较器">17.1 Rust 排序 API 与比较器</a></li><li class="toc-l2"><a href="#rust-ch03-sorting-and-binary-search-17-2-归并排序与逆序对">17.2 归并排序与逆序对</a></li><li class="toc-l2"><a href="#rust-ch03-sorting-and-binary-search-17-3-二分的四种边界写法">17.3 二分的四种边界写法</a></li><li class="toc-l2"><a href="#rust-ch03-sorting-and-binary-search-17-4-二分答案-从判定到最优">17.4 二分答案：从判定到最优</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能根据稳定性与内存要求，在 <code>sort</code>、<code>sort_unstable</code>、<code>sort_by_key</code> 之间正确选择</li>
+<li>会用比较器实现降序与多关键字排序，并理解 <code>Ord</code> 与 <code>PartialOrd</code> 的语义</li>
+<li>能手写归并排序并在合并过程中统计逆序对，解释其中的借用处理技巧</li>
+<li>掌握 lower_bound / upper_bound 等四种边界写法，并能用二分答案解可行性与单调问题</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-sorting-and-binary-search-17-1-rust-排序-api-与比较器">17.1 Rust 排序 API 与比较器</h2>
+<p><code>Vec</code> 和切片都提供了三个常用排序方法：<code>sort</code> 稳定排序，相等元素保持原有相对顺序，需要额外的临时内存，最坏 O(n log n) 比较、O(n) 额外空间；<code>sort_unstable</code> 不保证稳定性，通常更快且只用地毯式堆排与插入排的混合实现，额外空间 O(log n)；<code>sort_by_key</code> 按提取出的关键字排序。判断标准很简单：<strong>相等元素是否需要保留输入顺序</strong>——按分数排序后还要按名字排第二关键字时用稳定排序，或者干脆把两个关键字写进一个比较器里。</p>
+<p>比较器接收两个 <code>&amp;T</code>，返回 <code>Ordering</code>。降序不是把结果取负（Rust 的 <code>Ordering</code> 没有取负运算），而是把参数顺序反过来写：<code>b.cmp(a)</code>。多关键字用 <code>then_with</code> 串联：<code>q.1.cmp(&amp;p.1).then_with(|| p.0.cmp(q.0))</code> 表示分数降序、同分时名字升序。注意闭包参数名字 p 和 q 的顺序，写反了会得到完全相反的结果，这是排序题最常见的低级错误。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>稳定性</th>
+<th>额外空间</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sort()</code></td>
+<td>稳定</td>
+<td>O(n)</td>
+<td>相等元素需保留原序</td>
+</tr>
+<tr>
+<td><code>sort_unstable()</code></td>
+<td>不稳定</td>
+<td>O(log n)</td>
+<td>默认首选，更快</td>
+</tr>
+<tr>
+<td><code>sort_by(cmp)</code></td>
+<td>由底层决定</td>
+<td>同上</td>
+<td>自定义规则、降序</td>
+</tr>
+<tr>
+<td><code>sort_by_key(f)</code></td>
+<td>稳定</td>
+<td>O(n)</td>
+<td>单一关键字</td>
+</tr>
+</tbody></table>
+
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let mut a = vec![5, 2, 9, 1, 5, 6];</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let mut stable = a.clone();</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    stable.sort();</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    println!(&quot;ascending: {:?}&quot;, stable);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    a.sort_unstable();</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;unstable asc: {:?}&quot;, a);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let mut desc = vec![3, 1, 4, 1, 5];</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    desc.sort_unstable_by(|x, y| y.cmp(x));</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    println!(&quot;descending: {:?}&quot;, desc);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    let mut v = vec![(&quot;tom&quot;, 80), (&quot;ana&quot;, 95), (&quot;bob&quot;, 80)];</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    v.sort_unstable_by(|p, q| q.1.cmp(&amp;p.1).then_with(|| p.0.cmp(q.0)));</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    println!(&quot;by score: {:?}&quot;, v);</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">}</code></div></div></div>
+<p>排序浮点数时要格外小心：IEEE 754 的 NaN 与任何值比较都返回 false，不满足 <code>Ord</code> 要求的全序关系，所以 <code>f64</code> 没有实现 <code>Ord</code>，直接 <code>sort()</code> 编译不过。竞赛数据通常不含 NaN，这时可以用 <code>partial_cmp(...).unwrap()</code>；若数据可能含 NaN，要先把 NaN 过滤掉或映射到无穷大再排。</p>
+<p>切片本身还带一个 <code>binary_search</code> 方法，返回 <code>Result&lt;usize, usize&gt;</code>：找到时是 <code>Ok(下标)</code>，没找到时是 <code>Err(应插入位置)</code>，这个&quot;应插入位置&quot;正好等于 lower_bound。若数组里存在重复元素，<code>binary_search</code> 返回的是其中某一个，不保证是第一个或最后一个，所以题目要找边界时还是自己写 lower_bound / upper_bound 更可靠。类似的还有 <code>partition_point</code>，它接受一个谓词，返回第一个使谓词为 false 的位置——把二分模式的意图直接写进名字里，可读性更好。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>排序就是把一堆东西按规则排队。<code>sort</code> 是&quot;讲礼貌的排队&quot;，分数相同的人保持原来的先后；<code>sort_unstable</code> 是&quot;只关心分数&quot;的排队，同分谁在前都行，所以更快。比较器就是告诉程序&quot;谁该站前面&quot;的那句话，降序只要把两个参数换个位置说一遍。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-sorting-and-binary-search-17-2-归并排序与逆序对">17.2 归并排序与逆序对</h2>
+<p>归并排序把数组对半分，分别排好两个半区，再做一次线性合并。它的时间复杂度稳定为 O(n log n)，不像快速排序那样有退化风险，代价是需要一个等长的临时数组。逆序对定义为下标 i &lt; j 但 <code>a[i] &gt; a[j]</code> 的二元组的个数，它衡量数组的&quot;无序程度&quot;。</p>
+<p>巧妙之处在于：在合并两个<strong>已经有序</strong>的半区时，如果右半区的 <code>rbuf[j]</code> 小于左半区的 <code>lbuf[i]</code>，那么 <code>rbuf[j]</code> 不仅小于 <code>lbuf[i]</code>，还小于左半区中从 i 到末尾的所有元素（因为左半区递增），于是逆序对数一次性增加 <code>left_len - i</code>。这样统计逆序对不需要额外的嵌套循环，归并排序的 O(n log n) 复杂度原封不动地继承下来。</p>
+<p>Rust 写归并排序的难点不在算法而在借用。递归调用 <code>&amp;mut a[..mid]</code> 和 <code>&amp;mut a[mid..]</code> 是两段互不重叠的可变切片，合法；合并前要先把两半拷进临时数组，用 <code>a.split_at(mid)</code> 拿不可变切片、<code>tmp.split_at_mut(mid)</code> 拿可变切片，拷贝完成后用一个花括号块<strong>主动结束这些借用</strong>，之后才能写回 <code>a[k]</code>。如果借用没结束就写 <code>a[k] = ...</code>，编译器会报&quot;cannot borrow a as mutable&quot;。另外，把 <code>left.len()</code> 事先存成 <code>left_len</code> 这样的标量，也能减少对借用的依赖。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">49 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn merge_sort_count(a: &amp;mut [i64], tmp: &amp;mut [i64]) -&gt; i64 {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let n = a.len();</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    if n &lt;= 1 {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        return 0;</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let mid = n / 2;</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let mut inv = merge_sort_count(&amp;mut a[..mid], &amp;mut tmp[..mid]);</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    inv += merge_sort_count(&amp;mut a[mid..], &amp;mut tmp[mid..]);</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let left_len = mid;</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    let right_len = n - mid;</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    {</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        let (left, right) = a.split_at(mid);</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        let (lbuf, rbuf) = tmp.split_at_mut(mid);</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        lbuf[..left_len].copy_from_slice(left);</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        rbuf[..right_len].copy_from_slice(right);</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    }</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    let (mut i, mut j, mut k) = (0usize, 0usize, 0usize);</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    while i &lt; left_len &amp;&amp; j &lt; right_len {</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">        if tmp[i] &lt;= tmp[mid + j] {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">            a[k] = tmp[i];</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">            i += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">        } else {</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">            inv += (left_len - i) as i64;</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">            a[k] = tmp[mid + j];</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">            j += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">        k += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">    while i &lt; left_len {</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">        a[k] = tmp[i];</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">        i += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">        k += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">    while j &lt; right_len {</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">        a[k] = tmp[mid + j];</code></div>
+<div class="cl"><span class="ln" data-ln="38"></span><code class="code">        j += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="39"></span><code class="code">        k += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="40"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="41"></span><code class="code">    inv</code></div>
+<div class="cl"><span class="ln" data-ln="42"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="43"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="44"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="45"></span><code class="code">    let mut a = vec![2i64, 4, 1, 3, 5];</code></div>
+<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    let mut tmp = vec![0i64; a.len()];</code></div>
+<div class="cl"><span class="ln" data-ln="47"></span><code class="code">    let inv = merge_sort_count(&amp;mut a, &amp;mut tmp);</code></div>
+<div class="cl"><span class="ln" data-ln="48"></span><code class="code">    println!(&quot;sorted = {:?}, inversions = {}&quot;, a, inv);</code></div>
+<div class="cl"><span class="ln" data-ln="49"></span><code class="code">}</code></div></div></div>
+<p>合并条件写成 <code>&lt;=</code> 而不是 <code>&lt;</code>，保证相等元素先取左边的，因此这个排序是稳定的，也避免把相等元素误计为逆序对。临时数组只分配一次，由递归各层复用；若在每层递归里都新建 <code>Vec</code>，总分配量会上升，性能明显变差。</p>
+<p>递归深度是 log₂n，远小于递归爆栈的阈值，所以归并排序用递归是安全的，这与后面图中的深链 DFS 不同。若数据的值域不大（例如都在 10⁶ 以内），统计逆序对还有另一种做法：从右往左扫描，用树状数组（Fenwick tree）统计已出现过且小于当前值的元素个数，复杂度同样是 O(n log n)，内存只需一个计数数组。两种方法的结果应当一致，互为对拍的参照很合适。归并排序的额外好处是天然稳定，如果题目同时要求&quot;按值排序且同值保持原序&quot;，它就是首选。</p>
+<h2 id="rust-ch03-sorting-and-binary-search-17-3-二分的四种边界写法">17.3 二分的四种边界写法</h2>
+<p>二分查找的 bug 几乎都出在区间约定上。推荐全程使用<strong>左闭右开</strong> <code>[l, r)</code>：初始 <code>l = 0, r = len</code>，循环条件是 <code>while l &lt; r</code>，中点 <code>m = l + (r - l) / 2</code>。这写法的好处是循环结束时 <code>l == r</code>，答案就是 l，不需要讨论&quot;最后 l 和 r 谁大&quot;。中点用 <code>l + (r - l) / 2</code> 而不是 <code>(l + r) / 2</code>，可以避免两个大下标相加溢出。</p>
+<p>四种常见需求只差一个判定条件：找第一个大于等于 target 的位置（lower_bound）用 <code>a[m] &lt; target</code> 时右移；找第一个大于 target 的位置（upper_bound）用 <code>a[m] &lt;= target</code> 时右移。&quot;第一个等于&quot;是先做 lower_bound 再校验，&quot;最后一个等于&quot;是先做 upper_bound 再减一——而减一之前必须判断 <code>i &gt; 0</code>，否则 <code>i = 0</code> 时会触发 <code>usize</code> 下溢。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">51 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn lower_bound(a: &amp;[i32], target: i32) -&gt; usize {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let (mut l, mut r) = (0usize, a.len());</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    while l &lt; r {</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">        let m = l + (r - l) / 2;</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        if a[m] &lt; target {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">            l = m + 1;</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        } else {</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">            r = m;</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    l</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">fn upper_bound(a: &amp;[i32], target: i32) -&gt; usize {</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    let (mut l, mut r) = (0usize, a.len());</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    while l &lt; r {</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        let m = l + (r - l) / 2;</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        if a[m] &lt;= target {</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">            l = m + 1;</code></div>
+<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        } else {</code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">            r = m;</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    l</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">fn first_equal(a: &amp;[i32], target: i32) -&gt; Option&lt;usize&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    let i = lower_bound(a, target);</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">    if i &lt; a.len() &amp;&amp; a[i] == target {</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">        Some(i)</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">    } else {</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">        None</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="34"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="35"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">fn last_equal(a: &amp;[i32], target: i32) -&gt; Option&lt;usize&gt; {</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    let i = upper_bound(a, target);</code></div>
+<div class="cl"><span class="ln" data-ln="38"></span><code class="code">    if i &gt; 0 &amp;&amp; a[i - 1] == target {</code></div>
+<div class="cl"><span class="ln" data-ln="39"></span><code class="code">        Some(i - 1)</code></div>
+<div class="cl"><span class="ln" data-ln="40"></span><code class="code">    } else {</code></div>
+<div class="cl"><span class="ln" data-ln="41"></span><code class="code">        None</code></div>
+<div class="cl"><span class="ln" data-ln="42"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="43"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="44"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="45"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    let a = [1, 2, 2, 2, 3, 4];</code></div>
+<div class="cl"><span class="ln" data-ln="47"></span><code class="code">    println!(&quot;lower=({}, {})&quot;, lower_bound(&amp;a, 2), lower_bound(&amp;a, 5));</code></div>
+<div class="cl"><span class="ln" data-ln="48"></span><code class="code">    println!(&quot;upper=({}, {})&quot;, upper_bound(&amp;a, 2), upper_bound(&amp;a, 5));</code></div>
+<div class="cl"><span class="ln" data-ln="49"></span><code class="code">    println!(&quot;first={:?} last={:?}&quot;, first_equal(&amp;a, 2), last_equal(&amp;a, 2));</code></div>
+<div class="cl"><span class="ln" data-ln="50"></span><code class="code">    println!(&quot;count={}&quot;, upper_bound(&amp;a, 2) - lower_bound(&amp;a, 2));</code></div>
+<div class="cl"><span class="ln" data-ln="51"></span><code class="code">}</code></div></div></div>
+<p>上界减下界就是某个值出现次数，这是 lower_bound / upper_bound 最实用的组合。注意所有返回类型都是 <code>usize</code>，&quot;找不到&quot;用 <code>a.len()</code> 表示，而不是 <code>-1</code>；想表达&quot;不存在&quot;的语义就用 <code>Option&lt;usize&gt;</code>，让类型系统替你记账。</p>
+<p>还有一个常被忽略的要点：二分的前提是<strong>数组有序</strong>。如果题目给的是无序数据，别忘了先排序，并记得排序会打乱原始下标——若答案需要输出原位置，就要先和值一起打包成结构体或二元组再排。二分本身只要求&quot;谓词单调&quot;，不要求数组严格递增：对于形如&quot;前半段满足某条件、后半段不满足&quot;的判定序列，同样可以用同样的框架找分界点。把二分理解为&quot;在一个单调布尔序列里找 true/false 的交界&quot;，比死记四种模板更通用。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</code></div>
+<div class="cl is-text"><code class="code">lower=(1, 5)</code></div>
+<div class="cl is-text"><code class="code">upper=(4, 6)</code></div>
+<div class="cl is-text"><code class="code">first=Some(1) last=Some(3)</code></div>
+<div class="cl is-text"><code class="code">count=3</code></div></div></div>
+<h2 id="rust-ch03-sorting-and-binary-search-17-4-二分答案-从判定到最优">17.4 二分答案：从判定到最优</h2>
+<p>当题目要求&quot;最大化最小值&quot;或&quot;最小化最大值&quot;时，答案往往具有单调性：如果某个上限 limit 可行，那么比它更大的上限一定也可行；如果不可行，更小的也不可行。有了单调性，就能对答案本身二分，把在巨大值域上的搜索压缩到 O(log V) 次判定。</p>
+<p>&quot;把数组切成 m 段、最小化最大段和&quot;是标准范例。判定函数 <code>feasible(limit)</code> 贪心地从左往右累加，一旦加上当前元素超过 limit 就另起一段；若段数超过 m 则不可行。二分时 <code>lo</code> 取数组最大值（任何一段至少装得下最大的单个元素），<code>hi</code> 取全数组之和（一段装下全部），循环写法同样用 <code>lo + (hi - lo) / 2</code>，可行就把 <code>hi</code> 压到 mid，否则把 <code>lo</code> 抬到 mid + 1。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">38 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn feasible(a: &amp;[i64], pieces: usize, limit: i64) -&gt; bool {</code></div>
+<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let mut used = 1usize;</code></div>
+<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let mut sum = 0i64;</code></div>
+<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    for &amp;x in a {</code></div>
+<div class="cl"><span class="ln" data-ln="5"></span><code class="code">        if x &gt; limit {</code></div>
+<div class="cl"><span class="ln" data-ln="6"></span><code class="code">            return false;</code></div>
+<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        if sum + x &gt; limit {</code></div>
+<div class="cl"><span class="ln" data-ln="9"></span><code class="code">            used += 1;</code></div>
+<div class="cl"><span class="ln" data-ln="10"></span><code class="code">            sum = x;</code></div>
+<div class="cl"><span class="ln" data-ln="11"></span><code class="code">            if used &gt; pieces {</code></div>
+<div class="cl"><span class="ln" data-ln="12"></span><code class="code">                return false;</code></div>
+<div class="cl"><span class="ln" data-ln="13"></span><code class="code">            }</code></div>
+<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        } else {</code></div>
+<div class="cl"><span class="ln" data-ln="15"></span><code class="code">            sum += x;</code></div>
+<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    true</code></div>
+<div class="cl"><span class="ln" data-ln="19"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="21"></span><code class="code">fn minimize_largest_sum(a: &amp;[i64], pieces: usize) -&gt; i64 {</code></div>
+<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    let mut lo = *a.iter().max().unwrap();</code></div>
+<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    let mut hi: i64 = a.iter().sum();</code></div>
+<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    while lo &lt; hi {</code></div>
+<div class="cl"><span class="ln" data-ln="25"></span><code class="code">        let mid = lo + (hi - lo) / 2;</code></div>
+<div class="cl"><span class="ln" data-ln="26"></span><code class="code">        if feasible(a, pieces, mid) {</code></div>
+<div class="cl"><span class="ln" data-ln="27"></span><code class="code">            hi = mid;</code></div>
+<div class="cl"><span class="ln" data-ln="28"></span><code class="code">        } else {</code></div>
+<div class="cl"><span class="ln" data-ln="29"></span><code class="code">            lo = mid + 1;</code></div>
+<div class="cl"><span class="ln" data-ln="30"></span><code class="code">        }</code></div>
+<div class="cl"><span class="ln" data-ln="31"></span><code class="code">    }</code></div>
+<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    lo</code></div>
+<div class="cl"><span class="ln" data-ln="33"></span><code class="code">}</code></div>
+<div class="cl is-empty"><span class="ln" data-ln="34"></span><code class="code"> </code></div>
+<div class="cl"><span class="ln" data-ln="35"></span><code class="code">fn main() {</code></div>
+<div class="cl"><span class="ln" data-ln="36"></span><code class="code">    let a = [7i64, 2, 5, 10, 8];</code></div>
+<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    println!(&quot;answer = {}&quot;, minimize_largest_sum(&amp;a, 2));</code></div>
+<div class="cl"><span class="ln" data-ln="38"></span><code class="code">}</code></div></div></div>
+<p>写二分答案前必须<strong>先证明单调性</strong>，否则二分会悄悄给出错误答案。一个快速验证办法是拿几组小数据穷举所有切分，再把结果与判定函数对照；建立直觉后再推广到大数据。还要注意 <code>lo</code> 和 <code>hi</code> 的初值必须分别落在&quot;一定不可行/一定可行&quot;或包含答案的区间内：若 <code>lo</code> 设得太大，真正的答案会被排除在外；若 <code>hi</code> 设得太小，二分永远收敛不到可行解。</p>
+<p>二分答案的题目形形色色，但套路高度一致：&quot;求最大的最小距离&quot;可以判定为能否放下至少 k 个物品，&quot;求最小的最大耗时&quot;可以判定为能否在限定时间内完成所有任务，&quot;求最少天数&quot;可以判定为限定天数能否运完。判定函数几乎都是贪心：从左到右尽可能塞，塞不下就新开一组。写完判定函数后，先用极端数据自检——<code>limit</code> 取最大值时应恰好可行，<code>limit</code> 取最小值时通常不可行——再交给二分，能省掉大量调试时间。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li><code>sort</code> 与 <code>sort_unstable</code> 的核心差别是什么？什么场景必须用前者？</li>
+<li>归并排序统计逆序对时，为什么右半元素小于左半时一次性加 <code>left_len - i</code>？</li>
+<li>为什么 <code>last_equal</code> 里要先判断 <code>i &gt; 0</code> 再访问 <code>a[i - 1]</code>？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__union-find-and-heap.md.html">← 并查集与堆</a><a href="rust__chapters__ch03__prefix-diff-and-two-pointers.md.html">前缀和与差分、双指针 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

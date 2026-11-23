@@ -16,6 +16,7 @@ const ACCENTS: Record<string, string> = {
   'gaoshu-review': '#46e2a0',
   'c-engineering': '#ff9a4d',
   'cpp-engineering': '#a78bfa',
+  'rust-engineering': '#f4764c',
 };
 
 const GLYPHS: Record<string, string> = {
@@ -23,6 +24,7 @@ const GLYPHS: Record<string, string> = {
   'gaoshu-review': 'ε',
   'c-engineering': '{ }',
   'cpp-engineering': '++',
+  'rust-engineering': 'R>',
 };
 
 /** 每本笔记的默认版式：站点内实际展示的那一套（站长选定「夜读极光」） */
@@ -31,6 +33,7 @@ const DEFAULT_VARIANTS: Record<string, CoverVariant> = {
   'gaoshu-review': 'nocturne',
   'c-engineering': 'nocturne',
   'cpp-engineering': 'nocturne',
+  'rust-engineering': 'nocturne',
 };
 
 export function coverAccent(collection: NoteCollection): string {
