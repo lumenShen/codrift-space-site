@@ -1,4 +1,4 @@
-@charset "UTF-8";
+
 /* ==========================================================================
  * theme.css — 《高等数学笔记（同济大学第八版·上册）》版式系统 · v2
  *
@@ -125,7 +125,20 @@ body {
 }
 
 @media screen {
-  body { font-size: 17px; background: #fff; }
+  /* 屏幕阅读尺度：与 Rust 工程笔记共用同一套阅读令牌
+     （字号 / 行高 / 段间距 / 标题间距 / 列表与代码块节奏；打印版式不受影响） */
+  html { font-size: 17px; }
+  :root {
+    --font-sans: "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC",
+      "Source Han Sans SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    --fs-code: 0.84rem;   /* ≈14.3px，代码块与终端输出共用 */
+    --lh-code: 1.55;
+  }
+  body {
+    font-size: 17px;
+    line-height: 1.75;
+    background: #fff;
+  }
   .doc { padding-top: 1.4rem; }
 }
 
@@ -1196,4 +1209,26 @@ img, svg { max-width: 100%; }
   #chapter-ch06 .box > .box-b > :last-child { break-before: auto; page-break-before: auto; }
   #chapter-ch06 .box { break-inside: avoid; page-break-inside: avoid; }
   #chapter-ch06 .box > .box-b > p { break-inside: auto; page-break-inside: auto; }
+}
+
+/* ==========================================================================
+ * 屏幕阅读节奏：段间距 / 标题间距 / 列表与代码块尺度
+ * 与《Rust 工程笔记》共用同一套阅读令牌（只作用于屏幕，打印版式不变）。
+ * 放在文件末尾，保证能覆盖上面各节的基础规则。
+ * ========================================================================== */
+@media screen {
+  /* 段间距：Rust 笔记的 0.38em */
+  p { margin: 0 0 0.38em; }
+
+  /* 标题上下间距同源 */
+  h2 { margin: 1.25em 0 0.45em; }
+  h3 { margin: 0.9em 0 0.3em; }
+  .box + h2, .box + h3 { margin-top: 1.2em; }
+
+  ul, ol { margin: 0.35em 0 0.7em; }
+  li { margin: 0.1em 0; }
+  table { margin: 0.7em 0 0.8em; }
+
+  /* 代码块与终端输出共用 Rust 笔记的代码尺度 */
+  pre { font-size: var(--fs-code); line-height: var(--lh-code); }
 }
