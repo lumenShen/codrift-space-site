@@ -4,146 +4,340 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>生命周期</title>
-<meta name="description" content="第 4 单元 · 建议 60 分钟 · 让编译器相信你的引用不会比数据活得更久">
+<meta name="description" content="第 4 单元 · 建议 90 分钟 · 把生命周期当作 region 变量，理解省略、方差、HRTB 与 Pin">
 <meta name="author" content="Codrift · Rust 工程笔记">
 <meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
 <link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
 </head>
 <body class="type-unit">
 <a class="skip-link" href="#content">跳到正文</a>
 <nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
 <main class="doc" id="doc">
-<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">生命周期</h1><p class="doc-sub">第 4 单元 · 建议 60 分钟 · 让编译器相信你的引用不会比数据活得更久</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 04-lifetimes.md</p></header>
-<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-1-动机-引用也可能悬垂">4.1 动机：引用也可能悬垂</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-2-标注语法-a-到底标的是什么">4.2 标注语法：'a 到底标的是什么</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-3-省略规则-为什么你很少写生命周期">4.3 省略规则：为什么你很少写生命周期</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-4-结构体与-impl-上的生命周期">4.4 结构体与 impl 上的生命周期</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-5-static-最长但常被误解">4.5 'static：最长但常被误解</a></li></ol></nav>
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">生命周期</h1><p class="doc-sub">第 4 单元 · 建议 90 分钟 · 把生命周期当作 region 变量，理解省略、方差、HRTB 与 Pin</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 04-lifetimes.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-1-生命周期是-region-变量-不是-活多久">4.1 生命周期是 region 变量，不是「活多久」</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-2-生命周期省略规则-编译器替你写了什么">4.2 生命周期省略规则：编译器替你写了什么</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-3-region-推理-约束从哪来-怎么求解">4.3 region 推理：约束从哪来，怎么求解</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-4-方差与子类型-为什么-mut-t-对-t-不变">4.4 方差与子类型：为什么 `&mut T` 对 `T` 不变</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-5-hrtb-for-a-的真实含义与边界">4.5 HRTB：`for<'a>` 的真实含义与边界</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-6-static-的真实含义-不是-永不释放的对象">4.6 `'static` 的真实含义：不是「永不释放的对象」</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-7-自引用结构与-pin-引子">4.7 自引用结构与 Pin 引子</a></li><li class="toc-l2"><a href="#rust-ch01-lifetimes-4-8-工程取舍-什么时候与生命周期打交道">4.8 工程取舍：什么时候与生命周期打交道</a></li></ol></nav>
 <article class="content" id="content" aria-label="正文">
 <section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
 <div class="box-b">
 <ul>
-<li>说清生命周期存在的动机：避免返回悬垂引用</li>
-<li>能读懂并写出 <code>&#39;a</code> 这样的生命周期标注，理解它描述的是「借用关系」而非「存活时长」</li>
-<li>掌握三条省略规则，理解为什么多数函数签名不需要手写生命周期</li>
-<li>会在函数和结构体上使用生命周期，并正确理解 <code>&#39;static</code></li>
+<li>把 <code>&#39;a</code> 理解为由约束求解出来的 region 变量，而不是「让引用活得更久」的开关</li>
+<li>复述函数签名的三条生命周期省略规则，能判断什么时候必须显式标注</li>
+<li>解释方差：为什么 <code>&amp;&#39;a T</code> 协变而 <code>&amp;&#39;a mut T</code> 对 <code>T</code> 不变，并读懂相应的编译错误</li>
+<li>说清 <code>for&lt;&#39;a&gt;</code>、<code>&#39;static</code> 与自引用结构/Pin 各自的真实含义与适用边界</li>
 </ul>
 
 </div>
 </section>
-<h2 id="rust-ch01-lifetimes-4-1-动机-引用也可能悬垂">4.1 动机：引用也可能悬垂</h2>
-<p>所有权保证「谁负责释放」，借用规则保证「不能乱改」，但还缺一块拼图：引用本身可能比它指向的数据活得更久。想象一个函数在函数体内部创建一个字符串，然后返回它的引用。函数一结束，那个字符串就被 drop 了，返回的引用却指向一块已经失效的内存——这就是悬垂引用（dangling reference），在 C/C++ 里是经典的 use-after-free 漏洞。</p>
-<p>Rust 不允许这种情况发生。下面这段「坏代码」会在编译期被拦下，这里只展示它的报错（它不是可编译代码，不要照着写）：</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main</span></div>
-<div class="cl is-text"><span class="code">error[E0515]: cannot return value referencing local variable `s`</span></div>
-<div class="cl is-text"><span class="code"> --&gt; main.rs:2:9</span></div>
+<h2 id="rust-ch01-lifetimes-4-1-生命周期是-region-变量-不是-活多久">4.1 生命周期是 region 变量，不是「活多久」</h2>
+<p>初学者常把生命周期理解成「这个变量能活到什么时候」，于是以为写 <code>&#39;a</code> 是在给引用「续命」。完全相反：生命周期标注不延长任何东西的寿命，它只是给一个 region（程序点的集合）起名字，并声明引用与数据之间必须满足的 <strong>outlives（活得更久）关系</strong>。编译器把每个引用参数的 region 当作未知数，根据「引用指向谁」「返回值传给谁」收集约束，再求解出一组满足所有约束的最小 region。标注的作用是让函数签名成为一个可被检查的契约：无论调用方是谁，只要它满足签名声明的关系，函数体就一定是安全的。</p>
+<p>看一个最小的失败案例。如果函数想返回一个指向局部 <code>String</code> 的引用，即便你写了显式生命周期，编译器仍会拒绝——因为 <code>&#39;a</code> 由调用方决定，调用方完全可能要求它覆盖函数返回之后的漫长区间，而局部 <code>s</code> 在函数返回时就被释放了。编译器给出的是 <code>E0515</code>，措辞非常直白。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0515]: cannot return reference to local variable `s`</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_e0597b.rs:3:5</span></div>
 <div class="cl is-text"><span class="code">  |</span></div>
-<div class="cl is-text"><span class="code">2 |     let s = String::from(&quot;hi&quot;);</span></div>
-<div class="cl is-text"><span class="code">  |             ----------------- `s` is borrowed here</span></div>
 <div class="cl is-text"><span class="code">3 |     &amp;s</span></div>
-<div class="cl is-text"><span class="code">  |     ^^ returns a value referencing data owned by the current function</span></div>
-<div class="cl is-text"><span class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</span></div></div></div>
-<p>（示意输出，具体行号与格式因 rustc 版本而异。）编译器是怎么知道 <code>&amp;s</code> 会出问题的？靠的是生命周期检查：它会比较引用的生命周期和被引用数据的生命周期，只有当前者不超过后者时才放行。大多数时候编译器能自己推断，不需要你写任何标注——这也是为什么很多人写了很久 Rust 都没碰过 <code>&#39;a</code>。</p>
-<p>这种自动推断不仅发生在函数签名上，也发生在局部变量上。你写 <code>let r = &amp;s;</code>，编译器会根据 <code>s</code> 的作用域给 <code>r</code> 安排一个合适的有效期，并保证 <code>r</code> 不会在 <code>s</code> 之后还被使用。换句话说，生命周期检查是无处不在的，标注只是你在少数「编译器猜不出来」的场合主动提供的提示。把这件事想通，就不难理解为什么生命周期被称作零成本抽象：它不产生运行时代码，只是编译期的一道校验。</p>
+<div class="cl is-text"><span class="code">  |     ^^ returns a reference to data owned by the current function</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>如果连标注都不写，错误出现的时机更早：<code>E0106</code> 会告诉你返回值里的借用「没有可借用的来源」。这是省略规则的直接后果——输入位置没有任何引用时，编译器没有 region 可以分配给输出，只能要求你显式声明。两种错误指向同一个本质：<strong>返回的引用必须在某个由调用方提供的、足够长寿的数据上</strong>.</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
-<p>生命周期就是「引用的保质期」。数据像一盒牛奶，引用像贴在上面的便签。便签的有效期不能超过牛奶本身：牛奶过期（被释放）了，便签还留着就是废纸。生命周期标注不是给牛奶写生产日期，而是告诉编译器「这张便签和那盒牛奶是同一批的，会一起到期」。</p>
+<p>生命周期标注不是给引用「办延期」，而是签合同。合同上写「这个借用至少覆盖区间 &#39;a」，调用方必须保证交进来的数据真的能覆盖 &#39;a，函数才能把借用交回去。编译器像合同审查员，逐条核对区间能不能对上；对不上就拒签，而不是等运行时出问题。</p>
 
 </div>
 </section>
-<h2 id="rust-ch01-lifetimes-4-2-标注语法-a-到底标的是什么">4.2 标注语法：&#39;a 到底标的是什么</h2>
-<p>生命周期标注长这样：<code>&#39;a</code>、<code>&#39;b</code>、<code>&#39;static</code>，读作「撇 a」「撇 static」。它出现的位置是引用类型上，比如 <code>&amp;&#39;a str</code> 表示「这个引用的生命周期是 &#39;a」。关键要理解：生命周期标注描述的是多个引用之间的相对关系，而不是让某个值活得更久。写 <code>&#39;a</code> 不会延长任何东西的寿命，它只是给编译器一张「关系图」。</p>
-<p>下面的 <code>longest</code> 函数演示了最典型的场景：两个输入引用，返回一个引用。编译器必须知道返回值借用的是哪一个——如果两个输入的生命周期各不相同，就可能返回 shorter 的那个，导致悬垂。写成 <code>&lt;&#39;a&gt;(x: &amp;&#39;a str, y: &amp;&#39;a str) -&gt; &amp;&#39;a str</code>，意思是「两个参数和返回值共享同一个生命周期 &#39;a，返回值的有效范围不会超过两个输入中较短的那个」。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    if x.len() &gt;= y.len() { x } else { y }</span></div>
+<h2 id="rust-ch01-lifetimes-4-2-生命周期省略规则-编译器替你写了什么">4.2 生命周期省略规则：编译器替你写了什么</h2>
+<p>既然每条引用都要标注，<code>&amp;str</code> 这种写法为什么能编译？因为编译器在语法层做了<strong>生命周期省略（lifetime elision）</strong>：在没有显式标注的地方，按三条规则自动补上。第一，输入位置每个被省略的生命周期都变成一个<strong>互不相同</strong>的参数——<code>fn f(x: &amp;str, y: &amp;str)</code> 相当于 <code>fn f&lt;&#39;a, &#39;b&gt;(x: &amp;&#39;a str, y: &amp;&#39;b str)</code>。第二，如果输入位置恰好只有一个生命周期（不管显式还是省略），它会被赋给所有省略的输出位置——<code>fn first(s: &amp;str) -&gt; &amp;str</code> 相当于 <code>fn first&lt;&#39;a&gt;(s: &amp;&#39;a str) -&gt; &amp;&#39;a str</code>。第三，如果有多个输入生命周期但其中一个是 <code>&amp;self</code> 或 <code>&amp;mut self</code>，那么 <code>self</code> 的生命周期赋给所有省略的输出——这解释了为什么方法大多不需要标注返回值。除此之外，省略输出的生命周期都是错误。</p>
+<p>规则的价值在于「写出来的东西」和「推理出来的东西」一致：省略不是放松检查，只是把机械的样板写法藏起来。一旦你理解了三条规则，看到 <code>fn longest(x: &amp;str, y: &amp;str) -&gt; &amp;str</code> 就能立刻判断它不合法——两个输入生命周期，又没有 <code>self</code>，编译器不知道返回值借的是哪一个。这时必须写出显式关系，把两个参数和返回值绑到同一个 <code>&#39;a</code>。</p>
+<p>第三条规则是方法写起来省心的主要原因。像 <code>fn get(&amp;self, key: &amp;str) -&gt; &amp;Value</code> 这样的签名里有两个输入生命周期，但返回值默认绑到 <code>self</code>，因为直观上「从容器里取出的引用属于容器，不属于查询用的键」。如果真要返回借自 <code>key</code> 的东西，就必须显式标注成 <code>key</code> 的生命周期，让契约与实际行为一致。把省略规则记成「先数输入、再看有没有 self」，比死背条款更可靠；编译器报错时也会提示是哪个输出生命周期没找到来源。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn longest&lt;'a&gt;(left: &amp;'a str, right: &amp;'a str) -&gt; &amp;'a str {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    if left.len() &gt;= right.len() { left } else { right }</span></div>
 <div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
 <div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let a = String::from(&quot;abcd&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let b = &quot;xy&quot;;</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let result = longest(a.as_str(), b);</span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;最长的是 {result}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div></div></div>
-<p>这里有一个常见困惑：既然 <code>&#39;a</code> 是两个参数生命周期中较短的那个，那函数返回后还能用 <code>result</code> 吗？可以，只要 <code>result</code> 的使用发生在 <code>a</code> 和 <code>b</code> 都还活着的作用域内。借用检查器会把 <code>result</code> 的有效期限制在较短的那个输入之内，超出就报错。<code>&#39;a</code> 不是某个具体的秒数，而是一段由调用点决定的作用域区间。</p>
-<p>如果把两个参数写成不同的生命周期，比如 <code>&lt;&#39;a, &#39;b&gt;(x: &amp;&#39;a str, y: &amp;&#39;b str)</code>，返回值就必须明确说自己跟谁走。通常做法是加一个约束 <code>-&gt; &amp;&#39;a str</code>，再在代码里保证只返回 <code>x</code>（或者要求 <code>&#39;b: &#39;a</code>，即 <code>b</code> 活得至少和 <code>a</code> 一样久）。编译器不会替你做这种「选哪个」的决定，因为这是程序逻辑的一部分——它只负责检查你的承诺有没有兑现。</p>
-<h2 id="rust-ch01-lifetimes-4-3-省略规则-为什么你很少写生命周期">4.3 省略规则：为什么你很少写生命周期</h2>
-<p>既然生命周期这么重要，为什么日常代码里几乎看不到 <code>&#39;a</code>？因为编译器有三条生命周期省略（elision）规则，能自动为多数函数签名补上标注。规则如下：每个引用参数各自获得一个生命周期；如果只有一个输入生命周期，所有输出都用它；如果有多个输入生命周期，但其中一个出现在 <code>&amp;self</code> 或 <code>&amp;mut self</code> 上，那么所有输出都用 <code>self</code> 的生命周期。</p>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let a = String::from(&quot;short&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let result;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        let b = String::from(&quot;a much longer string&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        result = longest(&amp;a, &amp;b);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        println!(&quot;内层看到: {result}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;外层仍可用 a: {a}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 longest.rs -o longest &amp;&amp; ./longest</span></div>
+<div class="cl is-text"><span class="code">内层看到: a much longer string</span></div>
+<div class="cl is-text"><span class="code">外层仍可用 a: short</span></div></div></div>
+<p>注意 <code>longest</code> 的 <code>&#39;a</code> 实际上被推理成「<code>a</code> 和 <code>b</code> 两个借用 region 的交集」：返回值在内层使用，所以 <code>&#39;a</code> 不需要覆盖到外层；外层仍能打印 <code>a</code>，因为对 <code>a</code> 的借用早已结束。这正是 NLL 与生命周期推理协作的结果。若把 <code>result</code> 的打印移到内层作用域之外，约束就会要求 <code>&#39;a</code> 延伸到那里，而 <code>b</code> 已经释放，编译立刻失败——你可以亲手删掉内层那行 <code>println!</code> 试试。省略规则还有两处延伸：trait 对象在引用后默认带该引用的生命周期（<code>&amp;&#39;a dyn Trait</code> 等价于 <code>&amp;&#39;a (dyn Trait + &#39;a)</code>），而 <code>Box&lt;dyn Trait&gt;</code> 默认要求 <code>&#39;static</code>；这些默认值在错误信息里经常出现，看到时不必惊慌，它们只是省略规则的另一面。</p>
+<h2 id="rust-ch01-lifetimes-4-3-region-推理-约束从哪来-怎么求解">4.3 region 推理：约束从哪来，怎么求解</h2>
+<p>生命周期推理可以看成一次约束求解。约束主要有三类来源。第一类是<strong>良构性（well-formedness）</strong>：出现 <code>&amp;&#39;a T</code> 时，必须满足 <code>T: &#39;a</code>，意思是「T 内部的所有引用都比 <code>&#39;a</code> 长寿」。第二类是<strong>子类型关系</strong>：<code>&amp;&#39;long T</code> 可以用在需要 <code>&amp;&#39;short T</code> 的地方，前提是 <code>&#39;long: &#39;short</code>（长 region 包含短 region）。第三类是<strong>赋值与函数调用</strong>：把返回值赋给某个变量，等于要求返回值的 region 覆盖到该变量最后一次使用的程序点。求解器不断传播这些约束，直到收敛；若某个 region 被迫同时「长于」和「短于」另一个 region，就报错。</p>
+<p>结构体里的生命周期参数遵循同样的逻辑。<code>struct Borrowed&lt;&#39;a&gt; { name: &amp;&#39;a str }</code> 声明了一条约束：任何 <code>Borrowed&lt;&#39;a&gt;</code> 实例里的数据必须活到 <code>&#39;a</code>。从函数返回这个结构体时，编译器会把实参的 region 与返回类型的 <code>&#39;a</code> 连起来，于是「结构体里存着借用」这件事也能被静态验证。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">11 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">struct Borrowed&lt;'a&gt; { name: &amp;'a str }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn wrap&lt;'a&gt;(s: &amp;'a str) -&gt; Borrowed&lt;'a&gt; { Borrowed { name: s } }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let owned = String::from(&quot;Rust&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let b = wrap(&amp;owned);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;{b:?}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;{}&quot;, b.name);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 borrow_struct.rs -o borrow_struct &amp;&amp; ./borrow_struct</span></div>
+<div class="cl is-text"><span class="code">Borrowed { name: &quot;Rust&quot; }</span></div>
+<div class="cl is-text"><span class="code">Rust</span></div></div></div>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">时间轴（程序点 →）
+  ┌──────── 借用 b 的 region ────────┐
+  │                                 │
+①创建 owned  ②wrap(&amp;owned)  ③println!(&quot;{b:?}&quot;)  ④println!(&quot;{}&quot;, b.name)  ⑤owned 释放
+  │                                                               │
+  └──────── 'a 必须覆盖 ②→④ ────────────────────────────────────────┘
+
+若把 ④ 移到 ⑤ 之后：约束变成 `'a` 覆盖到 ⑤ 之后，而 owned 已经释放 → 编译失败</pre></figure>
+<p>函数调用是约束的重要来源：调用 <code>wrap(&amp;owned)</code> 时，编译器把形参的 <code>&#39;a</code> 与实参 <code>&amp;owned</code> 的 region 连起来，再把返回值的生命周期也连到同一个 <code>&#39;a</code>。如果随后把返回值存入一个活得更长的变量，约束就要求 <code>&#39;a</code> 相应延长；一旦延长到超过 <code>owned</code> 的释放点，求解失败，报错出现。这条链说明为什么生命周期错误经常「离现场很远」：出错的是约束汇合处，而不是写错标注的那一行。</p>
+<p>一个常见的误解是「生命周期标注让借用活得更久」。从上图可以看出，<code>&#39;a</code> 只是把②到④这段区间命了名；如果你硬要把它拉到⑤之后，编译器不会配合你延长 <code>owned</code> 的生命，只会报错。要真正让数据活得更久，得改变所有权（返回 <code>String</code> 或用 <code>Arc</code>），而不是改标注。这也是生命周期设计的核心哲学：它是对程序行为的<strong>描述与约束</strong>，不是对运行时行为的控制。</p>
+<h2 id="rust-ch01-lifetimes-4-4-方差与子类型-为什么-mut-t-对-t-不变">4.4 方差与子类型：为什么 <code>&amp;mut T</code> 对 <code>T</code> 不变</h2>
+<p>方差（variance）描述的是「泛型参数变化时，整体类型能否跟着变化」。先看 <code>&amp;&#39;a T</code>：它对 <code>&#39;a</code> 和 <code>T</code> 都是**协变（covariant）**的——如果 <code>&#39;long: &#39;short</code>，那么 <code>&amp;&#39;long T</code> 可以当成 <code>&amp;&#39;short T</code> 用；如果 <code>Sub</code> 是 <code>Super</code> 的子类型，<code>&amp;Sub</code> 也能当成 <code>&amp;Super</code> 用。这符合直觉：一个活得更久的引用、一个提供更丰富能力的引用，都可以安全地「降级」使用。</p>
+<p><code>&amp;&#39;a mut T</code> 则不同：它对 <code>&#39;a</code> 协变，但对 <code>T</code> 是**不变（invariant）**的。原因可以用一个反例说明：假如允许把 <code>&amp;mut &amp;&#39;static str</code> 当成 <code>&amp;mut &amp;&#39;short str</code>，函数就可以通过后者往那个槽里写入一个只活到 <code>&#39;short</code> 的字符串引用；而调用方手里拿着 <code>&amp;&#39;static str</code> 的声明，之后继续把它当静态引用用，就会读到已经失效的数据。为了堵住这个漏洞，编译器禁止这种转换。</p>
+<p>假如试着把短引用写进一个声明为 <code>&amp;mut &amp;&#39;static str</code> 的槽位，会得到下面这份真实诊断：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error: lifetime may not live long enough</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_invariant.rs:2:5</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">1 | fn overwrite&lt;'a&gt;(slot: &amp;mut &amp;'static str, short: &amp;'a str) {</span></div>
+<div class="cl is-text"><span class="code">  |              -- lifetime `'a` defined here</span></div>
+<div class="cl is-text"><span class="code">2 |     *slot = short;</span></div>
+<div class="cl is-text"><span class="code">  |     ^^^^^^^^^^^^^ assignment requires that `'a` must outlive `'static`</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>编译器要求短引用活到静态区那么久，显然不可能。理解方差能省掉大量调试时间：当错误涉及 <code>&amp;mut</code> 里的引用类型时，先怀疑不变性，而不是反复调整标注。标准库里 <code>Cell&lt;T&gt;</code> 同样对 <code>T</code> 不变（因为 <code>get</code>/<code>set</code> 可以双向流动），<code>Vec&lt;T&gt;</code> 对 <code>T</code> 协变，函数类型 <code>fn(T) -&gt; U</code> 对参数 <code>T</code> <strong>逆变（contravariant）</strong>、对返回值 <code>U</code> 协变。想自定义方差时可以用 <code>PhantomData&lt;T&gt;</code>（协变）、<code>PhantomData&lt;Cell&lt;T&gt;&gt;</code>（不变）或 <code>PhantomData&lt;fn(T)&gt;</code>（逆变）做标记——这是第 8 单元的话题。</p>
 <table>
 <thead>
 <tr>
-<th>写法</th>
-<th>含义</th>
-<th>何时需要</th>
+<th>类型</th>
+<th>对生命周期的方差</th>
+<th>对 T 的方差</th>
+<th>原因</th>
 </tr>
 </thead>
 <tbody><tr>
 <td><code>&amp;&#39;a T</code></td>
-<td>对 <code>T</code> 的共享引用，生命周期为 <code>&#39;a</code></td>
-<td>需要标注引用之间的关系时</td>
+<td>协变</td>
+<td>协变</td>
+<td>只能读出，降级安全</td>
 </tr>
 <tr>
 <td><code>&amp;&#39;a mut T</code></td>
-<td>对 <code>T</code> 的可变引用，生命周期为 <code>&#39;a</code></td>
-<td>同上，且需要修改数据时</td>
+<td>协变</td>
+<td>不变</td>
+<td>可写入，防止短值混入长槽</td>
 </tr>
 <tr>
-<td><code>fn f&lt;&#39;a&gt;(x: &amp;&#39;a str) -&gt; &amp;&#39;a str</code></td>
-<td>输出借用自输入</td>
-<td>多个输入且无 <code>self</code> 时</td>
+<td><code>Cell&lt;T&gt;</code></td>
+<td>—</td>
+<td>不变</td>
+<td><code>get</code>/<code>set</code> 双向流动</td>
 </tr>
 <tr>
-<td><code>T: &#39;a</code></td>
-<td>类型 <code>T</code> 里的所有引用都至少活到 <code>&#39;a</code></td>
-<td>泛型与 trait 约束中</td>
+<td><code>Vec&lt;T&gt;</code></td>
+<td>—</td>
+<td>协变</td>
+<td>只对外暴露安全的读写接口</td>
 </tr>
 <tr>
-<td><code>&amp;&#39;static str</code></td>
-<td>整个程序期间都有效</td>
-<td>字符串字面量、全局常量</td>
+<td><code>fn(A) -&gt; B</code></td>
+<td>—</td>
+<td>对 A 逆变、对 B 协变</td>
+<td>参数与返回值的方向相反</td>
 </tr>
 </tbody></table>
 
-<p>把这三条规则套到 <code>longest</code> 上：它有两个输入引用，又都不是 <code>self</code>，所以编译期无法决定返回值该用哪个生命周期，必须手写。而像 <code>fn first(s: &amp;str) -&gt; &amp;str</code> 这种只有一个输入引用的写法，编译器自动把输出生命周期设成和输入一样，于是你可以完全不写标注。理解省略规则的最大好处是：当你真的遇到「编译器要求写生命周期」的报错时，能立刻明白是自己的签名触发了哪条规则的例外。</p>
-<h2 id="rust-ch01-lifetimes-4-4-结构体与-impl-上的生命周期">4.4 结构体与 impl 上的生命周期</h2>
-<p>当结构体字段是引用时，结构体本身也要带生命周期参数，否则编译器不知道这个字段借的是谁。写法是 <code>struct Excerpt&lt;&#39;a&gt; { text: &amp;&#39;a str }</code>，表示 <code>Excerpt</code> 实例不能比 <code>text</code> 引用的数据活得久。注意生命周期参数写在尖括号里、名字前面带撇号，和泛型参数并列出现。</p>
-<p>在 <code>impl</code> 块里也要写出 <code>&lt;&#39;a&gt;</code>，否则编译器不认识这个参数。下面这个例子里，<code>first_word</code> 用 <code>&amp;self</code> 借用结构体，并返回 <code>&amp;&#39;a str</code>——因为字段 <code>text</code> 本身就是 <code>&amp;&#39;a str</code>，从它切出来的子串自然也带着 <code>&#39;a</code>。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Excerpt&lt;'a&gt; {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    text: &amp;'a str,</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<p>协变在实践中最常见的表现是：<code>&amp;&#39;static str</code> 可以传给任何期望 <code>&amp;&#39;a str</code> 的函数，因为 <code>&#39;static</code> 包含所有 region。下面这段程序先传一个局部字符串的引用，再传一个静态字面量，同一个函数签名都能接受。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn print_name(name: &amp;str) { println!(&quot;{name}&quot;); }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn static_name() -&gt; &amp;'static str { &quot;字符串字面量存放在静态存储区&quot; }</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl&lt;'a&gt; Excerpt&lt;'a&gt; {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn first_word(&amp;self) -&gt; &amp;'a str {</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        self.text.split_whitespace().next().unwrap_or(&quot;&quot;)</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let local = String::from(&quot;局部变量&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    print_name(&amp;local);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    print_name(static_name()); // 'static 协变成调用点需要的短 region</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 variance.rs -o variance &amp;&amp; ./variance</span></div>
+<div class="cl is-text"><span class="code">局部变量</span></div>
+<div class="cl is-text"><span class="code">字符串字面量存放在静态存储区</span></div></div></div>
+<h2 id="rust-ch01-lifetimes-4-5-hrtb-for-a-的真实含义与边界">4.5 HRTB：<code>for&lt;&#39;a&gt;</code> 的真实含义与边界</h2>
+<p>有时候你需要表达的不是「存在某个生命周期让函数可用」，而是「对<strong>任意</strong>生命周期都可用」。这就是 <strong>HRTB（higher-ranked trait bound，高阶 trait 约束）</strong>，写作 <code>for&lt;&#39;a&gt; Fn(&amp;&#39;a str) -&gt; &amp;&#39;a str</code>。它常用于回调：调用方要把一个函数交给你，而你会在自己的栈帧里创建临时数据传给它，因此必须保证这个函数对任何短命借用都能工作。</p>
+<p>下面的 <code>apply</code> 就是标准样板。<code>F: for&lt;&#39;a&gt; Fn(&amp;&#39;a str) -&gt; &amp;&#39;a str</code> 的意思是：对每一个 <code>&#39;a</code>，<code>F</code> 都能接受 <code>&amp;&#39;a str</code> 并返回同样长寿的 <code>&amp;&#39;a str</code>。于是函数体里创建 <code>local</code> 并把它的引用交给 <code>f</code> 是安全的——返回值只活到 <code>local</code> 离开作用域之前，随后被 <code>to_string()</code> 转成拥有的字符串。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">13 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn apply&lt;F&gt;(f: F) -&gt; String</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">where</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    F: for&lt;'a&gt; Fn(&amp;'a str) -&gt; &amp;'a str,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">{</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let local = String::from(&quot;临时借用&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    f(&amp;local).to_string()</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">fn identity&lt;'a&gt;(s: &amp;'a str) -&gt; &amp;'a str { s }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;{}&quot;, apply(identity));</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 hrtb.rs -o hrtb &amp;&amp; ./hrtb</span></div>
+<div class="cl is-text"><span class="code">临时借用</span></div></div></div>
+<p>HRTB 的边界同样能靠失败案例理解。如果传进来的闭包忽略参数，返回自己捕获的 <code>String</code> 的引用，它就只能保证返回值的寿命跟捕获对象一样长，无法对「任意 <code>&#39;a</code>」成立——尤其当调用方要求 <code>&#39;static</code> 时立刻露馅。编译器会给出 <code>E0597</code>，并指出「returning this value requires that <code>captured</code> is borrowed for <code>&#39;static</code>」。修复方向是让返回类型真正绑定到输入：<code>|s: &amp;str| s</code> 这种原样返回的闭包满足 HRTB，而返回捕获值的闭包不满足。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0597]: `captured` does not live long enough</span></div>
+<div class="cl is-text"><span class="code">  --&gt; diag_hrtb.rs:11:37</span></div>
+<div class="cl is-text"><span class="code">   |</span></div>
+<div class="cl is-text"><span class="code">10 |     let captured = String::from(&quot;外部捕获&quot;);</span></div>
+<div class="cl is-text"><span class="code">   |         -------- binding `captured` declared here</span></div>
+<div class="cl is-text"><span class="code">11 |     println!(&quot;{}&quot;, apply(|_s: &amp;str| captured.as_str()));</span></div>
+<div class="cl is-text"><span class="code">   |                          ---------- ^^^^^^^^---------</span></div>
+<div class="cl is-text"><span class="code">   |                          |          |</span></div>
+<div class="cl is-text"><span class="code">   |                          |          borrowed value does not live long enough</span></div>
+<div class="cl is-text"><span class="code">   |                          |          returning this value requires that `captured` is borrowed for `'static`</span></div>
+<div class="cl is-text"><span class="code">   |                          |          value captured here</span></div>
+<div class="cl is-text"><span class="code">12 | }</span></div>
+<div class="cl is-text"><span class="code">   | - `captured` dropped here while still borrowed</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>需要区分另一种写法：<code>fn apply&lt;&#39;a, F&gt;(f: F) -&gt; String where F: Fn(&amp;&#39;a str) -&gt; &amp;&#39;a str</code> 里的 <code>&#39;a</code> 是调用 <code>apply</code> 时选定的<strong>单个</strong>生命周期，约束弱得多。HRTB 的 <code>for&lt;&#39;a&gt;</code> 把量词放进 bound 内部，要求实现对所有 <code>&#39;a</code> 都成立。编译器的「implementation is not general enough」类错误通常就来自这里：你写的类型只对某个具体生命周期成立，而签名要求对任意生命周期成立。</p>
+<p>标准库里 HRTB 无处不在。排序函数的比较器、迭代器的 <code>map</code> 闭包、<code>Iterator::any</code> 的谓词，本质上都只对「调用期间有效的引用」做事，不会把引用存到别处，所以它们的 bound 都隐含「对任意短命借用可用」的意思。当你自己写接受回调的 API，尤其是回调会拿到你函数内部创建的临时引用时，主动加上 <code>for&lt;&#39;a&gt;</code> 能让类型签名准确表达意图，也把「不能把参数偷偷存起来」的要求写进了类型。代价是闭包的类型推断更严格——捕获外部借用的闭包往往不再满足约束，这正是上一份诊断传递的信息。</p>
+<h2 id="rust-ch01-lifetimes-4-6-static-的真实含义-不是-永不释放的对象">4.6 <code>&#39;static</code> 的真实含义：不是「永不释放的对象」</h2>
+<p><code>&#39;static</code> 是最长的 region：它覆盖整个程序的执行期。<code>&amp;&#39;static str</code> 指向的数据确实存放在静态存储区（字符串字面量、<code>static</code> 变量、<code>Box::leak</code> 泄漏出来的内存），程序结束前不会失效。但 <strong><code>T: &#39;static</code> 是关于类型内容的约束，不是说 T 的对象永不释放</strong>。一个 <code>String</code> 完全满足 <code>String: &#39;static</code>，因为它不持有任何借用；但其引用 <code>&amp;String</code> 一般不满足，除非那个 <code>String</code> 本身在静态存储区。这条区别解释了很多看似矛盾的现象：<code>thread::spawn</code> 要求闭包 + 捕获值满足 <code>&#39;static</code>，是因为新线程可能比当前栈帧活得更久，所以捕获值必须「不借用任何短命数据」——把 <code>String</code> move 进线程没问题，借一个局部 <code>String</code> 就不行。</p>
+<p><code>Cow&lt;&#39;a, str&gt;</code>（clone-on-write）把「借用或拥有」的二分写进了类型：<code>Cow::Borrowed(&amp;&#39;a str)</code> 借用现有数据，零分配；<code>Cow::Owned(String)</code> 持有副本，可以在必要时修改。下面的 <code>normalize</code> 在输入不含空格时直接借用返回，在需要替换时分配一个新 <code>String</code>——调用方无需关心是哪一种，因为 <code>Cow</code> 解引用后都表现为 <code>&amp;str</code>。返回值写成 <code>Cow&lt;&#39;_, str&gt;</code> 借用了省略规则：输出生命周期来自输入 <code>input</code> 的那个省略生命周期，因此返回值不能比输入活得更久。配合 <code>Box::leak</code>，还能构造一个真正存放在静态区的 <code>&amp;&#39;static str</code>；注意泄漏会放弃释放，适合配置表、全局常量这类「整个程序都要用」的数据，不宜滥用。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">19 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::borrow::Cow;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn normalize(input: &amp;str) -&gt; Cow&lt;'_, str&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    if input.contains(' ') {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        Cow::Owned(input.replace(' ', &quot;_&quot;))</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    } else {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        Cow::Borrowed(input)</span></div>
 <div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
 <div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
 <div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let story = String::from(&quot;rust lifetime basics&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let ex = Excerpt { text: story.as_str() };</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;第一个词是 {}&quot;, ex.first_word());</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
-<p>如果你把方法签名改成返回 <code>&amp;str</code>（不带 <code>&#39;a</code>），生命周期会按省略规则绑定到 <code>&amp;self</code>，表达的是「返回值的有效期不超过这个 Excerpt 实例」。两种写法都能编译，但语义不同：前者强调「和原始文本同寿」，后者强调「和结构体实例同寿」。实际项目里，只要你想清楚返回值实际借用的是谁，选对应的那个即可。</p>
-<h2 id="rust-ch01-lifetimes-4-5-static-最长但常被误解">4.5 &#39;static：最长但常被误解</h2>
-<p><code>&#39;static</code> 表示「整个程序运行期间都有效」。最常见的例子是字符串字面量：它们被编译进二进制文件，从程序启动到退出都存在，所以类型是 <code>&amp;&#39;static str</code>。下面的函数只接受 <code>&#39;static</code> 引用，传入字面量完全没问题。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn print_static(s: &amp;'static str) {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    println!(&quot;{s}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let literal = &quot;我是字符串字面量&quot;;</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    print_static(literal);</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div></div></div>
-<p>但 <code>&#39;static</code> 不等于「永远不变」，也不等于「必须写成字面量」。通过 <code>Box::leak</code> 把堆数据泄露出去，也能得到 <code>&amp;&#39;static mut T</code>——代价是这块内存直到程序结束都不会被释放。所以 <code>&#39;static</code> 更像一个承诺：「我保证这份数据活得比任何借用都久」。在函数签名里要求 <code>&amp;&#39;static str</code>，会让函数拒绝一切指向局部变量的引用，只接受真正长命的数据；写之前要想清楚自己是否真的需要这么强的约束。</p>
-<p>生命周期还会出现在泛型约束里。写 <code>T: &#39;a</code> 的意思是「类型 <code>T</code> 内部包含的所有引用都至少活到 <code>&#39;a</code>」。这在写泛型容器时很重要：如果你把 <code>T</code> 存进一个活得很长的结构体，就必须保证 <code>T</code> 里没有「短命」的引用，否则整个结构体会变成悬垂的。初学阶段遇到这种约束，先把它读成「T 里不能藏短命引用」就够了。</p>
-<p>一个实用的判断顺序是：先什么都不写，让编译器推断；只有当它明确报错、或你发现省略规则的表达能力不够时，再引入 <code>&#39;a</code>。生命周期不是用来「炫技」的，它是你向编译器解释引用关系的工具——能把关系讲清楚就够了，不必给每个引用都起名字。</p>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let s = String::from(&quot;plain&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let c = normalize(&amp;s);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;{c}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let spaced = normalize(&quot;has spaces&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;{spaced}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let leaked: &amp;'static str = Box::leak(String::from(&quot;泄漏到静态区&quot;).into_boxed_str());</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;{leaked}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 static_cow.rs -o static_cow &amp;&amp; ./static_cow</span></div>
+<div class="cl is-text"><span class="code">plain</span></div>
+<div class="cl is-text"><span class="code">has_spaces</span></div>
+<div class="cl is-text"><span class="code">泄漏到静态区</span></div></div></div>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：看到「<code>T: &#39;static</code> 要求」就以为必须把对象泄漏或放进 <code>static</code>。绝大多数情况下正确做法是把需要的数据 <strong>move 进来</strong>（交出所有权），而不是借用局部变量。另一个坑是在 trait 对象上忽略默认生命周期：<code>Box&lt;dyn Trait&gt;</code> 默认是 <code>Box&lt;dyn Trait + &#39;static&gt;</code>，如果你打算放进一个借用的对象，必须显式写 <code>Box&lt;dyn Trait + &#39;a&gt;</code>；反过来，<code>&amp;&#39;a dyn Trait</code> 默认是 <code>&amp;&#39;a (dyn Trait + &#39;a)</code>，这里再写 <code>+ &#39;static</code> 就会拒绝短命实现。区分「数据本身在静态存储区」和「类型不含非静态借用」这两句话，能避开大半相关错误。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-lifetimes-4-7-自引用结构与-pin-引子">4.7 自引用结构与 Pin 引子</h2>
+<p>现在来到生命周期的一个深水区：结构体里同时持有数据和指向自己数据的引用。为什么难？因为 Rust 的移动语义在机器层面是按位复制，一旦结构体被移动，字段的地址就变了，而那个指向旧地址的引用（或裸指针）会变成悬垂。考虑 <code>struct SelfRef { value: String, ptr: *const String }</code>：<code>ptr</code> 指向 <code>value</code> 的缓冲区，移动 <code>SelfRef</code> 后 <code>ptr</code> 仍指向旧位置。普通引用连构造这一步都过不了——借用检查器不会允许你在一个结构体里存指向自身字段的引用。</p>
+<p><strong>Pin</strong> 是标准库给出的解法。<code>Pin</code> 包裹一个指针类型 <code>P</code>，保证被指对象一旦被 pin 住，就再也不能被移动（除非它是 <code>Unpin</code>）。<code>Unpin</code> 是一个自动 trait，绝大多数类型都满足，表示「移动它是安全的」；一旦结构体里出现了 <code>PhantomPinned</code>，它就变成 <code>!Unpin</code>，<code>Pin&lt;Box&lt;T&gt;&gt;</code> 便不能把内容取出来移动。<code>async</code> 状态机是这种需求的典型来源：一个 <code>async fn</code> 被编译成状态机，局部变量之间可能互相引用，轮询时状态机原地被修改却不能移动——这正是 <code>Pin&lt;&amp;mut Future&gt;</code> 中 <code>Pin</code> 的用武之地。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">33 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::marker::PhantomPinned;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::pin::Pin;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct SelfRef {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    value: String,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    ptr: *const String,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    _pin: PhantomPinned,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">impl SelfRef {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn new(value: &amp;str) -&gt; Pin&lt;Box&lt;SelfRef&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let mut this = Box::pin(SelfRef {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            value: value.to_string(),</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            ptr: std::ptr::null(),</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            _pin: PhantomPinned,</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        });</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let self_ptr: *const String = &amp;this.value as *const String;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        unsafe {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            let mut_ref = Pin::as_mut(&amp;mut this);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            Pin::get_unchecked_mut(mut_ref).ptr = self_ptr;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        this</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    fn value(&amp;self) -&gt; &amp;str {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        unsafe { &amp;*self.ptr }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let sr = SelfRef::new(&quot;自引用结构&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    println!(&quot;{}&quot;, sr.value());</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 self_ref.rs -o self_ref &amp;&amp; ./self_ref</span></div>
+<div class="cl is-text"><span class="code">自引用结构</span></div></div></div>
+<p>这段代码里有两处 unsafe，都不是因为生命周期标注不够，而是因为「地址稳定性」这件事编译器无法用普通引用表达：第一，<code>get_unchecked_mut</code> 拿到 <code>&amp;mut SelfRef</code>，你必须保证不借此把结构体移走；第二，<code>&amp;*self.ptr</code> 解引用裸指针，你必须保证 <code>ptr</code> 始终指向仍在原位的 <code>value</code>。这里成立的前提是 <code>SelfRef</code> 含 <code>PhantomPinned</code>，且被 <code>Box::pin</code> 固定在堆上——堆分配本身不会因栈帧变化而移动。记住这条边界：Pin 保证的是<strong>不再移动</strong>，不是「永不析构」；析构时字段按声明顺序释放，<code>ptr</code> 只是裸指针，不会自动跟着释放，所以不需要额外处理。还要留意 <code>Pin&lt;&amp;mut T&gt;</code> 与 <code>Pin&lt;Box&lt;T&gt;&gt;</code> 的区别：后者拥有堆上的对象，能独自保证地址稳定；前者只是一个借来的固定承诺，其有效性取决于你有没有在别处移动底层对象。自己写 <code>Pin::new_unchecked</code> 时，这条不变式完全由你负责。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>自引用结构像一个人指着自己在房间里的座位说「我坐这儿」。如果有人把他连人带椅子搬走，他指的位置就错了。Pin 相当于把椅子焊在地上：人还能坐着干活，但不会再被搬走。<code>PhantomPinned</code> 就是主动声明「我这个座位不能搬」，而 <code>unsafe</code> 的那几行是你在签字保证焊得牢。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-lifetimes-4-8-工程取舍-什么时候与生命周期打交道">4.8 工程取舍：什么时候与生命周期打交道</h2>
+<p>生命周期标注的最终目标是表达「数据从哪来、能用到哪」，所以第一步永远是问：这个接口能不能改成返回拥有所有权的值？能用 <code>String</code> 就用 <code>String</code>，能用 <code>Arc&lt;T&gt;</code> 共享就用 <code>Arc&lt;T&gt;</code>——所有权方案会让签名和调用方都更简单。只有当复制成本确实不可接受（大字符串、大缓冲区、高频调用）时，才引入借用与生命周期参数。<code>Cow&lt;&#39;a, str&gt;</code> 是很好的中间路线：常见路径零拷贝，必要时才分配，把取舍推迟到运行时按数据决定。</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>推荐方案</th>
+<th>关键约束</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>返回派生字符串</td>
+<td><code>String</code> 或 <code>Cow&lt;&#39;_, str&gt;</code></td>
+<td>无生命周期或只借输入</td>
+</tr>
+<tr>
+<td>结构体暂存借用</td>
+<td><code>struct S&lt;&#39;a&gt; { r: &amp;&#39;a T }</code></td>
+<td>结构体整体受 <code>&#39;a</code> 约束</td>
+</tr>
+<tr>
+<td>通用回调、借用临时量</td>
+<td><code>for&lt;&#39;a&gt; Fn(&amp;&#39;a T)</code></td>
+<td>实现必须对任意 <code>&#39;a</code> 成立</td>
+</tr>
+<tr>
+<td>跨线程/存入全局</td>
+<td><code>T: &#39;static</code></td>
+<td>类型不含短命借用</td>
+</tr>
+<tr>
+<td>自引用状态机</td>
+<td><code>Pin&lt;Box&lt;T&gt;&gt;</code> + <code>!Unpin</code></td>
+<td>地址稳定，最小 unsafe</td>
+</tr>
+</tbody></table>
+
+<p>生命周期还会出现在 trait 定义中：<code>trait Borrowable { fn borrow(&amp;self) -&gt; &amp;str; }</code> 依赖第三条省略规则把返回值绑到 <code>self</code>；如果需要更精细的关系，就写成 <code>trait Borrowable&lt;&#39;a&gt; { fn borrow(&amp;self) -&gt; &amp;&#39;a str; }</code>，让实现方明确声明借用的来源。带生命周期参数的 trait 会让泛型约束变复杂（<code>&#39;a</code> 出现在 <code>T: Trait&lt;&#39;a&gt;</code> 里），但只要记住「先确定数据从哪来、再确定约束」，就不会迷路。</p>
+<p>把本单元和上一单元拼起来看：借用检查器负责「同一时刻谁能访问」，生命周期负责「这些借用能覆盖哪些程序点」，方差决定「哪些类型替换是安全的」，HRTB 把约束推广到任意 region，而 Pin 补上了地址稳定性这块拼图。它们共同支撑起 Rust 「无需垃圾回收的内存安全」这一核心承诺。下一单元转向枚举与错误处理，用类型系统把「可能失败」这件事也纳入编译期检查。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>给 4.2 节的 <code>longest</code> 增加第三个参数 <code>&amp;str</code>，先尝试用省略规则写签名（应报错），再用一个 <code>&#39;a</code> 绑定三者并编译；把真实报错的第一行贴出来。</li>
+<li>写一个 <code>struct Pair&lt;&#39;a&gt; { left: &amp;&#39;a str, right: &amp;&#39;a str }</code> 和 <code>fn longer&lt;&#39;a&gt;(p: &amp;Pair&lt;&#39;a&gt;) -&gt; &amp;&#39;a str</code>，让它返回更长的那个字段；编译后让 <code>Pair</code> 的某个字段来自短命局部变量，验证编译器如何拒绝。</li>
+<li>亲手编译 4.4 节的 <code>overwrite</code> 函数，记录真实错误；再把 <code>&amp;mut &amp;&#39;static str</code> 改成 <code>&amp;mut &amp;str</code>（带生命周期参数），解释为什么错误消失，以及这与方差的关系。</li>
+<li>用 <code>Cow&lt;&#39;_, str&gt;</code> 写一个 <code>trim_or_own</code> 函数：输入两端无空白时借用返回，否则返回 <code>String</code>；用两个测试用例（一个无需修改、一个需要修改）验证两条分支都走通，并解释 <code>&#39;static</code> 数据为什么也能传进来。</li>
+</ul>
+
+</div></div>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">
 <ul>
-<li>生命周期标注会延长引用的存活时间吗？</li>
-<li><code>longest</code> 为什么必须手写生命周期，而 <code>fn first(s: &amp;str) -&gt; &amp;str</code> 不用？</li>
-<li><code>&amp;&#39;static str</code> 一定是字符串字面量吗？</li>
+<li>生命周期标注是「延长寿命」还是「声明约束」？为什么说 <code>&#39;a</code> 是由约束求解得到的 region 变量？</li>
+<li>三条省略规则分别是什么？什么时候省略输出生命周期会报错？</li>
+<li><code>&amp;&#39;a T</code> 与 <code>&amp;&#39;a mut T</code> 在方差上有什么区别？为什么后者对 <code>T</code> 必须不变？</li>
+<li><code>for&lt;&#39;a&gt; Fn(&amp;&#39;a str) -&gt; &amp;&#39;a str</code> 与把 <code>&#39;a</code> 放在函数泛型参数上有什么本质区别？</li>
+<li><code>T: &#39;static</code> 到底约束了什么？<code>Box&lt;dyn Trait&gt;</code> 默认要求什么生命周期？</li>
+<li>为什么自引用结构需要 Pin？<code>Unpin</code> 与 <code>PhantomPinned</code> 分别起什么作用？</li>
 </ul>
 
 </div>
 </section>
 </article>
-<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__borrowing-and-references.md.html">← 借用与引用</a><a href="rust__chapters__ch01__enums-pattern-matching-and-errors.md.html">枚举、模式匹配与错误处理 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__borrowing-and-references.md.html">← 借用与引用</a><a href="rust__chapters__ch01__enums-and-errors.md.html">枚举与错误处理 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
 </main>
 </body>
 </html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高级类型与机制</title>
+<meta name="description" content="第 8 单元 · 建议 90 分钟 · 从 DST、Pin 到方差与 trait solver，补齐 Rust 类型系统的底层拼图">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">高级类型与机制</h1><p class="doc-sub">第 8 单元 · 建议 90 分钟 · 从 DST、Pin 到方差与 trait solver，补齐 Rust 类型系统的底层拼图</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 08-advanced-types.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-1-编译期大小-sized-sized-与-unsized-的边界">8.1 编译期大小：`Sized`、`?Sized` 与 unsized 的边界</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-2-dst-与胖指针-元数据的来源与未size化-coercion">8.2 DST 与胖指针：元数据的来源与未size化 coercion</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-3-pin-unpin-自引用结构为什么需要地址稳定">8.3 Pin/Unpin：自引用结构为什么需要地址稳定</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-4-方差深入-协变-逆变与不变">8.4 方差深入：协变、逆变与不变</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-5-trait-solver-直觉-impl-匹配是一次证明搜索">8.5 trait solver 直觉：impl 匹配是一次证明搜索</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-6-macro_rules-在-token-层写生成规则">8.6 macro_rules!：在 token 层写生成规则</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-7-const-generics-把值提升到类型参数">8.7 const generics：把值提升到类型参数</a></li><li class="toc-l2"><a href="#rust-ch01-advanced-types-8-8-把这些机制放回工程语境">8.8 把这些机制放回工程语境</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>区分 <code>Sized</code> 与 <code>?Sized</code>，理解 DST 与胖指针的元数据来源</li>
+<li>说清 <code>Pin</code>/<code>Unpin</code> 为什么是自引用结构和 async 状态机的必要条件</li>
+<li>用协变、逆变、不变分析生命周期子类型与借用报错</li>
+<li>把 trait 解析看成一次证明搜索，读懂常见的约束错误</li>
+<li>会用 <code>macro_rules!</code> 做代码生成，知道 const generics 的能力与边界</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-1-编译期大小-sized-sized-与-unsized-的边界">8.1 编译期大小：<code>Sized</code>、<code>?Sized</code> 与 unsized 的边界</h2>
+<p>Rust 的类型系统默认一切类型都有<strong>编译期已知的大小</strong>。这个假设渗透在语言的每个角落：值能按值传递、能放进栈帧、能作为结构体最后一个之前的字段、能通过 <code>mem::size_of</code> 查询。为了表达这个假设，编译器给每个类型参数悄悄加了一个 <code>T: Sized</code> 约束——你写 <code>fn f&lt;T&gt;(x: T)</code>，编译器看到的是 <code>fn f&lt;T: Sized&gt;(x: T)</code>。</p>
+<p>但有些类型天然没有固定大小：<code>[T]</code>（长度未知的切片）、<code>str</code>、<code>dyn Trait</code>，以及最后一个字段为 unsized 的自定义结构体。它们统称 <strong>DST（dynamically sized type，动态大小类型）</strong>。要让泛型函数接受它们，必须显式写 <code>T: ?Sized</code> 来取消默认约束。代价是：unsized 类型只能出现在「间接层」后面——引用、<code>Box</code>、<code>Rc</code> 等指针类型——而且不能用 <code>size_of::&lt;T&gt;()</code> 查询，只能用 <code>size_of_val(&amp;x)</code> 查询运行时实际大小。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">23 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::{size_of, size_of_val};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn needs_sized&lt;T: Sized&gt;(x: T) -&gt; usize { size_of::&lt;T&gt;() + size_of_val(&amp;x) * 0 }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn accepts_unsized&lt;T: ?Sized&gt;(x: &amp;T) -&gt; usize { size_of_val(x) }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let arr = [1u8, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let slice: &amp;[u8] = &amp;arr;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let text: &amp;str = &quot;hi&quot;;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let debug: &amp;dyn std::fmt::Debug = &amp;42i32;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;u8={} [u8;3]={}&quot;, size_of::&lt;u8&gt;(), size_of::&lt;[u8; 3]&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;&amp;[u8]={} &amp;str={} &amp;dyn Debug={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        size_of::&lt;&amp;[u8]&gt;(), size_of::&lt;&amp;str&gt;(), size_of::&lt;&amp;dyn std::fmt::Debug&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;Box&lt;[i32]&gt;={} Box&lt;dyn Debug&gt;={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        size_of::&lt;Box&lt;[i32]&gt;&gt;(), size_of::&lt;Box&lt;dyn std::fmt::Debug&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;size_of_val: slice={} text={} debug={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        size_of_val(slice), size_of_val(text), size_of_val(debug));</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    println!(&quot;needs_sized(u32)={}&quot;, needs_sized(1u32));</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;accepts_unsized: slice={} text={} debug={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        accepts_unsized(slice), accepts_unsized(text), accepts_unsized(debug));</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b1.rs -o u08_b1 &amp;&amp; ./u08_b1</span></div>
+<div class="cl is-text"><span class="code">u8=1 [u8;3]=3</span></div>
+<div class="cl is-text"><span class="code">&amp;[u8]=16 &amp;str=16 &amp;dyn Debug=16</span></div>
+<div class="cl is-text"><span class="code">Box&lt;[i32]&gt;=16 Box&lt;dyn Debug&gt;=16</span></div>
+<div class="cl is-text"><span class="code">size_of_val: slice=3 text=2 debug=4</span></div>
+<div class="cl is-text"><span class="code">needs_sized(u32)=4</span></div>
+<div class="cl is-text"><span class="code">accepts_unsized: slice=3 text=2 debug=4</span></div></div></div>
+<p>注意两组数字的对照：<code>[u8; 3]</code> 是 3 字节而 <code>[u8]</code> 根本没有大小；指向它们的引用都是 16 字节，因为它们都是<strong>胖指针</strong>。<code>size_of_val</code> 回答的是「这个引用指向的数据实际多大」，slice 是 3 字节、<code>&quot;hi&quot;</code> 是 2 字节、<code>dyn Debug</code> 背后的 <code>i32</code> 是 4 字节。为什么引用本身是 16 字节而不是 8？多出来的 8 字节是元数据，下一节展开。</p>
+<p>默认 <code>Sized</code> 还会影响 trait 的定义。像 <code>trait Clone</code> 隐含要求 <code>Self: Sized</code>（因为要按值返回 <code>Self</code>），所以 <code>dyn Clone</code> 不可用；而 <code>trait Debug</code> 没有这个要求，于是 <code>dyn Debug</code> 合法。这就把「能否做成 trait 对象」与「大小是否已知」两条线索接在了一起：动态分派依赖胖指针，而胖指针要求 trait 本身不要求具体大小。类似地，函数参数写成 <code>fn f(x: str)</code> 会被直接拒绝，因为参数必须按值传递、必须有已知大小；想处理字符串请用 <code>&amp;str</code>。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">薄指针与胖指针
+
+  &amp;i32 / &amp;[i32;3] / Box&lt;u8&gt;       ┌────────────┐
+  只有一个数据地址                  │ data ptr   │  8 字节
+                                  └────────────┘
+
+  &amp;[i32] / &amp;str                   ┌────────────┬────────────┐
+  数据地址 + 元素个数/字节长度      │ data ptr   │ len        │  16 字节
+                                  └────────────┴────────────┘
+
+  &amp;dyn Trait / Box&lt;dyn Trait&gt;     ┌────────────┬────────────┐
+  数据地址 + vtable 地址           │ data ptr   │ vtable ptr │  16 字节
+                                  └────────────┴────────────┘</pre></figure>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>Sized 类型是「量好尺寸装箱」的货物，仓库按固定格子摆放；unsized 类型是「一卷布」或「一袋子散装零件」，你没法说它占几个格子，只能记「从哪个位置开始、有多长」。所以指向它们的指针得带一张小票（长度或 vtable），这就是胖指针那额外的 8 字节。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-2-dst-与胖指针-元数据的来源与未size化-coercion">8.2 DST 与胖指针：元数据的来源与未size化 coercion</h2>
+<p>胖指针的第二部分是 <strong>metadata（元数据）</strong>，它的内容由目标类型决定：切片是元素个数，<code>str</code> 是字节长度，<code>dyn Trait</code> 是指向 vtable 的指针。元数据让编译器在只有静态类型信息的情况下，依然能正确回答「这个引用指向多少数据」「该调用哪个方法」「怎么释放这块内存」。它同时也解释了为什么 <code>Box&lt;dyn Trait&gt;</code> 能正确 <code>drop</code>——析构所需的 <code>size</code>/<code>align</code> 信息就在 vtable 里。</p>
+<p>从固定大小类型到 DST 的转换叫 <strong>unsized coercion（未定长强制转换）</strong>，由 <code>CoerceUnsized</code> trait 在标准库内部支持。最常见的形式是 <code>Box&lt;[T; N]&gt; -&gt; Box&lt;[T]&gt;</code> 与 <code>&amp;[T; N] -&gt; &amp;[T]</code>，<code>Box&lt;Concrete&gt; -&gt; Box&lt;dyn Trait&gt;</code> 也属于同一机制。转换后数据本身不变，只是指针的元数据从「无」变成「有」。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">24 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::size_of;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Wrapper&lt;T: ?Sized&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    data: Box&lt;T&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">impl&lt;T: ?Sized&gt; Wrapper&lt;T&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn new(data: Box&lt;T&gt;) -&gt; Self { Self { data } }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let boxed_array: Box&lt;[i32]&gt; = Box::new([1, 2, 3]);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;Box&lt;[i32]&gt; fat ptr = {}&quot;, size_of::&lt;Box&lt;[i32]&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;array data = {}, slice len = {}&quot;, size_of::&lt;[i32; 3]&gt;(), boxed_array.len());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let w1 = Wrapper::new(boxed_array);</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let w2 = Wrapper::new(Box::&lt;str&gt;::from(&quot;hello&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let w3: Wrapper&lt;dyn std::fmt::Display&gt; = Wrapper::new(Box::new(7i32));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;w1 len = {}&quot;, w1.data.len());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;w2 = {}&quot;, w2.data);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;w3 = {}&quot;, w3.data);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b2.rs -o u08_b2 &amp;&amp; ./u08_b2</span></div>
+<div class="cl is-text"><span class="code">Box&lt;[i32]&gt; fat ptr = 16</span></div>
+<div class="cl is-text"><span class="code">array data = 12, slice len = 3</span></div>
+<div class="cl is-text"><span class="code">w1 len = 3</span></div>
+<div class="cl is-text"><span class="code">w2 = hello</span></div>
+<div class="cl is-text"><span class="code">w3 = 7</span></div></div></div>
+<p><code>Wrapper&lt;T: ?Sized&gt;</code> 允许 <code>T</code> 是 <code>[i32]</code>、<code>str</code> 或 <code>dyn Display</code>，因为它只通过 <code>Box&lt;T&gt;</code> 间接持有数据。这正是 <code>?Sized</code> 的主要用途：<strong>让容器抽象不无谓地排除 unsized 类型</strong>。标准库里 <code>Box&lt;T&gt;</code>、<code>Rc&lt;T&gt;</code>、<code>Arc&lt;T&gt;</code> 都是这样定义的。</p>
+<p>元数据的大小不是固定的 8 字节，而是由目标类型的元数据种类决定；在当前实现里，切片长度和 vtable 指针恰好都是一个字长，所以胖指针都是 16 字节。标准库内部用 <code>Pointee::Metadata</code> 这样的机制把「指针类型 → 元数据类型」的关系表达出来，普通代码不需要直接依赖它，但知道元数据是类型系统的一部分，就能理解为什么胖指针不能随便转成裸指针再转回来——转换中必须保留元数据。</p>
+<p>自定义 DST 也有规则可循：结构体最后一个字段可以是 unsized 类型，但前面的字段必须都是 sized，且 unsized 字段必须真的在末尾（否则编译器无法用「固定前缀 + 变长尾部」布局）。例如 <code>struct Packet { len: usize, data: [u8] }</code> 是合法的 DST；由于它的构造通常需要手工分配变长内存，实践中更常见的写法是 <code>struct Packet { len: usize, data: Vec&lt;u8&gt; }</code>，把变长部分交给标准库管理。除非你在写类似 <code>Rc</code> 的底层设施，否则不该自己造 DST。值得注意的是，指向 DST 的 <code>Box</code> 在释放时必须知道总字节数，这个信息来自元数据；元数据丢失就意味着无法正确释放——这也是 unsize 转换必须编译期可知的原因。</p>
+<table>
+<thead>
+<tr>
+<th>指针类型</th>
+<th>目标 sized?</th>
+<th>指针大小</th>
+<th>元数据</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&amp;i32</code> / <code>Box&lt;u8&gt;</code></td>
+<td>是</td>
+<td>8</td>
+<td>无</td>
+</tr>
+<tr>
+<td><code>&amp;[T]</code></td>
+<td>否</td>
+<td>16</td>
+<td>元素个数</td>
+</tr>
+<tr>
+<td><code>&amp;str</code></td>
+<td>否</td>
+<td>16</td>
+<td>字节长度</td>
+</tr>
+<tr>
+<td><code>&amp;dyn Trait</code></td>
+<td>否</td>
+<td>16</td>
+<td>vtable 指针</td>
+</tr>
+<tr>
+<td>指向自定义 DST 的指针</td>
+<td>否</td>
+<td>16</td>
+<td>由 unsized 字段决定</td>
+</tr>
+</tbody></table>
+
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：<code>?Sized</code> 具有传染性。一旦某个泛型参数写成 <code>?Sized</code>，所有以它为参数的结构体和函数都必须跟着写 <code>?Sized</code>，而且不能再对它调用 <code>size_of::&lt;T&gt;()</code>、不能按值传递。另一点是 unsized 字段必须是最后一个——把它放在中间会直接编译失败。日常代码里 <code>?Sized</code> 几乎只出现在标准库式的容器抽象中，普通业务类型不用刻意追求它。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-3-pin-unpin-自引用结构为什么需要地址稳定">8.3 Pin/Unpin：自引用结构为什么需要地址稳定</h2>
+<p>考虑一个结构体，它内部有一个指针指向自己的另一个字段：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">text</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">1 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">SelfRef { value: String, ptr: *const String }   ptr 指向 self.value</span></div></div></div>
+<p>如果把这个结构体按值移动（赋值、作为函数参数传递、放进 <code>Vec</code> 后 <code>Vec</code> 扩容），整个结构体的地址变了，但 <code>ptr</code> 里存的还是旧地址，于是得到一个悬垂指针。这就是**自引用结构（self-referential struct）**的核心难题，也是 <code>async</code>/<code>await</code> 生成的状态机必须面对的问题：一个 future 常常持有对自身其他字段的引用，而 <code>Future::poll</code> 又需要能反复调用。</p>
+<p><code>Pin&lt;P&gt;</code> 给出的解法是「<strong>固定住被指向的对象</strong>」：一旦一个 <code>!Unpin</code> 类型被 pin 住，安全代码就再也不能把它移走。<code>Unpin</code> 是一个自动 trait，绝大多数类型都实现它（移动它们无害）；显式放入 <code>PhantomPinned</code> 字段的类型则变成 <code>!Unpin</code>，从而受到 pin 约束。<code>Pin&lt;Box&lt;T&gt;&gt;</code> 是最常用的形式——堆上地址天然稳定，把 <code>Box</code> 交给 <code>Pin</code> 就等于承诺「里面的值不再搬家」。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::marker::PhantomPinned;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::pin::Pin;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct SelfRef {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    value: String,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    ptr: *const String,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    _pin: PhantomPinned,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">impl SelfRef {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn new(v: &amp;str) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        Self { value: v.to_string(), ptr: std::ptr::null(), _pin: PhantomPinned }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    fn init(self: Pin&lt;&amp;mut Self&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        // SAFETY: 这里只写入 pointer 字段，不移动整个 SelfRef；</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        // 之后也不会提供任何能移出字段的接口。</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        let this = unsafe { self.get_unchecked_mut() };</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        this.ptr = &amp;this.value as *const String;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    fn value_ptr(self: Pin&lt;&amp;Self&gt;) -&gt; &amp;str {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        unsafe { &amp;*self.ptr }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut sr = Box::pin(SelfRef::new(&quot;hello&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    sr.as_mut().init();</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    println!(&quot;value = {}&quot;, sr.as_ref().value_ptr());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="31"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let moved = sr;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;after moving the Pin&lt;Box&gt;: {}&quot;, moved.as_ref().value_ptr());</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b3.rs -o u08_b3 &amp;&amp; ./u08_b3</span></div>
+<div class="cl is-text"><span class="code">value = hello</span></div>
+<div class="cl is-text"><span class="code">after moving the Pin&lt;Box&gt;: hello</span></div></div></div>
+<p>两处 <code>unsafe</code> 都需要解释。<code>get_unchecked_mut()</code> 之所以安全，是因为我们只改写了 <code>ptr</code> 字段，没有把 <code>SelfRef</code> 本身移出 pin；<code>value_ptr</code> 里解引用裸指针之所以安全，是因为 pin 保证 <code>value</code> 的地址在初始化之后不再变化，且该结构体没有提供任何移动它的安全接口。<strong>Pin 不是一个运行时检查，而是一组编码在类型里的承诺</strong>；unsafe 代码的职责就是维护这个承诺。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">Pin 保护自引用的流程
+
+  构造 SelfRef（ptr 为空）
+        │  Box::pin
+        ▼
+  Pin&lt;Box&lt;SelfRef&gt;&gt;：堆地址固定，promise「不再搬家」
+        │  as_mut().init()
+        ▼
+  写入 ptr = &amp;self.value（此时地址有效）
+        │  移动 Pin&lt;Box&lt;_&gt;&gt; 变量本身
+        ▼
+  堆上的 SelfRef 原地不动 ──► ptr 仍然有效</pre></figure>
+<p>Pin 的常用入口有三种。<code>Pin::new</code> 只对 <code>Unpin</code> 类型可用，是安全构造；<code>Box::pin</code> 在堆上分配并固定，适用于所有类型；<code>Pin::new_unchecked</code> 是 unsafe，调用者必须自己保证地址稳定。<code>Future::poll</code> 的签名 <code>fn poll(self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;&#39;_&gt;) -&gt; Poll&lt;T&gt;</code> 正是这套机制的应用点：async 块生成的状态机被 pin 后，才能安全地在字段之间持有自引用。业务代码几乎不需要手写 <code>Pin</code>——<code>pin!</code> 宏和 <code>Box::pin</code> 覆盖了绝大多数需求，自己写 unsafe pin projection 则是库作者的任务。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：不要把 <code>Pin</code> 误解成「让对象绝对不能动」。对于 <code>Unpin</code> 类型，<code>Pin::get_mut</code> 可以直接拿到 <code>&amp;mut T</code> 并移走它——pin 对它们没有约束力。只有当类型是 <code>!Unpin</code> 时，pin 才真正锁死移动；这也是 <code>PhantomPinned</code> 存在的意义。另一个常见错误是「pin projection」：想对 pin 住的某个字段取 <code>Pin&lt;&amp;mut Field&gt;</code>，需要 <code>pin-project</code> 这类工具或手写 unsafe，直接 <code>&amp;mut self.field</code> 会破坏 pin 的承诺。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-4-方差深入-协变-逆变与不变">8.4 方差深入：协变、逆变与不变</h2>
+<p>生命周期可以像类型一样构成子类型关系：<code>&#39;static</code> 比任何局部生命周期都长，记作 <code>&#39;static : &#39;a</code>（「<code>&#39;static</code> outlives <code>&#39;a</code>」），也可以说 <code>&#39;static &lt;: &#39;a</code>。<strong>方差（variance）</strong> 描述的是：当一个类型里的生命周期变短时，整个类型是变得「更一般」还是「更特殊」，抑或完全不能变。</p>
+<p>三种方差的直觉如下。<strong>协变（covariance）</strong>：<code>&amp;&#39;a T</code>、<code>Vec&lt;T&gt;</code>、<code>Option&lt;T&gt;</code> 对 <code>&#39;a</code> 或 <code>T</code> 协变——能接受 <code>&#39;static</code> 的地方也能接受更长的生命周期，反过来不行。<strong>逆变（contravariance）</strong>：函数参数类型 <code>fn(&amp;&#39;a T)</code> 对 <code>&#39;a</code> 逆变——一个能处理「任意生命周期引用」的函数，可以当作只处理 <code>&#39;static</code> 的函数用，反过来不行。<strong>不变（invariance）</strong>：<code>&amp;&#39;a mut T</code> 对 <code>T</code> 不变，<code>Cell&lt;T&gt;</code>、<code>UnsafeCell&lt;T&gt;</code> 对 <code>T</code> 不变——因为读写操作要求类型参数精确一致。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">13 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn shorten&lt;'a&gt;(long: &amp;'static str, short: &amp;'a str) -&gt; &amp;'a str {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    if long.len() &lt; short.len() { long } else { short }</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let local = String::from(&quot;hi&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;covariant result = {}&quot;, shorten(&quot;static&quot;, &amp;local));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut binding = String::from(&quot;mutable&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let r: &amp;mut String = &amp;mut binding;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let len = r.len();</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;&amp;mut String len = {len}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b4.rs -o u08_b4 &amp;&amp; ./u08_b4</span></div>
+<div class="cl is-text"><span class="code">covariant result = hi</span></div>
+<div class="cl is-text"><span class="code">&amp;mut String len = 7</span></div></div></div>
+<p><code>shorten</code> 能编译，正是因为 <code>&amp;&#39;static str</code> 协变：返回值需要 <code>&amp;&#39;a str</code>，而 <code>&#39;static</code> 比 <code>&#39;a</code> 长，可以作为更短生命周期的子类型返回。换个方向就不行——下面的例子试图把局部字符串的引用写进一个 <code>&amp;&#39;static str</code> 的槽位，编译器拒绝：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_variance_invariant_fail.rs -o inv</span></div>
+<div class="cl is-text"><span class="code">error[E0597]: `local` does not live long enough</span></div>
+<div class="cl is-text"><span class="code">  --&gt; u08_variance_invariant_fail.rs:9:30</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code"> 6 |     let mut slot: &amp;'static str = &quot;static&quot;;</span></div>
+<div class="cl is-text"><span class="code">  |                   ------------ type annotation requires that `local` is borrowed for `'static`</span></div>
+<div class="cl is-text"><span class="code"> 7 |     {</span></div>
+<div class="cl is-text"><span class="code"> 8 |         let local = String::from(&quot;short&quot;);</span></div>
+<div class="cl is-text"><span class="code"> 9 |         overwrite(&amp;mut slot, &amp;local);</span></div>
+<div class="cl is-text"><span class="code">  |                              ^^^^^^ borrowed value does not live long enough</span></div>
+<div class="cl is-text"><span class="code">10 |     }</span></div>
+<div class="cl is-text"><span class="code">  |     - `local` dropped here while still borrowed</span></div></div></div>
+<p>方差不是手写出来的，而是编译器根据类型定义<strong>推导</strong>出来的：它检查每个参数出现在什么位置（只读、只写、既读又写），据此赋予协变、逆变或不变。自定义类型若推导结果不符合预期，可以用 <code>PhantomData&lt;fn() -&gt; T&gt;</code>（协变）、<code>PhantomData&lt;fn(T) -&gt; ()&gt;</code>（逆变）或 <code>PhantomData&lt;Cell&lt;T&gt;&gt;</code>（不变）来「声明」期望的方差——这种技巧主要出现在 unsafe 代码和底层库中，用来防止误用。</p>
+<p>为什么需要不变性？考虑 <code>&amp;mut &amp;&#39;a str</code>：如果它对 <code>&#39;a</code> 协变，就可以把 <code>&amp;mut &amp;&#39;static str</code> 当作 <code>&amp;mut &amp;&#39;short str</code> 传入函数，函数往里写入一个短命引用，调用方却以为里面还是 <code>&#39;static</code>——悬垂引用就产生了。因此 <code>&amp;mut T</code> 对 <code>T</code> 必须不变；同理 <code>Cell&lt;T&gt;</code> 因为提供 <code>set</code>，也必须对 <code>T</code> 不变。这是方差规则背后的核心动机：<strong>不让写操作破坏类型系统对生命周期的承诺</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>类型构造子</th>
+<th>对生命周期/参数的方差</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&amp;&#39;a T</code></td>
+<td>对 <code>&#39;a</code> 和 <code>T</code> 协变</td>
+<td>只读</td>
+</tr>
+<tr>
+<td><code>&amp;&#39;a mut T</code></td>
+<td>对 <code>&#39;a</code> 协变、对 <code>T</code> 不变</td>
+<td>可写会破坏别名安全</td>
+</tr>
+<tr>
+<td><code>fn(&amp;&#39;a T)</code></td>
+<td>对 <code>&#39;a</code> 逆变</td>
+<td>参数位置反转方向</td>
+</tr>
+<tr>
+<td><code>Cell&lt;T&gt;</code> / <code>UnsafeCell&lt;T&gt;</code></td>
+<td>对 <code>T</code> 不变</td>
+<td>内部可变性</td>
+</tr>
+<tr>
+<td><code>Vec&lt;T&gt;</code> / <code>Option&lt;T&gt;</code></td>
+<td>对 <code>T</code> 协变</td>
+<td>只拥有值，不提供写入借出引用</td>
+</tr>
+</tbody></table>
+
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>协变像「长绳可以当短绳用」——你有一根十米绳，需要一米绳时当然够；逆变像「能修所有型号机器的师傅，可以派去只修 A 型号」；不变像「专门装 A 型号零件的盒子，不能塞 B 型号进去」，因为一旦塞错，以后取出来的人会按 A 型号的用法用它，就要出事。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-5-trait-solver-直觉-impl-匹配是一次证明搜索">8.5 trait solver 直觉：impl 匹配是一次证明搜索</h2>
+<p>写 <code>x.foo()</code> 或给函数加 <code>T: Trait</code> 约束时，编译器要做的事可以看成一次<strong>证明搜索</strong>：目标是证明 <code>Type: Trait</code> 成立。它遍历所有可见的 impl，尝试把 impl 的头部与当前目标统一（unify）；匹配成功后，再把 impl 的 <code>where</code> 子句变成新的子目标，递归求解。只有找到唯一成功的证明路径，调用才被接受。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">trait Marker { fn tag(&amp;self) -&gt; &amp;'static str; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl&lt;T: std::fmt::Debug&gt; Marker for T {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn tag(&amp;self) -&gt; &amp;'static str { &quot;debug-value&quot; }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">struct Plain;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;{}&quot;, 7.tag());</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;{}&quot;, vec![1, 2].tag());</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;{}&quot;, need_marker(7i32));</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    // need_marker(Plain); // 取消注释会报错：Plain 不满足 Marker 的 blanket impl 前提</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">fn need_marker&lt;T: Marker&gt;(x: T) -&gt; &amp;'static str { x.tag() }</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b5.rs -o u08_b5 &amp;&amp; ./u08_b5</span></div>
+<div class="cl is-text"><span class="code">debug-value</span></div>
+<div class="cl is-text"><span class="code">debug-value</span></div>
+<div class="cl is-text"><span class="code">debug-value</span></div></div></div>
+<p><code>7.tag()</code> 的证明过程是：搜索 <code>Marker</code> 的 impl → 只有 <code>impl&lt;T: Debug&gt; Marker for T</code> → 统一 <code>T = i32</code> → 新目标 <code>i32: Debug</code> → 找到标准库 impl → 证明完成。若把 <code>need_marker(Plain)</code> 的注释打开，搜索会在子目标 <code>Plain: Debug</code> 处失败，于是整条路径作废：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_bound_fail.rs -o bf</span></div>
+<div class="cl is-text"><span class="code">error[E0277]: the trait bound `Plain: Marker` is not satisfied</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u08_bound_fail.rs:9:40</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">9 | fn main() { println!(&quot;{}&quot;, need_marker(Plain)); }</span></div>
+<div class="cl is-text"><span class="code">  |                            ----------- ^^^^^ the trait `Debug` is not implemented for `Plain`</span></div>
+<div class="cl is-text"><span class="code">note: required for `Plain` to implement `Marker`</span></div>
+<div class="cl is-text"><span class="code">note: required by a bound in `need_marker`</span></div></div></div>
+<p>搜索也可能因为<strong>信息不足</strong>而失败，而不是因为约束不满足：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_solver_fail.rs -o sol</span></div>
+<div class="cl is-text"><span class="code">error[E0284]: type annotations needed</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u08_solver_fail.rs:2:9</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">2 |     let n = &quot;42&quot;.parse().unwrap();</span></div>
+<div class="cl is-text"><span class="code">  |         ^        ----- type must be known at this point</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">  = note: cannot satisfy `&lt;_ as FromStr&gt;::Err == _`</span></div>
+<div class="cl is-text"><span class="code">help: consider giving `n` an explicit type</span></div></div></div>
+<p><code>parse()</code> 对任何实现 <code>FromStr</code> 的类型都能工作，候选有无数个；<code>unwrap()</code> 又要求错误类型实现 <code>Debug</code>。求解器既不能枚举无穷候选，也不愿随便选一个（选择必须是确定的），于是报 E0284。补上 <code>let n: i32 = ...</code> 就给了它唯一的锚点。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">trait 求解器的一次证明搜索
+
+  目标：Plain: Marker
+        │
+        ▼
+  枚举 Marker 的 impl 候选
+        │
+        ├─ impl&lt;T: Debug&gt; Marker for T ──► 统一 T = Plain
+        │                                   │
+        │                                   ▼
+        │                              子目标 Plain: Debug
+        │                                   │
+        │                                   ▼
+        │                              无 impl ──► 证明失败
+        ▼
+  无其他候选 ──► 报错 E0277</pre></figure>
+<p>这个模型解释了前面几节的许多规则：coherence 保证 impl 集合无重叠，所以候选唯一；orphan rule 保证不同 crate 的 impl 能拼成全局一致的集合；而「更具体的 impl 优先」不被支持，是因为在泛型上下文里「具体」无法判定。当递归 impl 形成环时，求解器还有深度上限，超出会报 E0275「overflow evaluating the requirement」。读懂错误里 note 的「required by」链条，基本就能定位是哪一个子目标断了。</p>
+<p>还有一个实用概念叫「where 子句的传递」。在 <code>fn f&lt;T: Marker&gt;(x: T)</code> 里调用 <code>x.tag()</code>，编译器把约束 <code>T: Marker</code> 当作<strong>已知事实</strong>，不再继续展开它；只有真正要调用时，才在调用点检查具体类型能否满足。这解释了一个常见困惑：泛型函数体里看似「没有 impl」也能编译，因为约束本身就是承诺；而错误总是在具体调用点出现。Rust 的 trait 系统之所以能在缺乏完整类型信息时仍给出有意义的检查，靠的就是这种「定义处验证结构、实例化处验证事实」的两阶段分工。</p>
+<h2 id="rust-ch01-advanced-types-8-6-macro_rules-在-token-层写生成规则">8.6 macro_rules!：在 token 层写生成规则</h2>
+<p><code>macro_rules!</code> 是 Rust 的声明式宏，工作在 <strong>token 层</strong>而非字符串层：它把输入按 token 树匹配，再按模板展开成新的 token 树。这与 C 预处理器拼接文本有本质区别——宏不会破坏语法结构，也不会把标识符错误地粘在一起。语法由两部分组成：<code>=&gt;</code> 左边是 matcher（匹配模式），右边是 transcriber（展开模板）。</p>
+<p>matcher 里 <code>$(...),*</code> 表示「逗号分隔、重复零次或多次」，<code>$(;)*</code> 换成任意分隔符，<code>$(,)?</code> 表示可选尾随逗号。transcriber 里的 <code>$(...)*</code> 必须与 matcher 中的重复层级对应，否则编译器会报「变量仍然重复」之类的错误。匹配片段还可以指定类型：<code>expr</code>（表达式）、<code>ty</code>（类型）、<code>ident</code>（标识符）、<code>path</code>（路径）、<code>literal</code>（字面量）、<code>block</code>（块）等；选得越精确，宏展开后越不容易破坏语法结构。例如下面的 <code>$t:ty</code> 保证调用方写的是类型，<code>$label:expr</code> 保证是表达式。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">4 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">macro_rules! identity {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    ($e:expr) =&gt; { $e };</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn main() { println!(&quot;{}&quot;, identity!(1 + 2)); }</span></div></div></div>
+<p>这个最小例子说明宏必须接收完整的 token 树：若写成 <code>identity!(1 +)</code>，matcher 会在解析阶段就拒绝，而不是等到展开后产生语法错误。下面的宏一次性为多种类型生成 trait impl，展示了「宏能做的事函数做不到」——函数在运行时工作，宏在编译期生成代码。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">30 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">trait Describe { fn describe(&amp;self) -&gt; String; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">macro_rules! impl_describe {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    ($($t:ty =&gt; $label:expr),+ $(,)?) =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        $(</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">            impl Describe for $t {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">                fn describe(&amp;self) -&gt; String {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">                    format!(&quot;{} = {}&quot;, $label, self)</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        )+</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    };</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">impl_describe!(u32 =&gt; &quot;整数&quot;, i64 =&gt; &quot;大整数&quot;, String =&gt; &quot;字符串&quot;);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">macro_rules! double {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    ($x:expr) =&gt; {{</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let tmp = $x;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        tmp + tmp</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }};</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;{}&quot;, 7u32.describe());</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;{}&quot;, 9i64.describe());</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;{}&quot;, String::from(&quot;hi&quot;).describe());</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let tmp = 100;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    println!(&quot;double = {}, tmp = {}&quot;, double!(21), tmp);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b6.rs -o u08_b6 &amp;&amp; ./u08_b6</span></div>
+<div class="cl is-text"><span class="code">整数 = 7</span></div>
+<div class="cl is-text"><span class="code">大整数 = 9</span></div>
+<div class="cl is-text"><span class="code">字符串 = hi</span></div>
+<div class="cl is-text"><span class="code">double = 42, tmp = 100</span></div></div></div>
+<p><code>double!</code> 演示了 <strong>hygiene（卫生性）</strong>：宏内部引入的局部变量 <code>tmp</code> 与调用方作用域里的 <code>tmp</code> 属于不同的语法上下文，不会互相遮蔽或冲突，所以 <code>tmp</code> 仍然是 100。对于路径，<code>$crate</code> 提供类似的卫生性——在宏里引用自己 crate 的项时写 <code>$crate::foo</code>，就能在下游 crate 中正确解析，而不是误指向下游同名项。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：宏展开后的错误信息通常指向调用点，而且类型推断能被宏打断，调试体验远不如普通函数。不要用它做「本来用函数就能解决」的事。适合宏的场景是：变长参数列表、需要生成 impl/struct 定义、需要接受标识符作为语法片段、需要把重复样板压缩成一行。写复杂宏时，先写一份展开后的目标代码，再倒推 matcher，比直接写宏容易得多。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-advanced-types-8-7-const-generics-把值提升到类型参数">8.7 const generics：把值提升到类型参数</h2>
+<p>泛型参数传统上只能是类型或生命周期。<code>const generics</code> 让<strong>值</strong>也能成为类型参数，条件是它的类型受限于整数、<code>bool</code>、<code>char</code> 等编译期可知的类别。最典型的例子是数组：<code>[T; N]</code> 里的 <code>N</code> 就是一个 const 参数。<code>fn sum&lt;const N: usize&gt;(a: [i32; N])</code> 让同一个函数能服务于所有长度，同时保持编译期长度信息。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn sum&lt;const N: usize&gt;(a: [i32; N]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    a.iter().sum()</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">struct Matrix&lt;T, const R: usize, const C: usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    data: [[T; C]; R],</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">impl&lt;T: Default + Copy, const R: usize, const C: usize&gt; Matrix&lt;T, R, C&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn new() -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        Self { data: [[T::default(); C]; R] }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;sum3 = {}&quot;, sum([1, 2, 3]));</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;sum4 = {}&quot;, sum([0; 4]));</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let m: Matrix&lt;i32, 2, 3&gt; = Matrix::new();</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    println!(&quot;matrix = {:?}&quot;, m);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;shape = {}x{}&quot;, m.data.len(), m.data[0].len());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u08_b7.rs -o u08_b7 &amp;&amp; ./u08_b7</span></div>
+<div class="cl is-text"><span class="code">sum3 = 6</span></div>
+<div class="cl is-text"><span class="code">sum4 = 0</span></div>
+<div class="cl is-text"><span class="code">matrix = Matrix { data: [[0, 0, 0], [0, 0, 0]] }</span></div>
+<div class="cl is-text"><span class="code">shape = 2x3</span></div></div></div>
+<p>和类型泛型一样，const 泛型在单态化时按值展开：<code>sum::&lt;3&gt;</code> 与 <code>sum::&lt;4&gt;</code> 是不同的机器码实例，因此长度信息能被优化器利用。注意 <code>sum([0; 4])</code> 可以——数组表达式 <code>[0; 4]</code> 的长度是字面量，编译器能推断 <code>N = 4</code>。</p>
+<p>const generics 的边界也很明确。<strong>min const generic expressions（最小 const 泛型表达式）</strong> 尚未稳定，所以不能写「把泛型值当表达式计算」这样的签名：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">text</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">1 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn grow&lt;const N: usize&gt;(a: [i32; N]) -&gt; [i32; N + 1] { ... }  // 目前不稳定</span></div></div></div>
+<p>因为 <code>N + 1</code> 需要编译器对泛型 const 求值，这牵涉到溢出、相等性判断等复杂语义。目前的替代方案是返回 <code>Vec&lt;T&gt;</code>、把长度运算放到运行时，或者使用类型级别的技巧（如 typenum）。另外，const 参数要求的值必须是「结构相等」可用的类型——浮点数和自定义结构体一般不能作为 const 泛型参数。const 参数也能出现在 trait 与 impl 上：<code>trait Storage&lt;const N: usize&gt;</code> 让不同容量的存储实现同一套接口，<code>impl&lt;const N: usize&gt; Storage&lt;N&gt; for [u8; N]</code> 一次覆盖所有长度。这类写法在嵌入式与密码学代码里很常见，因为它能把「缓冲区必须恰好 32 字节」这样的约束写进类型，越界使用直接编译失败，而不是留到运行时检查。代价是类型名变长、错误信息更难读，而且每个不同的 <code>N</code> 都会单态化出一份代码——与类型泛型一样，要留意代码体积。</p>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>参数是什么</th>
+<th>何时确定</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>类型泛型 <code>T</code></td>
+<td>类型</td>
+<td>编译期</td>
+<td>容器元素、算法抽象</td>
+</tr>
+<tr>
+<td>生命周期泛型 <code>&#39;a</code></td>
+<td>region</td>
+<td>编译期</td>
+<td>引用关系</td>
+</tr>
+<tr>
+<td>const 泛型 <code>const N: usize</code></td>
+<td>编译期常量值</td>
+<td>编译期</td>
+<td>数组长度、固定维度</td>
+</tr>
+<tr>
+<td><code>const fn</code></td>
+<td>值（在函数中计算）</td>
+<td>编译期或运行期</td>
+<td>生成常量、布局计算</td>
+</tr>
+</tbody></table>
+
+<h2 id="rust-ch01-advanced-types-8-8-把这些机制放回工程语境">8.8 把这些机制放回工程语境</h2>
+<p>这一单元讲的六件事，出现的频率并不相同。方差与 trait solver 你不会「主动使用」，但它们每天都在解释编译器的行为：为什么这个借用报错、为什么类型推断不出来。DST 与 <code>?Sized</code> 多数时候藏在标准库背后；Pin 由 async 生态替你打理；宏与 const generics 则是库作者在明确收益时才拿出的工具。</p>
+<p>判断是否需要动用它们的标准也很朴素：<strong>先让类型表达清楚，再看编译器报什么</strong>。遇到「类型必须已知」「借用不够长」「trait 未实现」这类错误时，用本单元的模型倒推：信息不足就补类型标注（solver）；生命周期不够长就检查协变/不变的转换是否合法（方差）；自引用解决不了就让对象待在堆上（Pin）。反之，为了「显得高级」而在业务代码里引入宏或自定义 DST，往往得不偿失。</p>
+<p>特别值得强调的是 unsafe 的边界。Pin 与 DST 的底层构造都涉及裸指针和 unsafe，但本单元给出的用法把 unsafe 限制在极小的局部：两处 unsafe 都有明确的不变量说明，且 unsafe 之外仍然是安全接口。这是 Rust 处理底层机制的典型方式——<strong>把危险封装成安全抽象，并用类型系统维护抽象的边界</strong>。理解边界在哪，比掌握某个具体技巧更能决定代码质量。</p>
+<p>最后，把这八节连起来看：从枚举的 niche 布局到第 3 节的借用检查、从单态化/vtable 到闭包捕获与迭代器优化，再到本单元的 DST/Pin/方差/求解器，Rust 的类型系统始终围绕同一个目标运转——<strong>把尽可能多的程序性质变成编译期可验证的事实</strong>，并把确实无法静态决定的部分，用显式的、局部的、有契约的机制（胖指针、Pin、unsafe 块）安放好。这套一致性，才是它值得深入学习的原因。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>定义 <code>struct Header { len: usize }</code> 与一个最后一个字段为 <code>[u8]</code> 的 DST 结构体，说明它为什么不能作为函数参数按值传递；用 <code>Box&lt;[u8]&gt;</code> 实现一个功能等价的安全版本。</li>
+<li>把 <code>8.3</code> 的 <code>SelfRef</code> 改成不实现 <code>PhantomPinned</code>，看看能否用 <code>Pin::get_mut</code> 把它移走；记录编译结果并解释 <code>Unpin</code> 的作用。</li>
+<li>构造一个触发不变性报错的例子：让 <code>&amp;mut &amp;&#39;static str</code> 被当作 <code>&amp;mut &amp;&#39;a str</code> 使用并写入局部借用，记录编译器错误；再解释为什么 <code>Cell&lt;T&gt;</code> 也必须不变。</li>
+<li>用 <code>macro_rules!</code> 写一个 <code>make_getters!</code> 宏，为结构体的若干字段生成 getter 方法；再用 const generics 写一个 <code>fn dot&lt;const N: usize&gt;(a: [i32; N], b: [i32; N]) -&gt; i32</code>，验证不同长度的调用都能编译。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li><code>[u8]</code>、<code>str</code>、<code>dyn Trait</code> 为什么没有编译期大小？指向它们的指针为什么是 16 字节？</li>
+<li><code>PhantomPinned</code> 的作用是什么？为什么 <code>Pin</code> 对 <code>Unpin</code> 类型几乎不起作用？</li>
+<li>为什么 <code>&amp;mut T</code> 对 <code>T</code> 不变？举一个「如果协变就会破坏安全」的反例。</li>
+<li>trait 求解器为什么拒绝 <code>&quot;42&quot;.parse().unwrap()</code> 这种写法？它违反的是哪一条设计原则？</li>
+<li>宏的 hygiene 体现在哪里？const generics 为什么不能写 <code>N + 1</code> 这样的参数表达式？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__closures-and-iterators.md.html">← 闭包与迭代器</a><a href="rust__chapters__ch02__cargo-workspace-and-features.md.html">Cargo 工程化：workspace、feature 矩阵与依赖解析 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

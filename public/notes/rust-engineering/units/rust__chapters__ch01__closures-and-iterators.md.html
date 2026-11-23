@@ -4,199 +4,402 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>闭包与迭代器</title>
-<meta name="description" content="第 7 单元 · 建议 60 分钟 · 把「怎么做」写成可传递的值，用迭代器组装数据流">
+<meta name="description" content="第 7 单元 · 建议 90 分钟 · 从捕获布局到零成本适配链，搞懂「怎么做」如何变成可传递的值">
 <meta name="author" content="Codrift · Rust 工程笔记">
 <meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
 <link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
 </head>
 <body class="type-unit">
 <a class="skip-link" href="#content">跳到正文</a>
 <nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
 <main class="doc" id="doc">
-<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">闭包与迭代器</h1><p class="doc-sub">第 7 单元 · 建议 60 分钟 · 把「怎么做」写成可传递的值，用迭代器组装数据流</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 07-closures-and-iterators.md</p></header>
-<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-1-闭包-可以当值传递的函数">7.1 闭包：可以当值传递的函数</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-按-怎么用-分类">7.2 Fn、FnMut、FnOnce：按「怎么用」分类</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-3-迭代器-惰性求值的数据流">7.3 迭代器：惰性求值的数据流</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-4-适配器-map-filter-fold">7.4 适配器：map、filter、fold</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-5-collect-与类型推断">7.5 collect 与类型推断</a></li></ol></nav>
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">闭包与迭代器</h1><p class="doc-sub">第 7 单元 · 建议 90 分钟 · 从捕获布局到零成本适配链，搞懂「怎么做」如何变成可传递的值</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 07-closures-and-iterators.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-1-闭包是匿名结构体-捕获模式决定布局">7.1 闭包是匿名结构体：捕获模式决定布局</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-一层套一层的三个-trait">7.2 Fn、FnMut、FnOnce：一层套一层的三个 trait</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-3-闭包类型不可名状-impl-fn-与-dyn-fn">7.3 闭包类型不可名状：impl Fn 与 dyn Fn</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-4-迭代器惰性-构造适配器不等于执行">7.4 迭代器惰性：构造适配器不等于执行</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-5-适配器链如何消失-从-map-filter-到一个循环">7.5 适配器链如何消失：从 map/filter 到一个循环</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-6-collect-与-fromiterator-目标类型驱动收集">7.6 collect 与 FromIterator：目标类型驱动收集</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-7-size_hint-fusediterator-与自定义迭代器">7.7 size_hint、FusedIterator 与自定义迭代器</a></li><li class="toc-l2"><a href="#rust-ch01-closures-and-iterators-7-8-工程取舍-迭代器-循环与借用冲突">7.8 工程取舍：迭代器、循环与借用冲突</a></li></ol></nav>
 <article class="content" id="content" aria-label="正文">
 <section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
 <div class="box-b">
 <ul>
-<li>会定义闭包，理解它如何捕获环境变量以及类型推断的过程</li>
-<li>分清 Fn、FnMut、FnOnce 三个 trait 的约束强度与典型用法</li>
-<li>能用 <code>map</code>、<code>filter</code>、<code>fold</code> 等适配器组装惰性求值的数据流水线</li>
-<li>理解 <code>collect</code> 如何把迭代器变成集合，以及它是怎么知道目标类型的</li>
+<li>说清闭包捕获的四种模式以及它如何决定闭包结构体的大小</li>
+<li>理解 <code>Fn</code>/<code>FnMut</code>/<code>FnOnce</code> 的层级关系和 <code>move</code> 关键字的真实作用</li>
+<li>知道闭包类型为什么不可名状，以及 <code>impl Fn</code> 与 <code>dyn Fn</code> 的适用边界</li>
+<li>用「适配器是惰性状态机」的模型解释迭代器的执行时机与短路行为</li>
+<li>会自定义 <code>FromIterator</code>，并理解 <code>size_hint</code> 如何影响 <code>collect</code> 的预分配</li>
 </ul>
 
 </div>
 </section>
-<h2 id="rust-ch01-closures-and-iterators-7-1-闭包-可以当值传递的函数">7.1 闭包：可以当值传递的函数</h2>
-<p>函数只能定义一次、名字固定；闭包（closure）则像「匿名函数 + 它能看见的周围环境」，可以存进变量、当作参数传递、从函数里返回。语法是 <code>|参数| 表达式</code>，参数类型通常可以省略，因为编译器会从调用方式推断出来。下面的 <code>add</code> 明确写了类型，而 <code>|n| n * 2</code> 则让编译器从 <code>iter()</code> 产出的元素类型推断出 <code>n</code> 是 <code>&amp;i32</code>。</p>
-<p>闭包最特别的能力是捕获（capture）：它可以引用定义时所在作用域里的变量。<code>let x = 10; let plus_x = |n| n + x;</code> 里的 <code>x</code> 并没有通过参数传进来，而是被闭包「顺手带走」了。捕获的方式取决于闭包体怎么用这个变量：只读就按引用捕获，要修改就按可变引用捕获，要拿走所有权就用 <code>move</code> 关键字。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-1-闭包是匿名结构体-捕获模式决定布局">7.1 闭包是匿名结构体：捕获模式决定布局</h2>
+<p>闭包（closure）看起来像「一段能当值传递的代码」，但在编译后的世界里它是一个<strong>匿名结构体</strong>：结构体里若干字段保存被捕获的环境值，编译器再为它生成一个 <code>call</code> 方法执行函数体。一个闭包表达式就对应一个独一无二的类型，哪怕两段代码长得完全一样，它们的类型也不同——这是理解后续所有行为的起点。</p>
+<p>捕获模式不是由 <code>move</code> 关键字单独决定的，而是编译器<strong>先看函数体怎么用变量，再推导捕获方式</strong>：只读就按共享引用捕获，需要修改就按可变引用捕获，需要转移所有权就按值捕获。<code>move</code> 的作用是强制「所有捕获都按值进行」，即使函数体只读也复制/移动到闭包里。下面的程序用 <code>size_of_val</code> 把三种捕获的实际大小打出来：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::mem::size_of_val;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let a = 1u32;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut b = 2u32;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let s = String::from(&quot;hi&quot;);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let borrow = || a;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut borrow_mut = || { b += 1; b };</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let owned = move || s.len();</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;borrow={} borrow_mut={} owned={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        size_of_val(&amp;borrow), size_of_val(&amp;borrow_mut), size_of_val(&amp;owned));</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;values: {} {} {}&quot;, borrow(), borrow_mut(), owned());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b1.rs -o u07_b1 &amp;&amp; ./u07_b1</span></div>
+<div class="cl is-text"><span class="code">borrow=8 borrow_mut=8 owned=24</span></div>
+<div class="cl is-text"><span class="code">values: 1 3 2</span></div></div></div>
+<p><code>borrow</code> 和 <code>borrow_mut</code> 都是 8 字节，因为环境里只有一个引用；<code>owned</code> 是 24 字节，因为 <code>String</code> 被整个搬进了闭包（3 个字：指针、长度、容量）。注意 <code>owned</code> 只调用了 <code>s.len()</code>，并没有消耗 <code>s</code>，所以它仍然实现 <code>Fn</code>——<code>move</code> 改变的是<strong>捕获方式</strong>，不是 <code>call</code> 方法需要 <code>&amp;self</code> 还是 <code>self</code>。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">三种闭包在内存里的样子（x86_64）
+
+  let borrow = || a;                 ┌──────────┐
+  捕获 &amp;a                            │ &amp;a (8B)  │  → 8 字节
+                                     └──────────┘
+
+  let mut borrow_mut = || { b+=1; b };┌──────────┐
+  捕获 &amp;mut b                         │ &amp;mut b   │  → 8 字节
+                                     └──────────┘
+
+  let owned = move || s.len();       ┌────────────────────┐
+  捕获 String 本身                    │ ptr │ len │ cap   │  → 24 字节
+                                     └────────────────────┘</pre></figure>
+<p>不捕获任何变量的闭包大小为 0 字节（ZST），编译器可以直接用类型本身当值，不占存储空间。捕获字段的排列顺序是编译器的自由选择，不要依赖它；能依赖的只有「捕获得越多、闭包越大」这个总体规律。</p>
+<p>edition 2021 还引入了 <strong>disjoint capture（精确捕获）</strong>：闭包只使用结构体的一个字段时，编译器只捕获那个字段，而不是整个结构体。这直接减少了借用冲突——下面的例子在 2018 edition 下会报错（整个 <code>d</code> 被借用），在 2021 下却能编译，因为 <code>d.b</code> 完全没进入闭包：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Data { a: i32, b: String }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let d = Data { a: 1, b: String::from(&quot;s&quot;) };</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let c = || d.a;          // edition 2021：只捕获 d.a 这一个字段</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;c() = {}&quot;, c());</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;d.b = {}&quot;, d.b); // b 未被捕获，仍可正常使用</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b8.rs -o u07_b8 &amp;&amp; ./u07_b8</span></div>
+<div class="cl is-text"><span class="code">c() = 1</span></div>
+<div class="cl is-text"><span class="code">d.b = s</span></div></div></div>
+<p>这个机制对异步代码尤其重要：<code>async</code> 块本质上也是一种闭包式捕获，精确捕获让「只用到 <code>self</code> 的一个字段」的 future 不会把整个 <code>self</code> 借走，从而减少 <code>Send</code>/<code>Sync</code> 约束传播和借用冲突。</p>
+<p>闭包的参数类型通常可以省略，因为编译器会结合上下文推断：直接调用 <code>let f = |x| x + 1; f(1u32);</code> 时，<code>x</code> 被推断为 <code>u32</code>；传给 <code>map</code> 时，<code>x</code> 的类型由迭代器的 <code>Item</code> 决定。但「先定义、后传给多个不同签名的函数」会让推断失去唯一解，此时必须显式标注 <code>|x: i32| ...</code>。这也是闭包不如普通函数「独立」的一个表现——它的类型与上下文紧密绑定。</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
-<p>闭包像一个随身带着行李的小帮手。普通函数只能用它手里临时的东西，闭包却能把「当时桌上的东西」一起打包带走。迭代器则像一条传送带：你在传送带旁挂上几个工位（map、filter），东西只有被推到最后要用到时才真正加工——这叫惰性求值，好处是不用先造出一堆中间产物。</p>
+<p>闭包像一个随身带着工具的小工人。只看一眼桌上的尺子（共享借用），兜里只装一把「尺子在哪」的纸条；要挪动桌子（可变借用），兜里装的是「桌子在哪」的纸条；老板说「这桌子归你了」（move），他就把整张桌子扛走。工人干的活一样，但兜里东西的多少决定了他的「体积」。</p>
 
 </div>
 </section>
-<p>下面的程序把三种场景放在一起：一个纯粹的二元闭包、一个捕获了 <code>x</code> 的闭包，以及闭包作为 <code>map</code> 参数的使用。最后一个 <code>collect()</code> 会把迭代器收集成 <code>Vec&lt;i32&gt;</code>，目标类型由变量注释决定。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">12 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let add = |a: i32, b: i32| a + b;</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    println!(&quot;3 + 4 = {}&quot;, add(3, 4));</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let x = 10;</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let plus_x = |n: i32| n + x;</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;5 + x = {}&quot;, plus_x(5));</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let nums = [1, 2, 3];</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let doubled: Vec&lt;i32&gt; = nums.iter().map(|n| n * 2).collect();</span></div>
-<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;{doubled:?}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div></div></div>
-<p>闭包的类型是编译器为它匿名生成的，你写不出「闭包的类型名」。正因如此，接收闭包的函数必须写成泛型 <code>F: Fn...</code>，而不能写具体类型。这也是理解下一节三个 trait 的入口。</p>
-<p>编译器推断闭包参数类型的方式很实用：第一次调用时看到你传了整数，就确定参数是整数；如果一直不调用、上下文也没有类型信息，它就会报错，这时给参数补上类型即可。另外，<code>move</code> 关键字不只是「把变量搬进闭包」的语法糖——在把闭包交给另一个线程时，它几乎是必需的，因为新线程的生命周期可能超过当前栈帧，闭包不能依赖对局部变量的借用。</p>
-<h2 id="rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-按-怎么用-分类">7.2 Fn、FnMut、FnOnce：按「怎么用」分类</h2>
-<p>Rust 用三个 trait 描述闭包能怎样被调用，它们的约束强度依次递减：Fn 最宽松（可以重复调用，不消耗任何东西），FnMut 次之（可以重复调用，但需要可变引用来修改状态），FnOnce 最弱（只能调用一次，因为会消耗捕获的值）。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-2-fn-fnmut-fnonce-一层套一层的三个-trait">7.2 Fn、FnMut、FnOnce：一层套一层的三个 trait</h2>
+<p>三个调用 trait 形成严格的层级关系：<code>FnOnce: FnMut: Fn</code>。它们分别对应三种调用方式：</p>
 <table>
 <thead>
 <tr>
 <th>trait</th>
-<th>调用次数</th>
-<th>对捕获值的操作</th>
-<th>典型例子</th>
+<th>调用方法</th>
+<th>需要的接收者</th>
+<th>能做什么</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>Fn</code></td>
-<td>任意多次</td>
-<td>只读借用</td>
-<td><code>|| x</code>，<code>|a, b| a + b</code></td>
+<td><code>FnOnce</code></td>
+<td><code>call_once</code></td>
+<td><code>self</code>（按值）</td>
+<td>可以消耗捕获的值，只能调用一次</td>
 </tr>
 <tr>
 <td><code>FnMut</code></td>
-<td>任意多次</td>
-<td>可变借用、修改状态</td>
-<td>计数器 <code>|| { count += 1; count }</code></td>
+<td><code>call_mut</code></td>
+<td><code>&amp;mut self</code></td>
+<td>可以修改捕获的环境，可多次调用</td>
 </tr>
 <tr>
-<td><code>FnOnce</code></td>
-<td>仅一次</td>
-<td>取得所有权并消耗</td>
-<td><code>move || drop(s)</code></td>
+<td><code>Fn</code></td>
+<td><code>call</code></td>
+<td><code>&amp;self</code></td>
+<td>只读环境，可多次调用且无副作用要求</td>
 </tr>
 </tbody></table>
 
-<p>这套分类的价值在于：函数在签名里声明 <code>F: Fn</code>，就向调用方保证「我不会拿走你的闭包，也不会修改它」；声明 <code>F: FnMut</code> 则需要把闭包声明成 <code>mut</code>。如果参数写成 <code>F: FnOnce</code>，调用函数时闭包本身会被消耗掉——它最适合那些「只跑一次」的回调场景。</p>
-<p>三者之间是包含关系：所有 <code>Fn</code> 闭包都自动是 <code>FnMut</code>，所有 <code>FnMut</code> 又都是 <code>FnOnce</code>。所以写 <code>F: FnOnce</code> 是对调用方最宽松的约束（几乎任何闭包都能传进来），而写 <code>F: Fn</code> 最严格。设计 API 时有个实用原则：按「你实际需要的最弱能力」来选——只要调用一次就够，就别要求 <code>Fn</code>；这样调用方能传进来的闭包类型更多。</p>
-<p>下面的程序分别写了三个接收者。<code>call_mut</code> 的形参必须写 <code>mut f</code>，否则调用 <code>f()</code> 时会报「不可变地借用可变闭包」的错误。<code>call_once</code> 里用 <code>move</code> 把 <code>String</code> 的所有权移进闭包，闭包被调用后 <code>s</code> 就被 drop 了。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">25 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn call_once&lt;F: FnOnce() -&gt; i32&gt;(f: F) -&gt; i32 {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    f()</span></div>
+<p>层级是「子 trait 自动获得父 trait 的能力」：<code>Fn</code> 一定是 <code>FnMut</code>，也一定是 <code>FnOnce</code>；但反过来不成立。因此当一个函数泛型参数是 <code>F: FnOnce</code> 时，传进来的闭包即使只读取变量也没问题；反过来若参数是 <code>F: Fn</code>，却传了一个消耗 <code>String</code> 的闭包，编译器就会拒绝。标准库里的 <code>&amp;F</code> 在 <code>F: Fn</code> 时实现 <code>Fn</code>，<code>&amp;mut F</code> 在 <code>F: FnMut</code> 时实现 <code>FnMut</code>——这让「借用着调用」变得自然。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn call_once&lt;F: FnOnce() -&gt; String&gt;(f: F) -&gt; String { f() }</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn call_mut&lt;F: FnMut() -&gt; i32&gt;(mut f: F) -&gt; i32 { f() }</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn call&lt;F: Fn() -&gt; i32&gt;(f: F) -&gt; i32 { f() }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let x = 10;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let f = || x;                     // 只读借用，实现 Fn + FnMut + FnOnce</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;Fn:          {}&quot;, call(f));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut n = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut fm = || { n += 1; n };     // 可变借用，实现 FnMut + FnOnce</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;FnMut #1:    {}&quot;, call_mut(&amp;mut fm));</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;FnMut #2:    {}&quot;, call_mut(&amp;mut fm));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let s = String::from(&quot;bye&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    let fo = move || s;               // 按值移动，只实现 FnOnce</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;FnOnce:      {}&quot;, call_once(fo));</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b2.rs -o u07_b2 &amp;&amp; ./u07_b2</span></div>
+<div class="cl is-text"><span class="code">Fn:          10</span></div>
+<div class="cl is-text"><span class="code">FnMut #1:    1</span></div>
+<div class="cl is-text"><span class="code">FnMut #2:    2</span></div>
+<div class="cl is-text"><span class="code">FnOnce:      bye</span></div></div></div>
+<p>这里有两个值得停下来的细节。其一，<code>call_mut(&amp;mut fm)</code> 每次都能继续累加，说明可变引用的闭包「记住了」上次修改后的状态——状态在闭包结构体里，不在函数调用栈上。其二，<code>call_once(fo)</code> 之所以只实现 <code>FnOnce</code>，是因为闭包体把捕获的 <code>String</code> 直接返回（移动出 <code>self</code>），这样的闭包无法提供 <code>&amp;self</code> 版本。想让它变成 <code>FnMut</code> 或 <code>Fn</code>，就得返回引用或克隆值。</p>
+<p><code>FnOnce</code> 是实际上唯一「必须实现」的 trait：任何闭包都至少能被调用一次。写泛型代码时遵循「最低要求原则」——只要调一次就写 <code>FnOnce</code>，要改状态写 <code>FnMut</code>，完全只读才写 <code>Fn</code>。约束越松，API 能接受的可调用对象越多。</p>
+<p>标准库里这条原则随处可见：<code>Option::map</code> 接受 <code>FnOnce</code>，因为它对每个元素只调一次；<code>Iterator::map</code> 接受 <code>FnMut</code>，因为适配器可能被反复调用；<code>thread::spawn</code> 接受 <code>FnOnce + Send + &#39;static</code>，因为新线程只执行一次闭包且闭包必须拥有自己的数据。看懂这些签名，就能反推出库作者预期的使用方式。</p>
+<p>还有一点容易混淆：闭包实现哪些 <code>Fn</code> trait，是编译器根据<strong>闭包体对捕获值的使用方式</strong>自动推导的，没有任何手动 impl 的入口。想改变它，只能改变捕获方式（<code>move</code>）或函数体（是否消耗捕获值）。函数指针 <code>fn(i32) -&gt; i32</code> 也实现这三个 trait，而且作为 ZST 值可以无条件复制——这让接受 <code>impl Fn</code> 的 API 同样能接收普通函数，参数设计得当时非常灵活。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-3-闭包类型不可名状-impl-fn-与-dyn-fn">7.3 闭包类型不可名状：impl Fn 与 dyn Fn</h2>
+<p>因为闭包类型是编译器生成的匿名类型，你无法在源码里写出它的名字。想把它存进结构体、作为参数或返回值，只有三条路：用泛型参数 <code>F: Fn(...)</code>；用 <code>impl Fn(...)</code>（参数位置的泛型糖、返回位置的不透明类型）；或者擦除成 <code>dyn Fn(...)</code> 指针。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">13 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn make_adder(n: i32) -&gt; impl Fn(i32) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    move |x| x + n</span></div>
 <div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn call_mut&lt;F: FnMut() -&gt; i32&gt;(mut f: F) -&gt; i32 {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    f()</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">fn call&lt;F: Fn() -&gt; i32&gt;(f: F) -&gt; i32 {</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    f()</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn apply_static(f: &amp;impl Fn(i32) -&gt; i32, x: i32) -&gt; i32 { f(x) }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn apply_dynamic(f: &amp;dyn Fn(i32) -&gt; i32, x: i32) -&gt; i32 { f(x) }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let add = make_adder(5);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;static  = {}&quot;, apply_static(&amp;add, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;dynamic = {}&quot;, apply_dynamic(&amp;add, 4));</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;direct  = {}&quot;, add(10));</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b3.rs -o u07_b3 &amp;&amp; ./u07_b3</span></div>
+<div class="cl is-text"><span class="code">static  = 8</span></div>
+<div class="cl is-text"><span class="code">dynamic = 9</span></div>
+<div class="cl is-text"><span class="code">direct  = 15</span></div></div></div>
+<p><code>make_adder</code> 必须写 <code>move</code>：否则 <code>n</code> 只是对栈上局部变量的引用，函数返回后就成了悬垂引用。返回 <code>impl Fn</code> 时，调用方知道「有个实现了 Fn 的类型」，但不知道它是谁，因此不能写 <code>let f: 具体类型 = make_adder(5);</code>，也不能要求它实现额外的 trait（除非在返回类型里显式写出，如 <code>impl Fn(i32)-&gt;i32 + Send</code>）。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：返回闭包时忘记 <code>move</code> 是新手最常遇到的编译错误（「captured variable escapes the closure / returns a value referencing local variable」）。反过来也要警惕 <code>move</code> 的滥用：若一个闭包捕获了 <code>Rc</code> 或大 <code>Vec</code> 又只被短暂调用，按值移动会无谓地转移所有权和分配。记住判断标准——<strong>闭包要活得比捕获的变量久，就必须按值拥有它</strong>。</p>
+
+</div>
+</section>
+<p><code>dyn Fn</code> 把具体类型擦除成函数指针式的胖指针，适合把不同闭包放进同一个容器（如 <code>Vec&lt;Box&lt;dyn Fn(i32) -&gt; i32&gt;&gt;</code>），代价是一次间接调用且无法内联；<code>impl Fn</code> 则保持静态分派和零成本。<code>Fn</code>、<code>FnMut</code>、<code>FnOnce</code> 都是 object safe 的，所以 <code>dyn Fn</code> 形式合法；但带泛型方法的 trait 就不能这么做，这与 trait 对象那一节的规则一致。</p>
+<p>事件回调、GUI 信号槽这类「异构且需要存起来」的场景常用 <code>dyn Fn</code>，而 <code>map</code> 的谓词、<code>sort_by</code> 的比较器这类立即使用的场景几乎总是泛型/<code>impl Fn</code>。若一个 API 需要在两种模式间切换，可以提供两个入口：内部泛型版本保留性能，对外再包一层接受 <code>Box&lt;dyn Fn&gt;</code> 的便捷函数。还要注意生命周期：<code>Box&lt;dyn Fn()&gt;</code> 默认等价于 <code>Box&lt;dyn Fn() + &#39;static&gt;</code>，若闭包借用了局部变量，必须写成 <code>Box&lt;dyn Fn() + &#39;_&gt;</code> 并把生命周期参数显式传给函数。选择哪种形态还有一个语调上的信号：<code>impl Fn</code> 暗示「这是一个实现细节，不需要关心具体类型」，<code>dyn Fn</code> 则明确告诉读者「这里存在运行期多态，可能有间接调用开销」。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-4-迭代器惰性-构造适配器不等于执行">7.4 迭代器惰性：构造适配器不等于执行</h2>
+<p><code>v.iter().map(f).filter(g)</code> 看起来像一串函数调用，实际发生的是<strong>构造一个嵌套的适配器结构体</strong>：<code>Filter</code> 持有 <code>Map</code>，<code>Map</code> 持有 <code>Iter</code>。每一步只是记录「将来要做什么」，没有任何元素被处理。真正驱动计算的是 <code>next()</code>——<code>collect</code>、<code>for</code> 循环、<code>sum</code> 等消费者不断调用它，数据才像水流一样从源头经过每层适配器流出来。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let v = vec![1, 2, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let it = v</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        .iter()</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .map(|x| { println!(&quot;  map {}&quot;, x); x * 2 })</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .filter(|x| { println!(&quot;  filter {}&quot;, x); *x &gt; 4 });</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;适配器链已构造，还没执行&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let r: Vec&lt;_&gt; = it.collect();</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;结果 {:?}&quot;, r);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let short: Vec&lt;_&gt; = v</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        .iter()</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        .map(|x| { println!(&quot;  visit {}&quot;, x); *x })</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        .take(2)</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        .collect();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;take(2) = {:?}&quot;, short);</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b4.rs -o u07_b4 &amp;&amp; ./u07_b4</span></div>
+<div class="cl is-text"><span class="code">适配器链已构造，还没执行</span></div>
+<div class="cl is-text"><span class="code">  map 1</span></div>
+<div class="cl is-text"><span class="code">  filter 2</span></div>
+<div class="cl is-text"><span class="code">  map 2</span></div>
+<div class="cl is-text"><span class="code">  filter 4</span></div>
+<div class="cl is-text"><span class="code">  map 3</span></div>
+<div class="cl is-text"><span class="code">  filter 6</span></div>
+<div class="cl is-text"><span class="code">  map 4</span></div>
+<div class="cl is-text"><span class="code">  filter 8</span></div>
+<div class="cl is-text"><span class="code">结果 [6, 8]</span></div>
+<div class="cl is-text"><span class="code">  visit 1</span></div>
+<div class="cl is-text"><span class="code">  visit 2</span></div>
+<div class="cl is-text"><span class="code">take(2) = [1, 2]</span></div></div></div>
+<p>输出把惰性讲得非常直白：println 出现在「构造之后」之后；<code>map 1 → filter 2</code> 成对出现，说明每个元素完整地穿过整条链，而不是先把所有元素 map 完再统一 filter；<code>take(2)</code> 只打印了 <code>visit 1</code> 和 <code>visit 2</code>，说明它在拿到两个元素后立即停止，后续元素连 <code>map</code> 都不会执行。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">一次 `collect()` 驱动的数据流
+
+  collect() ──next()──► Filter ──next()──► Map ──next()──► slice::Iter
+      ▲                   │                  │                  │
+      │                   ▼                  ▼                  ▼
+      └──── 值 6/8 ◄── 通过谓词 ◄── x*2 ◄── &amp;1/&amp;2/&amp;3/&amp;4</pre></figure>
+<p>适配器之所以能层层嵌套，是因为每个适配器自身也实现了 <code>Iterator</code>：它的 <code>next()</code> 内部调用上游的 <code>next()</code>，对拿到的值做变换，再交给下游。<code>Iterator</code> trait 的核心只有一个必须实现的方法 <code>fn next(&amp;mut self) -&gt; Option&lt;Self::Item&gt;</code>——<code>&amp;mut self</code> 说明迭代器是有状态的游标，<code>Option</code> 的 <code>None</code> 表示流结束。所有其他方法（<code>map</code>、<code>fold</code>、<code>find</code>……）都是在这个方法之上用默认实现搭出来的。理解这一点，就可以把任意自定义数据源接进同一套生态。</p>
+<p>这种「按需拉取（pull-based）」模型带来两个直接好处：短路天然成立（<code>take</code>、<code>find</code>、<code>any</code> 不必处理剩余元素），以及中间结果不必分配（<code>map</code> 不会创建一个新 <code>Vec</code>）。代价是副作用难以预测——在 <code>map</code> 里写 <code>println!</code> 或改全局状态，调用次数取决于下游消费者，换一个 <code>take</code> 或 <code>collect</code> 就变了。把副作用放进 <code>for</code> 循环体，通常是更诚实的选择。</p>
+<p>另一个实际影响是「被消耗之后不能再用」：<code>collect</code> 会按值消耗迭代器，同一个 <code>it</code> 不能收集两次。想复用同一批数据，要么重新调用 <code>v.iter()</code> 构造新迭代器，要么先把结果收集成集合。这与「迭代器是游标而不是集合」的心智模型一致——它不代表数据本身，只代表一次遍历的过程。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-5-适配器链如何消失-从-map-filter-到一个循环">7.5 适配器链如何消失：从 map/filter 到一个循环</h2>
+<p>迭代器之所以被称为「零成本抽象」，是因为适配器链在优化构建里会被完全内联掉。下面两个函数做同样的事：一个用迭代器链，一个手写循环。我们把它们编译成汇编，再数一数调用指令：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">21 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![crate_type = &quot;lib&quot;]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">#[inline(never)]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">pub fn iter_sum(v: &amp;[i32]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    v.iter()</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        .copied()</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        .map(|x| x as i64 * 2)</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        .filter(|x| *x &gt; 4)</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        .sum()</span></div>
 <div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let s = String::from(&quot;hello&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;FnOnce: {}&quot;, call_once(move || s.len() as i32));</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut count = 0;</span></div>
-<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;FnMut: {}&quot;, call_mut(|| {</span></div>
-<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        count += 1;</span></div>
-<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        count</span></div>
-<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }));</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let x = 7;</span></div>
-<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;Fn: {}&quot;, call(|| x));</span></div>
-<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div></div></div>
-<p>如果忘记给 <code>call_mut</code> 的 <code>f</code> 加 <code>mut</code>，会看到这样的报错（示意输出）：</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main</span></div>
-<div class="cl is-text"><span class="code">error[E0596]: cannot borrow `f` as mutable, as it is not declared as mutable</span></div>
-<div class="cl is-text"><span class="code"> --&gt; main.rs:2:5</span></div>
-<div class="cl is-text"><span class="code">  |</span></div>
-<div class="cl is-text"><span class="code">2 |     f();</span></div>
-<div class="cl is-text"><span class="code">  |     ^ cannot borrow as mutable</span></div>
-<div class="cl is-text"><span class="code">help: consider changing this to be mutable</span></div>
-<div class="cl is-text"><span class="code">  |</span></div>
-<div class="cl is-text"><span class="code">1 | fn call_mut&lt;F: FnMut() -&gt; i32&gt;(mut f: F) -&gt; i32 {</span></div>
-<div class="cl is-text"><span class="code">  |                                 +++</span></div></div></div>
-<h2 id="rust-ch01-closures-and-iterators-7-3-迭代器-惰性求值的数据流">7.3 迭代器：惰性求值的数据流</h2>
-<p>迭代器（iterator）是对「一串可以逐个取出的值」的抽象。它的核心只有一个方法 <code>next()</code>，返回 <code>Option&lt;Item&gt;</code>——有元素就给 <code>Some(值)</code>，取完了给 <code>None</code>。<code>for</code> 循环其实就是迭代器的语法糖：<code>for x in v</code> 会把 <code>v</code> 转成迭代器，反复调用 <code>next()</code> 直到结束。</p>
-<p>迭代器最重要的性质是惰性（lazy）：光创建它不会做任何计算，只有真正调用 <code>next()</code>（或者被 <code>collect</code>、<code>sum</code> 这类消费器驱动）时才逐步产出值。这意味着你可以把多个步骤串成一条流水线，而中间结果不需要先存成完整的 <code>Vec</code>，既省内存又能早停。</p>
-<p>下面的程序先算一个「偶数平方和」，链上 <code>filter</code> 和 <code>map</code>，最后由 <code>sum()</code> 消费。第二半段用一个带打印的 <code>map</code> 演示惰性：创建之后什么都没打印，直到调用 <code>next()</code> 才看到输出。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let nums = [1, 2, 3, 4, 5, 6];</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let result: i32 = nums</span></div>
-<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        .iter()</span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .filter(|&amp;&amp;n| n % 2 == 0)</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .map(|&amp;n| n * n)</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        .sum();</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;偶数平方和 = {result}&quot;);</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut lazy = nums.iter().map(|n| {</span></div>
-<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        println!(&quot;正在计算 {n}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        n * 2</span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    });</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;此刻还没有任何计算发生&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;第一个结果: {:?}&quot;, lazy.next());</span></div>
-<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
-<p>注意 <code>iter()</code> 产出的是引用 <code>&amp;i32</code>，所以 <code>filter</code> 的闭包收到 <code>&amp;&amp;i32</code>、<code>map</code> 的闭包收到 <code>&amp;i32</code>。用 <code>|&amp;n|</code> 这样的模式可以把引用解构掉，直接拿到值。如果你拿到的是迭代器本身而不是切片，比如 <code>.into_iter()</code> 产出的是 <code>i32</code>，闭包参数就不用带 <code>&amp;</code> 了。三种常见入口的区别值得记牢：<code>iter()</code> 借用集合，<code>iter_mut()</code> 可变借用（可以原地修改元素），<code>into_iter()</code> 消耗集合、把所有权逐个交出。选哪个取决于你之后还想不想继续使用原集合。</p>
-<h2 id="rust-ch01-closures-and-iterators-7-4-适配器-map-filter-fold">7.4 适配器：map、filter、fold</h2>
-<p>适配器（adapter）是「接收一个迭代器、返回另一个迭代器」的方法，可以无限串联。<code>map</code> 做一对一转换，<code>filter</code> 按条件保留元素，<code>take(n)</code> 只取前 n 个，<code>enumerate()</code> 给元素配上下标。它们都是惰性的，不会立即遍历数据。</p>
-<p><code>fold</code> 则是消费器：它带一个初始累加值，把闭包依次应用到每个元素上，最后返回累加结果。下面的程序用 <code>fold</code> 实现字符串拼接，同时演示 <code>take</code> 和 <code>enumerate</code> 的惰性链条。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let nums = [1, 2, 3, 4, 5];</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let txt = nums</span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .iter()</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .take(3)</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        .map(|n| n.to_string())</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        .fold(String::from(&quot;结果:&quot;), |acc, n| {</span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">            format!(&quot;{acc} {n}&quot;)</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        });</span></div>
-<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;{txt}&quot;);</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    for (i, n) in nums.iter().enumerate() {</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        println!(&quot;下标 {i} -&gt; 值 {n}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
-<p>这里要提醒一点：<code>fold</code> 的闭包里用 <code>format!</code> 每次生成新字符串，数据量很大时会有额外分配。追求性能时可以改成可变累加器，或者用 <code>write!</code> 直接写入 <code>String</code>。这属于优化层面的考虑，初学阶段先用最直观的写法把逻辑写对更重要。先跑通，再优化，永远是比较稳妥的顺序。</p>
-<h2 id="rust-ch01-closures-and-iterators-7-5-collect-与类型推断">7.5 collect 与类型推断</h2>
-<p><code>collect()</code> 把迭代器收集成集合，是迭代器世界里最常用的「出口」。它之所以能工作，是因为 <code>FromIterator</code> trait：<code>Vec</code>、<code>BTreeSet</code>、<code>HashMap</code> 等类型都实现了它，知道怎么从一个迭代器构造自己。正因为如此，<code>collect()</code> 的返回类型必须由上下文给出——变量注释、函数返回值或后续用法都可以，但如果完全没有类型信息，编译器就会报错。</p>
-<p>下面的程序把同一组单词分别收集成 <code>Vec</code>、<code>BTreeSet</code> 和 <code>HashMap</code>。注意 <code>Vec&lt;usize&gt;</code> 的注释是必需的；而 <code>BTreeSet</code> 会自动去重；<code>HashMap</code> 的构造稍微特殊，这里用 <code>entry</code> API 手动统计词频，展示迭代器与常规写法的配合。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::{BTreeSet, HashMap};</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">#[inline(never)]</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">pub fn loop_sum(v: &amp;[i32]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let mut s = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    for &amp;x in v {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let y = x as i64 * 2;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        if y &gt; 4 { s += y; }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    s</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O --emit asm u07_b5.rs -o u07_b5.s</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ grep -c 'call' u07_b5.s</span></div>
+<div class="cl is-text"><span class="code">0</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ grep -c 'Map\|Filter\|next' u07_b5.s</span></div>
+<div class="cl is-text"><span class="code">0</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ grep -c '^\.LBB' u07_b5.s</span></div>
+<div class="cl is-text"><span class="code">12</span></div></div></div>
+<p>三个数字合在一起说明问题：汇编里没有任何 <code>call</code> 指令，也没有 <code>Map</code>、<code>Filter</code>、<code>next</code> 这样的符号残留，只剩下本地跳转标签（循环与分支）。迭代器适配器的每个 <code>next()</code> 都被内联展开，闭包体被直接嵌进循环体，最终产物与手写循环同一量级——LLVM 甚至可能对其中一版做自动向量化，导致两边指令数不完全相同，但两者都不再有适配器开销。</p>
+<p>适配器之所以能被内联，根源还是上一节讲的单态化：<code>Map&lt;I, F&gt;</code>、<code>Filter&lt;I, P&gt;</code> 都是泛型结构体，单态化后迭代器类型、闭包类型全都具体化，LLVM 能看到完整的调用图。<code>#[inline]</code> 提示在标准库里被大量使用，但多数情况下即使没有它，优化器也会因为「函数体很小且调用点固定」而自动内联。反过来说，若把谓词写成 <code>&amp;dyn Fn</code> 或手工装箱，就重新引入了间接调用，零成本优势随之消失。</p>
+<p>要复现这个实验，必须用 <code>-O</code> 或 Cargo 的 release 构建；debug 构建默认关优化，会保留大量 <code>next()</code> 调用，看起来「迭代器很慢」。这提醒我们：性能结论必须来自与实际发布配置一致的构建，而不是 debug 下的直觉。另一个测量陷阱是编译器可能把整个计算常量折叠掉——基准测试应当让输入来自运行时（例如命令行参数），并检查汇编里确实保留了循环。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>适配器链像一条流水线，但 Rust 编译器在发布时会把整条流水线「压平」成一个工人从头做到尾——流水线上的站点（map、filter）只是源码里的描述，机器码里它们已经融进了同一个循环。所以你写的是「数据流」，机器跑的是「循环」，两全其美。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-closures-and-iterators-7-6-collect-与-fromiterator-目标类型驱动收集">7.6 collect 与 FromIterator：目标类型驱动收集</h2>
+<p><code>collect()</code> 是迭代器世界里的「出口」，但它的能力不来自 <code>Iterator</code>，而来自目标类型实现的 <code>FromIterator</code>。写法 <code>let x: Target = iter.collect();</code> 中，类型是<strong>从赋值目标反推</strong>出来的；同一个迭代器可以收集成 <code>Vec</code>、<code>HashSet</code>、<code>BTreeMap</code>、<code>String</code>，甚至 <code>Result</code>——只要目标类型实现了对应 <code>Item</code> 的 <code>FromIterator</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">27 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::HashMap;</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let words = [&quot;rust&quot;, &quot;go&quot;, &quot;rust&quot;, &quot;c&quot;];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Pair(char, i32);</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let lens: Vec&lt;usize&gt; = words.iter().map(|w| w.len()).collect();</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;长度列表 {lens:?}&quot;);</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let unique: BTreeSet&lt;&amp;str&gt; = words.iter().copied().collect();</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;去重后 {unique:?}&quot;);</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut counts: HashMap&lt;&amp;str, i32&gt; = HashMap::new();</span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    for &amp;w in &amp;words {</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        *counts.entry(w).or_insert(0) += 1;</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;词频 {counts:?}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div></div></div>
-<p><code>collect()</code> 还有一个进阶用法：如果迭代器的元素本身是 <code>Result&lt;T, E&gt;</code>，你可以把它收集成 <code>Result&lt;Vec&lt;T&gt;, E&gt;</code>——遇到第一个 <code>Err</code> 就整体失败，否则得到装满成功值的向量。这在「批量解析、任一失败就报错」的场景里非常顺手，因为类型系统会自动帮你把错误冒泡出来。</p>
-<p>什么时候该用迭代器、什么时候写普通循环？一个简单判断：如果是在「对一串数据做连续的变换和筛选」，迭代器链通常更短、更不容易写出边界错误；如果逻辑里充满了提前返回、复杂状态机或需要修改多个外部变量，<code>for</code> 循环往往更清晰。两者不是高低之分，而是工具箱里的不同工具。迭代器链会消耗原始迭代器，收集完想再用一遍，记得重新调用 <code>iter()</code> 建一条新链，不能直接拿旧链重复收集。</p>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">impl FromIterator&lt;Pair&gt; for HashMap&lt;char, i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn from_iter&lt;T: IntoIterator&lt;Item = Pair&gt;&gt;(iter: T) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        let mut map = HashMap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        for Pair(k, v) in iter {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            map.entry(k).and_modify(|acc| *acc += v).or_insert(v);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        map</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let pairs = vec![Pair('a', 1), Pair('b', 2), Pair('a', 3)];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let m: HashMap&lt;char, i32&gt; = pairs.into_iter().collect();</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    println!(&quot;a={:?} b={:?}&quot;, m.get(&amp;'a'), m.get(&amp;'b'));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let doubled: Vec&lt;i32&gt; = (1..=4).map(|x| x * 2).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;doubled = {:?}&quot;, doubled);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let mixed: Vec&lt;Result&lt;i32, &amp;str&gt;&gt; = vec![Ok(1), Err(&quot;x&quot;), Ok(3)];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let short: Result&lt;Vec&lt;i32&gt;, &amp;str&gt; = mixed.into_iter().collect();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;short-circuit = {:?}&quot;, short);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b6.rs -o u07_b6 &amp;&amp; ./u07_b6</span></div>
+<div class="cl is-text"><span class="code">a=Some(4) b=Some(2)</span></div>
+<div class="cl is-text"><span class="code">doubled = [2, 4, 6, 8]</span></div>
+<div class="cl is-text"><span class="code">short-circuit = Err(&quot;x&quot;)</span></div></div></div>
+<p><code>FromIterator</code> 的签名决定了「一次调用完成聚合」，所以实现里通常用 <code>fold</code> 或循环累积状态，而不是在每次 <code>next</code> 时都分配新集合。自定义的 <code>FromIterator&lt;Pair&gt;</code> 把同字符的值累加，<code>a</code> 得到 <code>1 + 3 = 4</code>。这条 <code>impl</code> 之所以合法，是因为本地类型 <code>Pair</code> 出现在 trait 的类型参数位置，且它前面没有未覆盖的泛型参数——这正是孤儿规则所要求的「至少一个本地类型作为锚点」。它与标准库已有的 <code>FromIterator&lt;(K, V)&gt; for HashMap&lt;K, V&gt;</code> 不冲突，因为 <code>Pair</code> 和元组 <code>(K, V)</code> 是不同的 <code>Item</code> 类型。</p>
+<p><code>FromIterator</code> 的完整签名是 <code>fn from_iter&lt;T: IntoIterator&lt;Item = A&gt;&gt;(iter: T) -&gt; Self</code>：它不要求传入的必须是 <code>Iterator</code>，任何能转成迭代器的容器都行。这个细节让 <code>collect</code> 的调用极其灵活，也带来一个常见困惑——当目标类型无法从上下文推断时，编译器会报「type annotations needed」，此时用 turbofish 写 <code>collect::&lt;Vec&lt;i32&gt;&gt;()</code> 或 <code>collect::&lt;BTreeSet&lt;_&gt;&gt;()</code> 即可消歧。</p>
+<p>标准库里还有几个值得记住的实现：<code>String: FromIterator&lt;char&gt;</code> 与 <code>String: FromIterator&lt;&amp;str&gt;</code> 让字符流直接拼成字符串；<code>Option&lt;V&gt;: FromIterator&lt;Option&lt;A&gt;&gt;</code>（其中 <code>V: FromIterator&lt;A&gt;</code>）在任一项为 <code>None</code> 时整体返回 <code>None</code>，是 <code>Result</code> 短路行为的 Option 版本；<code>Iterator::unzip</code> 则依赖 <code>(A, B): FromIterator&lt;(X, Y)&gt;</code>，把成对元素拆成两个集合。看到这些实现，就能理解为什么 <code>collect</code> 几乎能「变出」任何容器。</p>
+<p><code>Result</code> 的 <code>FromIterator</code> 尤其有用：它内部用 <code>try_fold</code>，遇到第一个 <code>Err</code> 就停止，所以 <code>short-circuit = Err(&quot;x&quot;)</code>，后面的 <code>Ok(3)</code> 根本没被收进结果。如果你在 <code>collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()</code> 之后还手动过滤错误，说明没利用好这个机制。反过来说，若确实需要「收集全部成功项并列出所有错误」，就不能依赖这个短路行为，得自己分区处理——例如用 <code>partition::&lt;Result&lt;_, _&gt;, _&gt;</code> 拆成两个 <code>Vec</code>，或者手写循环同时累加。理解 <code>FromIterator</code> 的短路语义，也能解释为什么 <code>try_fold</code> 是迭代器家族里如此核心的方法：它是 <code>find</code>、<code>try_for_each</code>、<code>collect::&lt;Result&lt;_,_&gt;&gt;()</code> 等一众适配器的共同底座，内部用 <code>ControlFlow</code> 表达「继续」与「提前结束」。</p>
+<h2 id="rust-ch01-closures-and-iterators-7-7-size_hint-fusediterator-与自定义迭代器">7.7 size_hint、FusedIterator 与自定义迭代器</h2>
+<p>实现 <code>Iterator</code> 时只需提供 <code>next()</code>，但还有几个可选方法会影响性能与语义。<code>size_hint()</code> 返回 <code>(下界, 上界)</code>，<code>collect</code> 用它预分配容量；<code>ExactSizeIterator</code> 表示上下界精确等于剩余元素数；<code>FusedIterator</code> 承诺「一旦返回 <code>None</code>，以后永远返回 <code>None</code>」，让 <code>last()</code>、<code>find()</code> 等适配器能安全优化。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">28 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Counter(u32);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">impl Iterator for Counter {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    type Item = u32;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn next(&amp;mut self) -&gt; Option&lt;u32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        if self.0 &lt; 3 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            let v = self.0;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">            self.0 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">            Some(v)</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            None</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn size_hint(&amp;self) -&gt; (usize, Option&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        let n = (3 - self.0) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        (n, Some(n))</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">impl std::iter::FusedIterator for Counter {}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let c = Counter(0);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;size_hint = {:?}&quot;, c.size_hint());</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;collect   = {:?}&quot;, Counter(0).collect::&lt;Vec&lt;_&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;sum       = {}&quot;, Counter(0).sum::&lt;u32&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;after 3 next = {:?}&quot;, Counter(0).last());</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u07_b7.rs -o u07_b7 &amp;&amp; ./u07_b7</span></div>
+<div class="cl is-text"><span class="code">size_hint = (3, Some(3))</span></div>
+<div class="cl is-text"><span class="code">collect   = [0, 1, 2]</span></div>
+<div class="cl is-text"><span class="code">sum       = 3</span></div>
+<div class="cl is-text"><span class="code">after 3 next = Some(2)</span></div></div></div>
+<p><code>Counter</code> 的 <code>size_hint</code> 上下界都是 3，因此 <code>collect</code> 可以一次分配好 3 个槽位。<code>last()</code> 之所以能直接一路 <code>next</code> 到底并记住最后一个值，与 <code>FusedIterator</code> 的承诺有关——不保证融合的迭代器在第一次 <code>None</code> 之后可能又吐出值，<code>DoubleEndedIterator</code> 等适配器需要区别对待。</p>
+<p>写自定义迭代器时还有两个常见方法。<code>DoubleEndedIterator</code> 增加 <code>next_back()</code>，让 <code>rev()</code> 成为可能；它要求前后两个游标不会交叉，否则会重复或漏掉元素。<code>ExactSizeIterator</code> 是 <code>Iterator</code> 的子 trait，增加 <code>len()</code>，它要求 <code>size_hint</code> 的上下界相等且准确。实现这些方法能解锁更多适配器，但每个都是必须遵守的语义契约。</p>
+<p>另外，示例里的 <code>3 - self.0</code> 在类型 <code>u32</code> 下有下溢风险：如果 <code>next</code> 在返回 <code>None</code> 之后又被误调用（或状态被外部破坏），表达式会 panic（debug）或回绕（release）。更稳健的写法是 <code>(3u32).saturating_sub(self.0)</code>。算法编里会大量遇到这类整数边界问题——<code>usize</code> 的下溢尤其隐蔽，因为代码看起来完全合理。自定义迭代器的另一个常见义务是「融合性」：标准迭代器在耗尽后再次调用 <code>next</code> 通常仍返回 <code>None</code>，你的实现也应如此，否则会在 <code>zip</code>、<code>chain</code> 等组合里出现意外行为。写单元测试时，除了验证元素序列，还要专门验证耗尽后的重复调用。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：<code>size_hint</code> 是<strong>给优化器的提示，不是正确性承诺</strong>。标准库不会因为下界是 3 就假定一定有 3 个元素，但你的 <code>collect</code> 性能会直接受它影响；写错上界只会让预分配不准，不会让结果出错。真正危险的是谎称实现了 <code>FusedIterator</code> 或 <code>ExactSizeIterator</code>：那是在向标准库承诺语义性质，违反它属于错误契约（尽管 trait 本身是 safe 的），会导致依赖该承诺的适配器行为异常。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-closures-and-iterators-7-8-工程取舍-迭代器-循环与借用冲突">7.8 工程取舍：迭代器、循环与借用冲突</h2>
+<p>用了这么多节讲迭代器，最后要回答的是「到底什么时候用它」。先说一个底层事实：<code>for x in coll</code> 会展开成 <code>let mut it = IntoIterator::into_iter(coll); while let Some(x) = it.next() { ... }</code>。所以 for 循环本身就是迭代器协议的使用者，二者不是对立关系——争的只是「要不要把处理步骤写成适配器链」。</p>
+<p>一个高频坑是借用冲突：遍历 <code>Vec</code> 的同时往里 <code>push</code>，或者同时持有 <code>iter()</code> 和 <code>iter_mut()</code>，都会被借用检查器拒绝。这不是迭代器的限制，而是别名的硬规则——可变迭代要求对元素的独占访问，任何其他路径都不能同时活着。解决办法有三类：收集要新增的元素后一次性 <code>extend</code>；用索引循环（下标是整数，不借 <code>Vec</code>）；或者把需要修改的元素用 <code>iter_mut()</code> 一次遍历完成。</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐写法</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>纯变换/过滤后收集</td>
+<td>迭代器链</td>
+<td>意图清晰，惰性且零成本</td>
+</tr>
+<tr>
+<td>需要在循环里 <code>?</code> 提前返回</td>
+<td><code>for</code> + <code>?</code></td>
+<td>闭包里 <code>?</code> 的类型和返回路径较绕</td>
+</tr>
+<tr>
+<td>需要同时修改容器结构</td>
+<td>索引循环或先收集再合并</td>
+<td>绕开借用冲突</td>
+</tr>
+<tr>
+<td>带复杂副作用/日志</td>
+<td><code>for</code> 循环</td>
+<td>执行时机与次数一目了然</td>
+</tr>
+<tr>
+<td>需要复用一段「处理流程」</td>
+<td>自己实现 <code>Iterator</code></td>
+<td>把逻辑封装成可组合的适配器</td>
+</tr>
+</tbody></table>
+
+<p>还有一个性能上的细粒度考量：<code>filter</code> 之后紧跟 <code>map</code> 与 <code>map</code> 之后紧跟 <code>filter</code>，语义相同但闭包调用次数不同（对不满足谓词的元素是否执行 map）。在热路径上，把廉价筛选放在昂贵变换之前通常更快；但只有在剖析数据支持时才值得为此牺牲直觉。更一般的做法是相信优化器，先写清楚，再测瓶颈。</p>
+<p>还有一条关于可读性的经验：一条链超过三四个适配器、或者闭包体超过两行，就该考虑拆成中间变量或独立函数。迭代器的优势在于「每一步都在说做什么」，一旦闭包里塞满控制流，这层清晰度就消失了。相反，简单到 <code>iter().sum()</code> 这种程度时，手写循环的样板代码反而成了噪音。迭代器的更大价值其实在于<strong>可组合性</strong>：一旦数据以 <code>Iterator</code> 形式流动，就能无缝切换到 <code>rayon</code> 的并行迭代器、接入 <code>serde</code> 的序列化流程，或用同一套适配器处理来自文件、网络、内存的不同来源——这是手写循环难以提供的抽象红利。</p>
+<p>把整节串起来看，闭包提供了「把行为当值传递」的能力，捕获规则让它安全地携带环境；<code>Fn</code> 家族提供了调用能力的分层，使 API 能按需约束；迭代器则把「遍历」抽象成一个惰性状态机，让 <code>map</code>/<code>filter</code> 这类别名能够像乐高一样组合，又在优化后消融成最朴素的循环。三者共同构成 Rust 里最基本也最高频的抽象层——理解它们的机制，比记住几十个适配器方法有用得多。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>写一个返回闭包的函数 <code>fn counter() -&gt; impl FnMut() -&gt; i32</code>，每次调用返回递增整数；再用 <code>Box&lt;dyn FnMut() -&gt; i32&gt;</code> 存两个这样的计数器到 <code>Vec</code> 里，验证它们状态互不影响。</li>
+<li>把 <code>7.4</code> 的 <code>map</code> 换成 <code>filter_map</code>，只保留偶数并翻倍，记录执行顺序；再用 <code>find</code> 替代 <code>collect</code> 观察短路提前到哪一步。</li>
+<li>为 <code>struct Range(u32, u32)</code> 实现 <code>Iterator</code> 与 <code>FusedIterator</code>，要求 <code>size_hint</code> 精确；用 <code>collect</code> 验证预分配是否正确。</li>
+<li>写一段代码尝试在遍历 <code>Vec&lt;i32&gt;</code> 时用 <code>push</code> 新增元素，记录编译错误；然后改用「先收集增量再 extend」的版本跑通。</li>
+</ul>
+
+</div></div>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">
 <ul>
-<li>闭包捕获环境变量时，Fn、FnMut、FnOnce 分别意味着什么？</li>
-<li>为什么说迭代器是惰性的，<code>map</code> 之后不调用 <code>collect</code> 会发生什么？</li>
-<li><code>iter()</code>、<code>iter_mut()</code>、<code>into_iter()</code> 三者的区别是什么？</li>
-<li><code>collect()</code> 为什么经常需要写变量类型注释？</li>
+<li>一个闭包只读捕获变量时有多大？<code>move</code> 关键字改变的是什么，不改变的是什么？</li>
+<li>为什么 <code>Fn</code> 一定是 <code>FnMut</code> 和 <code>FnOnce</code>，反过来不成立？举一个只实现 <code>FnOnce</code> 的闭包例子。</li>
+<li>适配器链在 debug 与 release 构建下的性能差别为什么可能很大？怎么验证优化是否发生？</li>
+<li><code>collect::&lt;Result&lt;Vec&lt;_&gt;, _&gt;&gt;()</code> 遇到错误时会怎样？它依赖哪个 trait 的什么行为？</li>
+<li>为什么在遍历 <code>Vec</code> 时不能同时 <code>push</code>？给出两种可行的改写方式。</li>
 </ul>
 
 </div>
 </section>
 </article>
-<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__structs-traits-and-generics.md.html">← 结构体、trait 与泛型</a><a href="rust__chapters__ch02__cargo-workspace-and-features.md.html">Cargo workspace 与 feature 工程化 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__structs-traits-generics.md.html">← trait 与泛型</a><a href="rust__chapters__ch01__advanced-types.md.html">高级类型与机制 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
 </main>
 </body>
 </html>

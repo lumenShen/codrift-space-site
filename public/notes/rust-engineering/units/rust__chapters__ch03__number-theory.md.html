@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数论：快速幂、扩展欧几里得、逆元、CRT 与素数判定</title>
+<meta name="description" content="第 32 单元 · 建议 90 分钟 · 用不变量驯服模运算，让每一条同余等式都可验证">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">数论：快速幂、扩展欧几里得、逆元、CRT 与素数判定</h1><p class="doc-sub">第 32 单元 · 建议 90 分钟 · 用不变量驯服模运算，让每一条同余等式都可验证</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 32-number-theory.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-number-theory-32-1-模运算的代数底座与问题全景">32.1 模运算的代数底座与问题全景</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-2-快速幂-二进制指数与-mul_mod-的溢出防线">32.2 快速幂：二进制指数与 mul_mod 的溢出防线</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-3-扩展欧几里得-不变量-ax-by-gcd">32.3 扩展欧几里得：不变量 ax+by=gcd</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-4-逆元-存在条件与两种求法">32.4 逆元：存在条件与两种求法</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-5-crt-逐条合并同余方程">32.5 CRT：逐条合并同余方程</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-6-素数判定-从试除到-miller-rabin">32.6 素数判定：从试除到 Miller-Rabin</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-7-复杂度-数值边界与工程取舍">32.7 复杂度、数值边界与工程取舍</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-8-随机对拍-四组独立裁判">32.8 随机对拍：四组独立裁判</a></li><li class="toc-l2"><a href="#rust-ch03-number-theory-32-9-自检与练习">32.9 自检与练习</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能解释快速幂为何是 O(log e)，并说清 u128 中间量在模乘里防溢出的边界</li>
+<li>能写出扩展欧几里得并证明 <code>a*x + b*y = gcd(a,b)</code> 这一不变量在递归中保持</li>
+<li>能判断逆元何时存在，并用 exgcd 或费马小定理求出它</li>
+<li>能用 CRT 合并同余方程，处理模数不互质与矛盾方程组</li>
+<li>能实现确定性 Miller-Rabin，并与试除法对拍 2..5000 的全部整数</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-number-theory-32-1-模运算的代数底座与问题全景">32.1 模运算的代数底座与问题全景</h2>
+<p>数论算法在竞赛与工程里出现的频率不高，但一旦出现就是&quot;不会就完全做不出&quot;的硬门槛。本单元围绕五个工具展开：快速幂 <code>a^e mod m</code>、扩展欧几里得、乘法逆元、中国剩余定理、素数判定。它们的共同底座是<strong>同余类环 Z/mZ</strong>：加减乘在模 m 下封闭，加法有单位元 0，乘法有单位元 1，但乘法逆元并非总存在——只有与 m 互质的元素才有逆元。把这一点记牢，后面一半的边界条件都能自己推出来。</p>
+<p>这些工具并非纯理论摆设。快速幂与逆元是 RSA、Diffie-Hellman  implementations 里最基础的操作；CRT 让大模数运算拆成几个小模数并行计算后再合并，是许多密码库提速的手段；素数判定用于生成密钥参数；扩展欧几里得则常用于有理数化简与线性同余求解。即便不做密码学，组合数取模、哈希函数、随机种子生成也处处用到它们。理解了应用场景，就明白为什么这些函数对&quot;结果必须精确、失败必须显式&quot;有如此高的要求——它们在系统里往往是正确性的最后一道防线，而不是可有可无的优化。</p>
+<p>问题定义要精确。快速幂：给定 a、e、m，求 a^e 除以 m 的余数，e 可达 1e18。逆元：给定 a、m，找 x 使 a·x ≡ 1 (mod m)，不存在时明确报告。CRT：给定若干 (rᵢ,mᵢ)，找 x 使 x ≡ rᵢ (mod mᵢ) 全部成立，返回最小非负解与 lcm，矛盾时报告无解。素数判定：给定 n &lt; 2^64，判断其是否为素数。</p>
+<p>再往深一层看，Z/mZ 与整数的本质差异在于&quot;除法不是总运算&quot;。整数里 a·x=b 总有 x=b/a（只要整除），模世界里却要看 gcd(a,m) 是否整除 b；这正是线性同余方程与逆元存在条件的来源。另外，模运算满足 (a+b) mod m = ((a mod m)+(b mod m)) mod m，这条&quot;先取模再运算&quot;的同态性质是所有快速幂与 CRT 算法合法性的根源——它允许我们把大数拆成小段，而不改变最终余数。Rust 的整数除法对负数向零取整，<code>-3 % 11</code> 得到 -3；在数论代码里若需要规范余数，应写 <code>((x % m) + m) % m</code>，否则负数余数会让对拍出现&quot;值不同但同余&quot;的假失败。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>模运算就像钟面上的算术——过了 12 点又回到 1。快速幂是&quot;把指数写成二进制，看到一位 1 就乘一次、每走一位就把底数平方&quot;，十几步就能算完 10 亿次方。扩展欧几里得像倒着走辗转相除的台阶，顺便记下&quot;每一步余数是怎么由原来的两个数拼出来的&quot;。逆元就是除法在钟面上的替身：不能真除，就乘上那个&quot;抵消它&quot;的数。CRT 是把几条不同模数的余数线索拼成唯一答案。Miller-Rabin 则是拿几个特殊底数去&quot;试探&quot;一个数是否装得像素数。</p>
+
+</div>
+</section>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">输入整数  →  判定问题类型  →  选工具（幂 / 逆元 / 合并 / 判定）
+          →  所有中间量升到 u128/i128  →  返回结果  →  与朴素实现对拍</pre></figure>
+<h2 id="rust-ch03-number-theory-32-2-快速幂-二进制指数与-mul_mod-的溢出防线">32.2 快速幂：二进制指数与 mul_mod 的溢出防线</h2>
+<p>快速幂（binary exponentiation）的核心恒等式是 a^e = (a²)^(e/2) 当 e 为偶数，a·a^(e-1) 当 e 为奇数。把 e 写成二进制后，从低位到高位扫描：当前底数 a 依次代表 a¹、a²、a⁴、a⁸……；若当前位为 1，就把这个幂乘进答案。不变量可以写成：<strong>每轮循环开始时，res · a^e == 原始 a^原始e (mod m)</strong>。位为 1 时 res 乘 a、e 减 1；随后 a 平方、e 右移一位；两步都保持等式，循环结束 e=0，res 即答案。</p>
+<p>Rust 里最关键的一行是 <code>mul_mod</code>：<code>((a as u128 * b as u128) % m as u128) as u64</code>。两个 u64 相乘的最大值是 (2^64-1)² = 2^128 - 2^65 + 1，严格小于 2^128，所以 u128 恰好装得下，不会溢出。若 m 也是 u128 量级就不能这么做，需要蒙哥马利乘法或 Russia-peasant 加倍法。另一个边界是 m=1：所有余数都是 0，必须提前返回，否则 <code>a %= 1</code> 后虽然也得到 0，但显式处理更清晰。e=0 时任何 a 的 0 次幂都是 1（包括 a=0，约定 0^0=1），循环不进入，res 保持 1，正确。</p>
+<p>手动走一遍 3^13 mod 17 能看清循环：13 的二进制是 1101。初始 res=1、a=3、e=13（1101）；第 1 轮最低位 1，res=3，a=9，e=6（110）；第 2 轮最低位 0，res 不变，a=81≡13，e=3（11）；第 3 轮最低位 1，res=3·13=39≡5，a=13²=169≡16，e=1；第 4 轮最低位 1，res=5·16=80≡12，e=0 结束。答案 12 与程序输出一致。注意循环次数是 e 的二进制位数（这里 4 次），不是 e 本身（13 次）——这就是 O(log e) 的直观来源。进入循环前 <code>a %= m</code> 不是可有可无：若 a 远大于 m，第一次 <code>mul_mod(a,a,m)</code> 的 a 虽已在 u64 范围内但平方会触发中间量问题，先约简能保证每轮底数都小于 m。</p>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>若指数 e 本身大到无法装进 u64（例如以十进制字符串给出），可以在已知 m 为素数时用费马小定理把 e 约简到 e mod (m-1) 再计算；若 m 为合数则要用欧拉定理 e mod φ(m)，而计算 φ(m) 需要 m 的素因子分解。这是&quot;把指数降维&quot;的常见技巧，也是快速幂与素数判定经常成对出现的原因。约简指数时别忘了处理 e=0 的约定：任何非零底数的 0 次幂为 1，即使约简后也是 1，二者一致。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">28 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// u64 相乘的中间结果最大 (2^64-1)^2 &lt; 2^128，故 u128 一定装得下。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn mul_mod(a: u64, b: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    ((a as u128 * b as u128) % m as u128) as u64</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">/// 快速幂：O(log e) 次模乘，指数按二进制位从低到高消费。</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">fn mod_pow(mut a: u64, mut e: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    if m == 1 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut res = 1u64;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    a %= m;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    while e &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        if e &amp; 1 == 1 { res = mul_mod(res, a, m); }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        a = mul_mod(a, a, m);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        e &gt;&gt;= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;2^10 mod 1000 = {}&quot;, mod_pow(2, 10, 1000));</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;3^13 mod 17 = {}&quot;, mod_pow(3, 13, 17));</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;7^0 mod 13 = {}&quot;, mod_pow(7, 0, 13));</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;123456789^987654321 mod 1e9+7 = {}&quot;, mod_pow(123456789, 987654321, 1_000_000_007));</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    // 费马小定理求逆：p 为素数时 a^(p-2) 是 a 的逆元。</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;inv(3) mod 1e9+7 = {}&quot;, mod_pow(3, 1_000_000_007 - 2, 1_000_000_007));</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v32_pow.rs -o v32_pow &amp;&amp; ./v32_pow</span></div>
+<div class="cl is-text"><span class="code">2^10 mod 1000 = 24</span></div>
+<div class="cl is-text"><span class="code">3^13 mod 17 = 12</span></div>
+<div class="cl is-text"><span class="code">7^0 mod 13 = 1</span></div>
+<div class="cl is-text"><span class="code">123456789^987654321 mod 1e9+7 = 652541198</span></div>
+<div class="cl is-text"><span class="code">inv(3) mod 1e9+7 = 333333336</span></div></div></div>
+<p><code>3^13 mod 17 = 12</code> 可以手算核对：3²=9，3⁴=81≡13，3⁸≡13²=169≡16≡-1，所以 3^13=3^8·3^4·3^1≡(-1)·13·3=-39≡12 (mod 17)。最后一行是费马小定理的应用：p 为素数且 a 不被 p 整除时 a^(p-2) 就是 a 的逆元，3×333333336 = 1000000008 ≡ 1 (mod 1e9+7)。</p>
+<h2 id="rust-ch03-number-theory-32-3-扩展欧几里得-不变量-ax-by-gcd">32.3 扩展欧几里得：不变量 ax+by=gcd</h2>
+<p>普通欧几里得算法反复用 <code>gcd(a,b) = gcd(b, a mod b)</code> 把规模缩小，终止于 b=0。扩展版多记一组系数：递归到底时 a·1 + b·0 = a = gcd；回溯时若 <code>b*q + (a mod b)*t = g</code>，其中 q、t 是子问题的系数，把 <code>a mod b = a - ⌊a/b⌋·b</code> 代入得 <code>a*t + b*(q - ⌊a/b⌋*t) = g</code>，于是当前系数是 <code>x = t</code>、<code>y = q - (a/b)*t</code>。这就是代码里 <code>*x = y1; *y = x1 - (a/b)*y1;</code> 的来历。</p>
+<p>不变量是 <code>a*x + b*y == gcd(a,b)</code>，且递归参数满足 <code>b &lt; a</code>（a,b 为正时），因此深度 O(log min(a,b))。注意 a 或 b 为 0 的边界：<code>exgcd(0, b)</code> 会进入 b≠0 分支，递归调用 <code>exgcd(b, 0 % b = 0)</code> 返回 g=b、x=1、y=0，回溯得 x=0、y=1，验证 0·0 + b·1 = b，正确。代码用 i128 而非 i64，是因为回溯中的 <code>x1 - (a/b)*y1</code> 可能达到量级 b，a、b 接近 1e18 时 i64 会溢出。</p>
+<p>这条等式还有一个名字——<strong>贝祖等式</strong>（Bézout&#39;s identity）：gcd(a,b) 是形如 a·x+b·y 的最小正整数。它不只用来求逆元，也是 CRT 中&quot;diff 能否被 g 整除&quot;判据的理论来源：a·x ≡ b (mod m) 有解当且仅当 gcd(a,m) | b。递归版代码短小，但每层都有一次函数调用与两个 <code>&amp;mut i128</code> 参数传递；追求常数时可改写为迭代版，用四个滚动变量维护系数。本单元选递归版，是因为回溯公式与推导一一对应，读者能直接从数学证明映射到代码，减少&quot;知道结论但不知道为什么&quot;的风险。实践中还有一种常见错误：把 <code>x1 - (a/b)*y1</code> 写成 <code>y1 - (a/b)*x1</code>，这在对 a=17、b=5 的手推里立刻暴露（会得到 7 与 -2，验算 17·7+5·(-2)=109≠1）。</p>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>系数并不唯一：若 (x,y) 是一组解，则 (x+k·(b/g), y-k·(a/g)) 也是解，k 为任意整数。exgcd 返回的是绝对值较小的一组，但不保证 x 落在 [0,m) 内；<code>mod_inv</code> 里那次 <code>(x % m + m) % m</code> 才是把它规范成最小非负代表。对拍时若忘记归一化，&quot;值不同但同余&quot;的两个逆元会被判定为不等，产生假 mismatch——这类问题不是算法错，而是输出表示不统一。把归一化写在函数内部，是避免调用方各自犯同一错误的最省事做法。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">42 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 扩展欧几里得：返回 gcd(a,b)，并把系数写进 x、y 使 a*x + b*y = gcd(a,b)。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">/// 要求 a, b 为非负整数（不同时为 0）。</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn exgcd(a: i128, b: i128, x: &amp;mut i128, y: &amp;mut i128) -&gt; i128 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    if b == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        *x = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        *y = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        return a;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut x1 = 0i128;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut y1 = 0i128;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let g = exgcd(b, a % b, &amp;mut x1, &amp;mut y1);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    *x = y1;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    *y = x1 - (a / b) * y1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    g</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">/// 用 exgcd 求 a 在模 m 下的乘法逆元，不存在（gcd != 1）时返回 None。</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn mod_inv(a: i128, m: i128) -&gt; Option&lt;i128&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let (mut x, mut y) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let g = exgcd(a % m, m, &amp;mut x, &amp;mut y);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    if g != 1 { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    Some(((x % m) + m) % m)</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    for (a, b) in [(240i128, 46i128), (30, 12), (17, 5)] {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let (mut x, mut y) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        let g = exgcd(a, b, &amp;mut x, &amp;mut y);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        println!(&quot;exgcd({},{}) g={} x={} y={} check={}&quot;, a, b, g, x, y, a * x + b * y);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    for (a, m) in [(3i128, 11i128), (10, 17), (6, 9)] {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        println!(&quot;inv({},{}) = {:?}&quot;, a, m, mod_inv(a, m));</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    // 验证逆元：a * inv(a) mod m 必须为 1。</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    let a = 123456789i128;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    let m = 1_000_000_007i128;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    if let Some(inv) = mod_inv(a, m) {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        println!(&quot;inv(123456789,1e9+7) = {} check = {}&quot;, inv, a * inv % m);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v32_exgcd.rs -o v32_exgcd &amp;&amp; ./v32_exgcd</span></div>
+<div class="cl is-text"><span class="code">exgcd(240,46) g=2 x=-9 y=47 check=2</span></div>
+<div class="cl is-text"><span class="code">exgcd(30,12) g=6 x=1 y=-2 check=6</span></div>
+<div class="cl is-text"><span class="code">exgcd(17,5) g=1 x=-2 y=7 check=1</span></div>
+<div class="cl is-text"><span class="code">inv(3,11) = Some(4)</span></div>
+<div class="cl is-text"><span class="code">inv(10,17) = Some(12)</span></div>
+<div class="cl is-text"><span class="code">inv(6,9) = None</span></div>
+<div class="cl is-text"><span class="code">inv(123456789,1e9+7) = 18633540 check = 1</span></div></div></div>
+<p><code>check=</code> 那一列直接打印 a<em>x+b</em>y，三行都等于 g，这是不变量的可视化验证。注意 <code>exgcd(30,12)</code> 给出的 x=1、y=-2 只是<strong>一组</strong>解，通解是 x=1+6t/k、y=-2-30t/k 形式（k=g），本单元只需要存在性与一组可行解，不必求最小非负系数。</p>
+<h2 id="rust-ch03-number-theory-32-4-逆元-存在条件与两种求法">32.4 逆元：存在条件与两种求法</h2>
+<p>乘法逆元定义在 Z/mZ 中：找 x 使 a·x ≡ 1 (mod m)。存在当且仅当 gcd(a,m)=1。证明很短：若 a·x + m·y = 1 有解，则 a·x ≡ 1；反之若 a·x ≡ 1，则 a·x - 1 被 m 整除，即存在 y 使 a·x + m·y = 1，故 gcd(a,m) 整除 1。这个充要条件决定了所有边界：<code>inv(6,9)=None</code>，因为 gcd=3；<code>inv(10,17)=Some(12)</code>，因为 10×12=120=7×17+1。</p>
+<p>两种求法各有适用场景。exgcd 法对任意 m 有效，只要互质，复杂度 O(log m)，代码直接复用上一节。费马小定理法只在 m 为素数时成立：a^(m-1) ≡ 1，故 a^(m-2) 是逆元；它依赖快速幂，复杂度也是 O(log m)，但实现更短，且容易与模幂代码共享。工程里常见 1e9+7、998244353 这类素数模数，用费马法最省事；若模数是合数（例如某些哈希取模），必须回退到 exgcd，否则会得到错误答案。</p>
+<p>用一个反例把费马法的边界钉死：m=9、a=2，gcd=1 所以逆元存在（是 5，因为 2×5=10≡1），但费马公式给出 2^(9-2)=2^7=128≡2 (mod 9)，完全不对。原因很简单：费马小定理的前提&quot;m 是素数&quot;不成立。因此接口设计上，费马法函数体里要么用 <code>debug_assert!(is_prime(m))</code> 守住前提，要么干脆在文档里写清&quot;调用方保证 m 为素数&quot;，不能让调用者误以为它和 exgcd 等价。另一个细节：<code>mod_inv</code> 返回 <code>Option&lt;i128&gt;</code> 而不是直接返回 i128，把&quot;不存在&quot;编码进类型系统，迫使调用方用 <code>if let</code> 或 <code>?</code> 处理；这比返回 0 或 panic 更安全——毕竟 0 永远不是任何模数下的逆元，把它当错误哨兵看似可行，但一旦有人忘记检查就会静默算错。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：别把&quot;m 是素数&quot;和&quot;a 与 m 互质&quot;混为一谈。费马法只校验前者，若 m 是合数而 a 恰好互质（如 m=9、a=2），a^(m-2)=2^7=128≡2 (mod 9)，并不是逆元（正确逆元是 5）。另一个坑是负数：<code>a % m</code> 在 Rust 中可能为负，<code>mod_inv</code> 里对 x 做 <code>((x % m) + m) % m</code> 才是规范非负余数；直接用 x 会得到负逆元，虽在数学上等价，但打印出来或与暴力比对时会不一致。</p>
+
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>逆元的用途远不止&quot;做除法&quot;。组合数 C(n,k) mod p 需要 k! 与 (n-k)! 的逆元；线性同余方程 a·x ≡ b (mod m) 的解是 x ≡ b·inv(a)；许多哈希与随机算法的归一化步骤也要除以模数。把逆元当成&quot;模世界的除法&quot;来记，比背公式更有用。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-number-theory-32-5-crt-逐条合并同余方程">32.5 CRT：逐条合并同余方程</h2>
+<p>中国剩余定理解决&quot;多个模数下的余数能否拼成一个数&quot;。先讲经典情形：模数两两互质时，解模 M=∏mᵢ 唯一。构造法用 Mᵢ=M/mᵢ 与 tᵢ=inv(Mᵢ mod mᵢ)，则 x = Σ rᵢ·Mᵢ·tᵢ 是解。但构造法要算大数乘积；增量合并法更实用：维护当前解 x 与当前模数 mod_now（初始 0、1），读入新方程 x ≡ r (mod n)，设新解为 x + mod_now·t，代入得 mod_now·t ≡ r - x (mod n)。若 g=gcd(mod_now,n) 不整除 r-x，则无解；否则两边除 g，用 exgcd 求 mod_now/g 模 n/g 的逆，得到 t 的最小非负代表，更新 mod_now ← lcm(mod_now,n)。</p>
+<p>不变量是：<strong>每轮结束后，x 满足目前已合并的全部同余式，且 mod_now 是这些模数的 lcm</strong>。初始 vacuously 成立；增量步骤保证新解满足新方程且不破坏旧方程（因为加的是 mod_now 的整数倍）；模数更新为 lcm 保证解在模 lcm 下唯一。这个视角自然涵盖不互质的情形：<code>crt([1,3],[4,6])</code> 中 gcd(4,6)=2 整除 3-1，故有解 x=9，模 12；<code>crt([0,1],[2,4])</code> 中 gcd=2 不整除 1-0，故无解。手算校验：9 mod 4=1、9 mod 6=3，正确。</p>
+<p>把 <code>crt([2,3,2],[3,5,7])</code> 的增量过程完整展开，能看到每一步的数从哪里来：初始 x=0、mod_now=1。第一条 x≡2 (mod 3)：exgcd(1,3) 得 s=1，diff=2，step=2，lcm=3，x=2。第二条 x≡3 (mod 5)：exgcd(3,5) 得 3·2+5·(-1)=1，s=2；diff=3-2=1，coef=1·2=2，step=2，lcm=15，x=(2+3·2) mod 15=8。第三条 x≡2 (mod 7)：exgcd(15,7) 得 15·1+7·(-2)=1，s=1；diff=2-8=-6，coef=-6，step=(-6 mod 7)=1，lcm=105，x=(8+15·1) mod 105=23。程序输出 <code>Some((23,105))</code>，与手算逐位一致。这里 <code>step</code> 为什么要取模 n/g？因为 t 的合法取值是一族等差数列，取最小非负代表既保证 x 落在 [0,lcm)，又让结果可复现；若不取模，x 会随 exgcd 返回的系数大小漂移，对拍时&quot;同一个解的不同代表&quot;会造成假 mismatch。增量合并的顺序不影响最终的最小解与 lcm，只影响中间 x 的数值，因此不同教材给出的构造式长得不同却结果一致；实现时保持固定顺序即可，不必纠结哪条方程先合并。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">41 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn exgcd(a: i128, b: i128, x: &amp;mut i128, y: &amp;mut i128) -&gt; i128 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    if b == 0 { *x = 1; *y = 0; return a; }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let (mut x1, mut y1) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let g = exgcd(b, a % b, &amp;mut x1, &amp;mut y1);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    *x = y1;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    *y = x1 - (a / b) * y1;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    g</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">/// 合并同余方程组 x ≡ rem[i] (mod m[i])，返回 (最小非负解, 所有模数的 lcm)。</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">/// 若存在矛盾则返回 None。</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn crt(rem: &amp;[i128], m: &amp;[i128]) -&gt; Option&lt;(i128, i128)&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let (mut x, mut mod_now) = (0i128, 1i128);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    for i in 0..rem.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let n = m[i];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        let (mut s, mut t) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let g = exgcd(mod_now, n, &amp;mut s, &amp;mut t); // mod_now*s + n*t = g</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let diff = rem[i] - x;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        if diff % g != 0 { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        // mod_now * s ≡ g (mod n)，两边同除 g 后求 step。</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let coef = (diff / g) * s;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        let step = ((coef % (n / g)) + (n / g)) % (n / g);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let lcm = mod_now / g * n;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        x = (x + mod_now * step) % lcm;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        if x &lt; 0 { x += lcm; }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        mod_now = lcm;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    Some((x, mod_now))</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="32"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    println!(&quot;crt([2,3,2],[3,5,7]) = {:?}&quot;, crt(&amp;[2, 3, 2], &amp;[3, 5, 7]));</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    println!(&quot;crt([1,3],[4,6])    = {:?}&quot;, crt(&amp;[1, 3], &amp;[4, 6]));</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    println!(&quot;crt([0,1],[2,4])    = {:?}&quot;, crt(&amp;[0, 1], &amp;[2, 4]));</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    println!(&quot;crt([7,3],[13,17])  = {:?}&quot;, crt(&amp;[7, 3], &amp;[13, 17]));</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    // 大模数：m 相乘会溢出 i64，但 i128 仍安全。</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    println!(&quot;crt([123,456],[1_000_000_007,1_000_000_009]) = {:?}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        crt(&amp;[123, 456], &amp;[1_000_000_007, 1_000_000_009]));</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v32_crt.rs -o v32_crt &amp;&amp; ./v32_crt</span></div>
+<div class="cl is-text"><span class="code">crt([2,3,2],[3,5,7]) = Some((23, 105))</span></div>
+<div class="cl is-text"><span class="code">crt([1,3],[4,6])    = Some((9, 12))</span></div>
+<div class="cl is-text"><span class="code">crt([0,1],[2,4])    = None</span></div>
+<div class="cl is-text"><span class="code">crt([7,3],[13,17])  = Some((20, 221))</span></div>
+<div class="cl is-text"><span class="code">crt([123,456],[1_000_000_007,1_000_000_009]) = Some((499999841499998989, 1000000016000000063))</span></div></div></div>
+<p>最后一行是 i128 必要性的实证：两个模数相乘约 1e18，接近 i64 上限；再乘以中间系数必然溢出 i64，而 i128 余量充足。若你的模数规模再大一个数量级，就得考虑用 <code>u128</code> 配合溢出安全的乘法，或者把解表示为同余类而不算出具体整数。</p>
+<h2 id="rust-ch03-number-theory-32-6-素数判定-从试除到-miller-rabin">32.6 素数判定：从试除到 Miller-Rabin</h2>
+<p>试除法用 d 从 2 扫到 √n，复杂度 O(√n)：n=1e12 时要 1e6 次除法，尚可；n&lt;2^64 时 √n 达 4e9，不可行。Miller-Rabin 基于费马小定理的逆否：若 n 是奇素数，对任意 a 与 n 互质有 a^(n-1) ≡ 1 (mod n)。把 n-1 写成 d·2^s（d 为奇数），考察序列 a^d, a^(2d), ..., a^(2^(s-1)d)。若 n 为素数，该序列要么首项为 1，要么某一项为 n-1（因为 1 的平方根模素数只有 ±1）。若某个 a 使这两条都不满足，a 就是&quot;合数见证&quot;，n 必为合数。</p>
+<p>确定性版本的关键是底数集合：对 n &lt; 2^64，取 [2, 325, 9375, 28178, 450775, 9780504, 1795265022] 这七个数已证明足够。代码先做小素数试除，命中就直接返回，既加速又避免对偶数跑完整流程。分解 <code>d·2^s</code> 时 <code>s</code> 用 <code>u32</code> 足够（n&lt;2^64 时 s&lt;64）。<code>base % n == 0</code> 的底数要跳过，否则 a=0 会让首项为 0 而误判。</p>
+<p>为什么只做一次费马测试不够？存在卡米耶尔数（如 561、1105、1729），它们对所有与自身互质的底数都满足 a^(n-1)≡1，却不是素数。Miller-Rabin 的加强在于检查&quot;平方根只能是 ±1&quot;：若 a^d ≡ 1 或序列中出现 n-1，则通过；否则任何一步出现非 ±1 的平方根，就证明 n 不是素数。这个加强让卡米耶尔数无处遁形——561 在本实现里直接被小素数 3 筛掉，而对 1105 等数，七个底数中至少一个会给出见证。若把底数改成随机选取并重复 k 轮，就得到概率版 Miller-Rabin：单轮误判率不超过 1/4，k=20 时低于 10^-12；本单元选确定性底数集合，牺牲了极小量常数换取&quot;无随机、可复现&quot;的判定结果，适合对拍与回归测试。工程上若 n 超过 u64（如大数库场景），只能用概率版并显式声明置信度。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">栈：n, d, s, base, x          ← Miller-Rabin 的单轮状态
+堆：无（全部标量，u64 / u32）
+常量区：7 个底数 + 12 个小素数  ← 预置判定证据</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">46 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn mul_mod(a: u64, b: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    ((a as u128 * b as u128) % m as u128) as u64</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn mod_pow(mut a: u64, mut e: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut res = 1u64;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    a %= m;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    while e &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if e &amp; 1 == 1 { res = mul_mod(res, a, m); }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        a = mul_mod(a, a, m);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        e &gt;&gt;= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">/// Miller-Rabin 确定性版本：对 n &lt; 2^64，下面 7 个底数足够。</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">fn is_prime(n: u64) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    if n &lt; 2 { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    // 先用小素数筛一遍，省掉大量合数的 Miller-Rabin 流程。</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    for p in [2u64, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37] {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        if n % p == 0 { return n == p; }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let mut d = n - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let mut s = 0u32;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    while d % 2 == 0 { d /= 2; s += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    for &amp;base in &amp;[2u64, 325, 9375, 28178, 450775, 9780504, 1795265022] {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        let a = base % n;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        if a == 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        let mut x = mod_pow(a, d, n);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        if x == 1 || x == n - 1 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        let mut witness = true;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        for _ in 1..s {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            x = mul_mod(x, x, n);</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            if x == n - 1 { witness = false; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        if witness { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    true</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    for n in [1u64, 2, 3, 4, 97, 100, 561, 1_000_000_007, 4_294_967_291] {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        println!(&quot;is_prime({}) = {}&quot;, n, is_prime(n));</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v32_prime.rs -o v32_prime &amp;&amp; ./v32_prime</span></div>
+<div class="cl is-text"><span class="code">is_prime(1) = false</span></div>
+<div class="cl is-text"><span class="code">is_prime(2) = true</span></div>
+<div class="cl is-text"><span class="code">is_prime(3) = true</span></div>
+<div class="cl is-text"><span class="code">is_prime(4) = false</span></div>
+<div class="cl is-text"><span class="code">is_prime(97) = true</span></div>
+<div class="cl is-text"><span class="code">is_prime(100) = false</span></div>
+<div class="cl is-text"><span class="code">is_prime(561) = false</span></div>
+<div class="cl is-text"><span class="code">is_prime(1000000007) = true</span></div>
+<div class="cl is-text"><span class="code">is_prime(4294967291) = true</span></div></div></div>
+<p>561 是著名的卡米歇尔数：它对底数 2 通过费马测试，却不是素数；小素数试除里 561%3=0 直接判合，避免了误判。4294967291 是 32 位范围内最大的素数，程序正确识别，说明 7 底数集合在小数值上也没有假阴性。</p>
+<h2 id="rust-ch03-number-theory-32-7-复杂度-数值边界与工程取舍">32.7 复杂度、数值边界与工程取舍</h2>
+<p>五个工具的复杂度都很轻：快速幂 O(log e)，exgcd 与逆元 O(log m)，CRT 合并 k 个方程 O(k·log M)，Miller-Rabin 每轮 O(log³ n)（用 u128 模乘时退化为 O(log² n) 的常数因子）。真正的工程风险不在时间复杂度，而在整数表示：中间量用 u128/i128 是底线，除非你能证明所有乘积都在目标类型范围内。</p>
+<p>测试层面也有讲究。数论函数适合写&quot;性质测试&quot;而非只写固定样例：例如对任意互质 a、m，逆元必须满足 <code>a*inv(a,m) % m == 1</code>；对任意 e≥0，<code>mod_pow(a,e+1,m) == mul_mod(mod_pow(a,e,m),a,m)</code>；CRT 返回的解代回每个原方程都必须成立。这些性质不依赖具体数值，用随机数据批量验证，覆盖比手写十个用例更广。本单元末尾的对拍程序就是这类性质测试的完整样板。同时保留 3^13 mod 17 这类手算可核对的小样例，作为&quot;理解正确&quot;的锚点——性质测试保证不回归，手算样例保证没把定义理解反，两者缺一不可。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>数论代码看着短，翻车几乎都在&quot;数字装不下&quot;和&quot;前提没检查&quot;两件事上。模乘先升位再取模，逆元先看互质，CRT 先看余数差能否被 gcd 整除，Miller-Rabin 先跳过模为 0 的底数。把这些前提写成代码里的显式分支，而不是脑子里的默认假设，代码就稳了。</p>
+
+</div>
+</section>
+<p>再强调一个容易被忽视的取舍：<code>i128</code> 不是免费的。它的乘除在软件里展开成多条指令，比 <code>u64</code> 慢数倍；若你的算法在热点路径上执行上亿次模乘，应该先用 <code>u128</code> 保证正确，再用基准测试确认是否需要引入蒙哥马利乘法等优化。反过来，若输入范围明确小于 1e9（例如数组下标相关的组合数），全程 <code>u64</code> 甚至 <code>u32</code> 就够了，盲目用 i128 只会拖慢速度。选择位宽的正确顺序是：先证明上界，再选最小够用类型，最后在边界处显式升位——本单元代码把升位集中在 <code>mul_mod</code> 与 exgcd 的回溯式里，正是这个原则的体现。</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>输入规模</th>
+<th>时间</th>
+<th>必须升位的中间量</th>
+<th>失败返回</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>快速幂</td>
+<td>e ≤ 1e18</td>
+<td>O(log e)</td>
+<td>a*b（u128）</td>
+<td>无</td>
+</tr>
+<tr>
+<td>扩展欧几里得</td>
+<td>a,b ≤ 1e18</td>
+<td>O(log min)</td>
+<td>(a/b)*y1（i128）</td>
+<td>无</td>
+</tr>
+<tr>
+<td>乘法逆元</td>
+<td>任意互质 m</td>
+<td>O(log m)</td>
+<td>系数归一（i128）</td>
+<td>None</td>
+</tr>
+<tr>
+<td>CRT</td>
+<td>k 个方程</td>
+<td>O(k log M)</td>
+<td>mod_now*step（i128）</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Miller-Rabin</td>
+<td>n &lt; 2^64</td>
+<td>O(log³ n)</td>
+<td>a*b（u128）</td>
+<td>bool</td>
+</tr>
+</tbody></table>
+
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：CRT 里 <code>lcm = mod_now / g * n</code> 的除法必须在乘法之前。写成 <code>mod_now * n / g</code> 会先溢出，即使数学结果相同。同理，<code>step</code> 取模时用 <code>n/g</code> 而不是 <code>n</code>——因为 mod_now/g 与 n/g 才互质，逆元只在模 n/g 下存在；若误用 n，<code>((coef % n) + n) % n</code> 得到的 t 在模 n/g 意义下也许不是最小代表，虽仍满足方程，但可能与暴力枚举的最小解不一致，导致对拍假失败。</p>
+
+</div>
+</section>
+<p>API 设计上还有两处值得较真。其一，CRT 返回 <code>(解, lcm)</code> 而不只是解：调用方往往需要知道解的唯一性模数，例如把解再代入另一个方程时，lcm 就是新的 mod_now。其二，逆元与 CRT 都用 <code>Option</code> 表达&quot;无解&quot;，而不是 panic。数论函数的失败是正常业务分支（输入不满足前提），用 panic 会把可恢复的错误变成进程崩溃；用 <code>Result&lt;_, MathError&gt;</code> 也可以，但当错误信息只有&quot;不互质&quot;一种时，<code>Option</code> 更轻。对拍代码因此可以写成 <code>assert_eq!(crt(...), brute)</code>，直接比较 <code>Option</code> 的相等性，无需额外解包——<code>Option&lt;(i128,i128)&gt;</code> 派生了 PartialEq，这让裁判代码异常简洁。</p>
+<h2 id="rust-ch03-number-theory-32-8-随机对拍-四组独立裁判">32.8 随机对拍：四组独立裁判</h2>
+<p>对拍程序用固定种子 31415926 的 xorshift64，四组裁判互不复用被测逻辑：快速幂对朴素连乘、exgcd 对独立 gcd 循环并验算 a<em>x+b</em>y、逆元先独立判断 gcd 再比对存在性与乘积、CRT 对&quot;枚举 0..lcm 所有 x&quot;、Miller-Rabin 对试除法遍历 2..5000。任何一处 mismatch 都计数并打印样本。</p>
+<p>固定种子的价值在于&quot;失败可复现&quot;：若某天把种子改成一个新值后出现 mismatch，只要把这个值和失败样本一起记录，任何人都能在任意机器上重跑同一序列。相比之下，用系统时间做种子看似&quot;覆盖更广&quot;，但失败无法复现，调试成本极高。xorshift64 的状态只有一个 u64，移位异或三步即可推进，关键性质是周期 2^64-1（种子非 0）；它不保证低位均匀，但对&quot;生成 a、e、m&quot;这种用途完全够用。CRT 裁判选择小模数池 [3,4,5,6,7,11]，最大 lcm 为 4620，枚举全部 x 只需几千步；若把模数换成 1e9+7 级别，暴力枚举就跑不完，这正是&quot;对拍规模要小到暴力可行、大到覆盖分支&quot;的原则。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">四组对拍的数据流
+种子 31415926 → xorshift64 → (a,e,m) → mod_pow ↔ 连乘
+                            → (a,b)   → exgcd ↔ gcd循环 + 验算
+                            → (r,m)   → crt ↔ 枚举 0..lcm
+n = 2..5000 → is_prime ↔ 试除</pre></figure>
+<p>值得单独讲一个真实发生的教训：对拍第一版把&quot;逆元一定存在&quot;当成隐含前提，对所有 a∈[1,60) 都期待 <code>Some(inv)</code>，结果报出 13 次 mismatch。排查后发现这些样本是 a=11、m=11 之类——根本不互质，<code>None</code> 才是正确答案。也就是说，<strong>错的是对拍自己，不是被测代码</strong>。修正版先用独立的 gcd 循环判定可逆性，再分两路比较：可逆则验 <code>a*inv % m == 1</code>，不可逆则要求 <code>None</code>。最终输出里 <code>non_invertible=13 mismatches=0</code>，正好把这 13 个样本从&quot;错误&quot;翻转成&quot;正确覆盖的边界&quot;。这件事说明：对拍的裁判必须比被测代码更笨、更可证明，任何&quot;理所当然&quot;的假设都要显式检查。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">171 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn mul_mod(a: u64, b: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    ((a as u128 * b as u128) % m as u128) as u64</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn mod_pow(mut a: u64, mut e: u64, m: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    if m == 1 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let mut res = 1u64; a %= m;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    while e &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        if e &amp; 1 == 1 { res = mul_mod(res, a, m); }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        a = mul_mod(a, a, m); e &gt;&gt;= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">fn exgcd(a: i128, b: i128, x: &amp;mut i128, y: &amp;mut i128) -&gt; i128 {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    if b == 0 { *x = 1; *y = 0; return a; }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let (mut x1, mut y1) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let g = exgcd(b, a % b, &amp;mut x1, &amp;mut y1);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    *x = y1; *y = x1 - (a / b) * y1; g</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">fn mod_inv(a: i128, m: i128) -&gt; Option&lt;i128&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let (mut x, mut y) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let g = exgcd(a % m, m, &amp;mut x, &amp;mut y);</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    if g != 1 { None } else { Some(((x % m) + m) % m) }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">fn crt(rem: &amp;[i128], m: &amp;[i128]) -&gt; Option&lt;(i128, i128)&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    let (mut x, mut mod_now) = (0i128, 1i128);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    for i in 0..rem.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        let n = m[i];</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        let (mut s, mut t) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        let g = exgcd(mod_now, n, &amp;mut s, &amp;mut t);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        let diff = rem[i] - x;</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        if diff % g != 0 { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let coef = (diff / g) * s;</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        let step = ((coef % (n / g)) + (n / g)) % (n / g);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        let lcm = mod_now / g * n;</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        x = (x + mod_now * step) % lcm;</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        if x &lt; 0 { x += lcm; }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        mod_now = lcm;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    Some((x, mod_now))</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">fn is_prime(n: u64) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    if n &lt; 2 { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    for p in [2u64, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37] {</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        if n % p == 0 { return n == p; }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    let mut d = n - 1; let mut s = 0u32;</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    while d % 2 == 0 { d /= 2; s += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    for &amp;base in &amp;[2u64, 325, 9375, 28178, 450775, 9780504, 1795265022] {</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        let a = base % n; if a == 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        let mut x = mod_pow(a, d, n);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        if x == 1 || x == n - 1 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        let mut witness = true;</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        for _ in 1..s { x = mul_mod(x, x, n); if x == n - 1 { witness = false; break; } }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        if witness { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    true</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">fn gcd(mut a: u64, mut b: u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    while b != 0 { let r = a % b; a = b; b = r; }</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    a</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">fn trial_prime(n: u64) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    if n &lt; 2 { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    let mut d = 2;</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    while d * d &lt;= n { if n % d == 0 { return false; } d += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    true</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="81"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">    let mut rng = Rng::new(31415926);</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">    // 1) 快速幂 vs 朴素连乘</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">    let (mut bad1, mut sample1) = (0u32, Vec::new());</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">    for _ in 0..400 {</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">        let a = rng.below(1000);</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">        let e = rng.below(80);</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">        let m = rng.below(999) + 2;</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">        let got = mod_pow(a, e, m);</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">        let mut want = 1u64;</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">        for _ in 0..e { want = (want * (a % m)) % m; }</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">        if got != want { bad1 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">        if sample1.len() &lt; 3 { sample1.push((a, e, m, got, want)); }</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">    println!(&quot;[pow] trials=400 mismatches={}&quot;, bad1);</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">    for (a,e,m,g,w) in sample1 { println!(&quot;[pow] {}^{} mod {} = {} (naive {})&quot;, a, e, m, g, w); }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="98"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">    // 2) exgcd / 逆元 vs 暴力</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">    let (mut bad2, mut sample2) = (0u32, Vec::new());</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">        let a = (rng.below(100) + 1) as i128;</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">        let b = (rng.below(100) + 1) as i128;</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">        let (mut x, mut y) = (0i128, 0i128);</span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">        let g = exgcd(a, b, &amp;mut x, &amp;mut y);</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">        let mut aa = a; let mut bb = b;</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">        while bb != 0 { let r = aa % bb; aa = bb; bb = r; }</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">        if g != aa || a * x + b * y != g { bad2 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">        if sample2.len() &lt; 3 { sample2.push((a, b, g, x, y)); }</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">    println!(&quot;[exgcd] trials=300 mismatches={}&quot;, bad2);</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">    for (a,b,g,x,y) in sample2 { println!(&quot;[exgcd] exgcd({},{}) g={} x={} y={}&quot;, a,b,g,x,y); }</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">    let primes = [11i128, 13, 17, 19, 23, 29, 31, 37, 101];</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">    let (mut bad_inv, mut inv_ok, mut inv_none) = (0u32, 0u32, 0u32);</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">        let a = (rng.below(60) + 1) as i128;</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">        let m = primes[rng.below(primes.len() as u64) as usize];</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">        // 先独立判断可逆性：只有当 gcd(a,m)==1 时逆元才存在。</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">        let coprime = gcd(a as u64, m as u64) == 1;</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">        match (mod_inv(a, m), coprime) {</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">            (Some(inv), true) =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">                inv_ok += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">                if a * inv % m != 1 { bad_inv += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">            (None, false) =&gt; inv_none += 1,</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">            _ =&gt; bad_inv += 1,</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">    println!(&quot;[inverse] trials=300 invertible={} non_invertible={} mismatches={}&quot;, inv_ok, inv_none, bad_inv);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="130"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">    // 3) CRT vs 枚举所有 x</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">    let mods_pool = [3i128, 4, 5, 6, 7, 11];</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">    let (mut bad3, mut both_none, mut both_some) = (0u32, 0u32, 0u32);</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">        let cnt = 2 + rng.below(2) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">        let mut rem = Vec::new(); let mut md = Vec::new(); let mut lcm = 1i128;</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">        for _ in 0..cnt {</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">            let p = mods_pool[rng.below(mods_pool.len() as u64) as usize];</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">            rem.push((rng.below(p as u64) as i128) % p);</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">            lcm = lcm / gcd(lcm as u64, p as u64) as i128 * p;</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">            md.push(p);</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">        let got = crt(&amp;rem, &amp;md);</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">        let mut brute = None;</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">        for x in 0..lcm {</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">            if rem.iter().zip(&amp;md).all(|(r, m)| x % m == *r) { brute = Some(x); break; }</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">        match (&amp;got, &amp;brute) {</span></div>
+<div class="cl"><span class="ln" data-ln="149"></span><span class="code">            (None, None) =&gt; both_none += 1,</span></div>
+<div class="cl"><span class="ln" data-ln="150"></span><span class="code">            (Some((g, gm)), Some(b)) =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="151"></span><span class="code">                both_some += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="152"></span><span class="code">                if *g != *b || *gm != lcm { bad3 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="153"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="154"></span><span class="code">            _ =&gt; bad3 += 1,</span></div>
+<div class="cl"><span class="ln" data-ln="155"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="156"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="157"></span><span class="code">    println!(&quot;[crt] trials=300 solvable={} unsolvable={} mismatches={}&quot;, both_some, both_none, bad3);</span></div>
+<div class="cl"><span class="ln" data-ln="158"></span><span class="code">    println!(&quot;[crt] check [2,3,2] mod [3,5,7] = {:?}&quot;, crt(&amp;[2,3,2], &amp;[3,5,7]));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="159"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="160"></span><span class="code">    // 4) Miller-Rabin vs 试除</span></div>
+<div class="cl"><span class="ln" data-ln="161"></span><span class="code">    let (mut bad4, mut primes_found) = (0u32, 0u32);</span></div>
+<div class="cl"><span class="ln" data-ln="162"></span><span class="code">    for n in 2u64..=5000 {</span></div>
+<div class="cl"><span class="ln" data-ln="163"></span><span class="code">        let g = is_prime(n);</span></div>
+<div class="cl"><span class="ln" data-ln="164"></span><span class="code">        let w = trial_prime(n);</span></div>
+<div class="cl"><span class="ln" data-ln="165"></span><span class="code">        if g { primes_found += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="166"></span><span class="code">        if g != w { bad4 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="167"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="168"></span><span class="code">    println!(&quot;[prime] range=2..5000 primes={} mismatches={}&quot;, primes_found, bad4);</span></div>
+<div class="cl"><span class="ln" data-ln="169"></span><span class="code">    println!(&quot;[prime] is_prime(561)={} is_prime(1000000007)={} is_prime(4294967291)={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="170"></span><span class="code">        is_prime(561), is_prime(1_000_000_007), is_prime(4_294_967_291));</span></div>
+<div class="cl"><span class="ln" data-ln="171"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v32_cross.rs -o v32_cross &amp;&amp; ./v32_cross</span></div>
+<div class="cl is-text"><span class="code">[pow] trials=400 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[pow] 714^32 mod 816 = 0 (naive 0)</span></div>
+<div class="cl is-text"><span class="code">[pow] 436^36 mod 338 = 144 (naive 144)</span></div>
+<div class="cl is-text"><span class="code">[pow] 474^65 mod 67 = 27 (naive 27)</span></div>
+<div class="cl is-text"><span class="code">[exgcd] trials=300 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[exgcd] exgcd(79,14) g=1 x=-3 y=17</span></div>
+<div class="cl is-text"><span class="code">[exgcd] exgcd(66,75) g=3 x=8 y=-7</span></div>
+<div class="cl is-text"><span class="code">[exgcd] exgcd(24,65) g=1 x=19 y=-7</span></div>
+<div class="cl is-text"><span class="code">[inverse] trials=300 invertible=287 non_invertible=13 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[crt] trials=300 solvable=198 unsolvable=102 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[crt] check [2,3,2] mod [3,5,7] = Some((23, 105))</span></div>
+<div class="cl is-text"><span class="code">[prime] range=2..5000 primes=669 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[prime] is_prime(561)=false is_prime(1000000007)=true is_prime(4294967291)=true</span></div></div></div>
+<p>2..5000 共有 669 个素数，Miller-Rabin 与试除逐个一致；CRT 的 300 组随机样本里 198 组有解、102 组矛盾，两类都被正确识别。这些数字不是&quot;大概对&quot;，而是逐样本比出来的结果，可以放心作为实现基线。</p>
+<h2 id="rust-ch03-number-theory-32-9-自检与练习">32.9 自检与练习</h2>
+<p>回顾本单元，五个工具其实共享一条思路：把&quot;大&quot;问题拆成可验证的&quot;小&quot;步骤，再用一个不变量把步骤串起来。快速幂拆的是指数位，不变量是 res·a^e 不变；exgcd 拆的是辗转相除，不变量是 a·x+b·y=g；CRT 拆的是逐条同余，不变量是 x 满足已合并方程且模数为 lcm；Miller-Rabin 拆的是平方序列，判据是平方根只能为 ±1。写这类代码时，先问自己&quot;这一步之后什么没变&quot;，比先写代码再调试高效得多。下一单元转向计算几何，会把同样的&quot;符号即不变量&quot;思想用在叉积与凸包上，读者可以留意两编之间的呼应：数论里的同余等式与几何里的叉积符号，都是把复杂对象压缩成一个可判定的量。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>快速幂的不变量 <code>res · a^e == a0^e0 (mod m)</code> 在&quot;当前位为 1&quot;和&quot;位为 0&quot;两种分支下分别如何保持？</li>
+<li>为什么 exgcd 的系数回溯公式是 <code>x = y1</code>、<code>y = x1 - (a/b)*y1</code>？试着用 a=17、b=5 手推一遍。</li>
+<li>逆元存在的充要条件是什么？为什么费马法不能用于合数模数？</li>
+<li>CRT 中 <code>diff % g != 0</code> 为什么等价于方程组无解？</li>
+<li>Miller-Rabin 中为什么要把 n-1 拆成 d·2^s，而不是直接做一次费马测试？</li>
+</ul>
+
+</div>
+</section>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>练习 1：实现&quot;线性同余方程求解器&quot; <code>solve(a,b,m)</code>，返回 a·x ≡ b (mod m) 的全部解（提示：g=gcd(a,m)，若 b%g≠0 无解，否则化归为 b/g · inv(a/g mod m/g)，解为 x0 + k·(m/g)）。用 100 组随机 a,b,m 与暴力枚举对拍。</li>
+<li>练习 2：把 CRT 改成&quot;经典构造法&quot;（x = Σ rᵢ·Mᵢ·inv(Mᵢ)），与增量合并法在 100 组两两互质模数上对拍；再各自处理一组不互质模数，观察构造法为何失效。</li>
+<li>练习 3：给 Miller-Rabin 加一个 <code>witness_count(n)</code>，返回 7 个底数中有几个是合数见证；对 561、1105、1729 等卡米歇尔数打印计数，确认它们至少被一个底数识破。</li>
+<li>练习 4：把本单元对拍种子改成你的生日（8 位数字），重跑 <code>v32_cross.rs</code>；四组 mismatch 应仍为 0。若不为 0，打印失败样本并判断是算法错误还是裁判前提写错——本单元 32.8 的真实教训可以借鉴。</li>
+</ul>
+
+</div></div>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__advanced-data-structures.md.html">← 高级数据结构：线段树、二维 BIT 与主席树</a><a href="rust__chapters__ch03__geometry.md.html">计算几何：叉积、凸包与扫描线 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

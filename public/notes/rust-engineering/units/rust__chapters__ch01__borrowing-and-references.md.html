@@ -4,156 +4,252 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>借用与引用</title>
-<meta name="description" content="第 3 单元 · 建议 60 分钟 · 学会在不交出所有权的前提下使用数据">
+<meta name="description" content="第 3 单元 · 建议 90 分钟 · 走进借用检查器内部，看它如何在控制流图上判定一次借用">
 <meta name="author" content="Codrift · Rust 工程笔记">
 <meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
 <link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
 </head>
 <body class="type-unit">
 <a class="skip-link" href="#content">跳到正文</a>
 <nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
 <main class="doc" id="doc">
-<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">借用与引用</h1><p class="doc-sub">第 3 单元 · 建议 60 分钟 · 学会在不交出所有权的前提下使用数据</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 03-borrowing-and-references.md</p></header>
-<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-1-动机-不想交出所有权怎么办">3.1 动机：不想交出所有权怎么办</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-2-不可变引用与可变引用">3.2 不可变引用与可变引用</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-3-借用规则-编译器是你的图书管理员">3.3 借用规则：编译器是你的图书管理员</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-4-nll-借用没你想的那么长">3.4 NLL：借用没你想的那么长</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-5-as_ref-与-as_mut-从容器里借出引用">3.5 as_ref 与 as_mut：从容器里借出引用</a></li></ol></nav>
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">借用与引用</h1><p class="doc-sub">第 3 单元 · 建议 90 分钟 · 走进借用检查器内部，看它如何在控制流图上判定一次借用</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 03-borrowing-and-references.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-1-借用检查器看的不是括号-而是控制流上的-loan">3.1 借用检查器看的不是括号，而是控制流上的 loan</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-2-nll-region-由最后一次使用反推">3.2 NLL：region 由最后一次使用反推</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-3-两阶段借用-方法调用里的-先订后取">3.3 两阶段借用：方法调用里的「先订后取」</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-4-reborrow-mut-的临时让渡">3.4 reborrow：`&mut` 的临时让渡</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-5-从权限角度看-t-与-mut-t">3.5 从权限角度看 `&T` 与 `&mut T`</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-6-共享可变性-把检查从编译期搬到运行期">3.6 共享可变性：把检查从编译期搬到运行期</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-7-裸指针与-unsafe-引子-编译器不再替你记账">3.7 裸指针与 unsafe 引子：编译器不再替你记账</a></li><li class="toc-l2"><a href="#rust-ch01-borrowing-and-references-3-8-遇到借用错误时的排查顺序">3.8 遇到借用错误时的排查顺序</a></li></ol></nav>
 <article class="content" id="content" aria-label="正文">
 <section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
 <div class="box-b">
 <ul>
-<li>理解引用（reference）与借用的含义，能用 <code>&amp;T</code> 和 <code>&amp;mut T</code> 写函数参数</li>
-<li>牢记借用规则，能解释为什么「一个可变借用」和「多个不可变借用」不能共存</li>
-<li>理解 NLL（非词法作用域生命周期）如何让借用在使用结束后自动终止</li>
-<li>会用 <code>as_ref</code> / <code>as_mut</code> 在持有所有权的容器上取得引用</li>
+<li>把借用检查理解为控制流图上的 loan 与 region 分析，而不是对词法括号的机械检查</li>
+<li>说清 NLL 如何由「最后一次使用」反推借用存活区间，能读懂 <code>E0502</code> 诊断</li>
+<li>解释两阶段借用与 reborrow 各自解决什么问题、边界在哪里</li>
+<li>掌握 <code>Cell</code> / <code>RefCell</code> 把检查推迟到运行时代价的思路，并理解裸指针与 <code>unsafe</code> 的准入条件</li>
 </ul>
 
 </div>
 </section>
-<h2 id="rust-ch01-borrowing-and-references-3-1-动机-不想交出所有权怎么办">3.1 动机：不想交出所有权怎么办</h2>
-<p>上一个单元里，把 <code>String</code> 传给函数就会把它 move 进去，调用方随后再也用不了。这在很多场景下太浪费了：一个函数只是想读一读字符串的长度，凭什么要把它吞掉？更麻烦的是，如果函数用完了也想「还回来」，你就得设计返回值把所有权再传回来，签名变得啰嗦。</p>
-<p>Rust 的解法是借用（borrowing）：你可以把一个值的引用交给函数，函数用完就还，所有权始终留在原处。引用就是一个指向数据的指针，但它不是「随便什么指针」，而是被编译器严格检查过的指针——它必须指向有效的、类型正确的数据。这种「有规则约束的指针」正是 Rust 既能避免悬垂指针、又不需要垃圾回收的关键。</p>
-<p>引用还有一个容易被忽视的好处：它不复制数据。传一个 <code>&amp;String</code> 给函数，传递的只是栈上那个小小的指针，堆上的字符串内容原地不动。对于大对象，这比 clone 便宜得多。另外，Rust 的引用不可能为空——想表达「可能没有」，请用 <code>Option&lt;&amp;T&gt;</code>，而不是像 C 那样用空指针。把「有没有」显式写进类型，是 Rust 减少 bug 的又一手段。</p>
+<h2 id="rust-ch01-borrowing-and-references-3-1-借用检查器看的不是括号-而是控制流上的-loan">3.1 借用检查器看的不是括号，而是控制流上的 loan</h2>
+<p>很多资料把借用规则写成三条口诀：同一时刻要么有多个 <code>&amp;T</code>，要么只有一个 <code>&amp;mut T</code>；引用不能比被引用的数据活得久；不能在使用之后移动原值。口诀便于记忆，却解释不了为什么下面这种代码有时能编译、有时不能。要真正理解，需要换成编译器的视角：借用检查运行在 MIR（控制流图）上，图中每个程序点都可能「发放」一个 loan（借用），loan 有一个 region（它必须保持有效的程序点集合）。当某个程序点要执行一次访问时，检查器查看此刻存活的 loan：如果存在与这次访问冲突的 loan，就报错。</p>
+<p>冲突的判定很朴素：<code>&amp;T</code> 是共享只读权限，可以和别的共享 loan 共存，但不能和写访问或 <code>&amp;mut</code> loan 共存；<code>&amp;mut T</code> 是独占可写权限，不能和任何其它 loan 共存。注意关键词是「<strong>同一时刻</strong>」——这个时刻由 region 决定，而 region 由数据的流向决定，不由大括号决定。编译器同时追踪值的初始化状态：移动之后再读是另一类错误，和借用冲突不是一回事，但都在同一张控制流图上判定。</p>
+<p>把 loan 模型再推进一层，就能解释几个常见疑问。第一，为什么在 <code>if</code> 的一个分支里创建的借用有时会影响另一个分支？因为 region 是程序点的集合，控制流汇合处如果引用仍然可能被使用，集合就要覆盖汇合点。第二，为什么提前 <code>drop(r)</code> 有时能救回一段代码？因为 <code>drop</code> 是一次显式使用，它之后 loan 就可以结束。第三，为什么借用检查能发现循环里的问题？因为它按控制流图的路径（包括回边）传播 loan，而不是只从上往下扫一遍语句。换句话说，借用检查本质上是一次<strong>数据流不动点计算</strong>：反复传播约束直到不再变化，这与类型推断、生命周期推理使用的是同一套基础设施。</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
-<p>所有权像是把书送人，送出去你手上就没了。借用则是把书借给朋友看：书还是你的，他看完要还。规则也很像现实——你可以把书同时借给好几个人看（大家只读），但如果其中一个人要在书上涂改，那段时间里就绝不能有别人在看，否则大家看到的版本就不一致了。</p>
+<p>把借用想成借书。<code>&amp;T</code> 是「我只看」，可以多个人同时看同一本；<code>&amp;mut T</code> 是「我要在上面写批注」，借到手就谁都不能碰。管理员（借用检查器）不关心你说「借到哪天」，他只盯着每个瞬间谁手里拿着书：只要两个人的要求在同一瞬间撞车，就当场拦下来。而「同一瞬间」是顺着程序执行路线算出来的，不是看代码写在哪个大括号里。</p>
 
 </div>
 </section>
-<h2 id="rust-ch01-borrowing-and-references-3-2-不可变引用与可变引用">3.2 不可变引用与可变引用</h2>
-<p>引用分两种，区别全在一个 <code>mut</code> 上。不可变引用写 <code>&amp;T</code>，表示「我只读，不改」；可变引用写 <code>&amp;mut T</code>，表示「我要改」。函数参数里用哪种，直接决定了调用方能不能同时做别的事。</p>
-<p>先看只读的写法。<code>length(&amp;name)</code> 把 <code>name</code> 的引用传进去，函数签名写 <code>&amp;String</code>，函数体内 <code>s.len()</code> 只是读取长度。调用结束后 <code>name</code> 依然完好，还能照常打印。这里的 <code>&amp;</code> 是「取引用」操作符，<code>println!</code> 里直接用 <code>name</code> 而不是 <code>&amp;name</code>，是因为格式化宏会自动按引用捕获——不过写清楚 <code>&amp;name</code> 也不会错。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn length(s: &amp;String) -&gt; usize {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    s.len()</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let name = String::from(&quot;Rust&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let n = length(&amp;name);</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;name={name}, 长度={n}&quot;);</span></div>
+<h2 id="rust-ch01-borrowing-and-references-3-2-nll-region-由最后一次使用反推">3.2 NLL：region 由最后一次使用反推</h2>
+<p>在 Rust 2018 之前，借用检查采用词法生命周期：一个引用的有效期延伸到它所在词法作用域的末尾。那意味着即使 <code>let r = &amp;x;</code> 之后再也没用过 <code>r</code>，只要 <code>r</code> 还在作用域里，对 <code>x</code> 的可变借用就会被拒绝。这种模型过于保守——它把「变量还活着」误当成「变量还会被用」。Rust 2018 引入的 <strong>NLL（non-lexical lifetimes，非词法生命周期）</strong> 改变了这一点：region 由引用的实际使用点反推，最后一次使用之后，loan 就结束了。</p>
+<p>看一个具体例子。下面先通过 <code>&amp;mut scores[0]</code> 拿到一个可变借用并修改它，随后打印它；从 <code>println!(&quot;first = {first}&quot;)</code> 之后，这个 loan 就死掉了，所以接下来可以正常地打印整个 <code>scores</code> 甚至 <code>push</code> 新元素。在词法生命周期模型下，这段代码会因为 <code>first</code> 作用域延伸到函数末尾而被拒绝；NLL 让它合法。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut scores = vec![10, 20, 30];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let first = &amp;mut scores[0];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    *first += 5;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    println!(&quot;first = {first}&quot;);   // loan 在这里最后一次存活</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;whole = {:?}&quot;, scores); // 之后借用已结束，可以只读整个 Vec</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    scores.push(40);               // 也可以再次可变借用</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;after push = {:?}&quot;, scores);</span></div>
 <div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div></div></div>
-<p>再看可变引用。函数参数写 <code>&amp;mut String</code>，函数体里就能调用 <code>push</code> 修改内容；调用方必须把变量声明成 <code>mut</code>，并用 <code>&amp;mut msg</code> 传参。两处的 <code>mut</code> 缺一不可——这是 Rust 在提醒你「修改的权力」需要双方共同确认，而不是某个函数偷偷获得。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn push_exclaim(s: &amp;mut String) {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    s.push('!');</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut msg = String::from(&quot;hello&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    push_exclaim(&amp;mut msg);</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;{msg}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div></div></div>
-<p>写函数签名时，你可能纠结参数该写 <code>&amp;String</code> 还是 <code>&amp;str</code>。经验法则是：如果函数不需要调用 <code>String</code> 独有的能力，优先写 <code>&amp;str</code>。因为 <code>&amp;String</code> 会自动解引用（deref coercion）成 <code>&amp;str</code>，所以传 <code>&amp;name</code> 给一个接受 <code>&amp;str</code> 的函数完全没问题；反过来接受 <code>&amp;String</code> 的函数却没法接收字符串字面量。参数越宽泛，函数越通用。</p>
-<p>一个小建议：写函数时优先考虑 <code>&amp;T</code>，只在确实需要修改时才升级到 <code>&amp;mut T</code>。因为不可变引用更「宽容」，调用方更容易满足借用规则，函数的适用范围也更广。方法调用时也有自动借用：对 <code>String</code> 调用 <code>len()</code>，实际等价于编译器自动帮你取了引用，所以你不需要手动写 <code>(&amp;s).len()</code>。</p>
-<h2 id="rust-ch01-borrowing-and-references-3-3-借用规则-编译器是你的图书管理员">3.3 借用规则：编译器是你的图书管理员</h2>
-<p>借用规则可以浓缩成两条：第一，同一时刻，要么有任意多个不可变引用，要么有且仅有一个可变引用，二者不能同时存在；第二，引用必须始终有效，不能指向已经被释放的数据。第二条会在下一个单元讲生命周期时展开，这里先盯住第一条。</p>
-<p>为什么可变引用必须独占？想象一个向量 <code>v</code>，你手里拿着 <code>&amp;v[0]</code> 指向第一个元素，这时如果允许 <code>v.push(4)</code>，向量可能因容量不足而重新分配内存，你手里的引用就变成了悬垂指针，指向一块已经被释放的区域。Rust 直接在编译期禁止这种组合：只要还有不可变引用活着，就不能取得可变引用；反过来也一样。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 nll.rs -o nll &amp;&amp; ./nll</span></div>
+<div class="cl is-text"><span class="code">first = 15</span></div>
+<div class="cl is-text"><span class="code">whole = [15, 20, 30]</span></div>
+<div class="cl is-text"><span class="code">after push = [15, 20, 30, 40]</span></div></div></div>
+<p>反过来看失败的情形：如果 <code>r</code> 在 <code>v.push(4)</code> 之后还要用，loan 的 region 就必须覆盖 <code>push</code> 那个点，冲突随即出现。下面这段真实诊断里，编译器用三个标签把因果链串起来：第 3 行发生不可变借用，第 4 行发生可变借用，第 5 行说明不可变借用「之后还会被使用」。这就是 NLL 的输出——它明确告诉你 region 被延长到了哪里，而不是含糊地说「作用域冲突」。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_e0502.rs:4:5</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 |     let r = &amp;v[0];</span></div>
+<div class="cl is-text"><span class="code">  |              - immutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">4 |     v.push(4);</span></div>
+<div class="cl is-text"><span class="code">  |     ^^^^^^^^^ mutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">5 |     println!(&quot;{r}&quot;);</span></div>
+<div class="cl is-text"><span class="code">  |                - immutable borrow later used here</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>NLL 仍有边界：它只能识别「确实不再使用」的借用，不能替你改变程序语义。比如把引用存进一个结构体、从函数返回、或者放进循环里跨迭代存活，region 会被约束拉长，这时候编译器会要求你写出显式的生命周期标注来证明安全性——那是下一单元的主题。日常开发中一个实用的技巧是：<strong>让借用尽早最后一次使用</strong>，必要时加一个内部作用域 <code>{ let r = ...; ... }</code> 把 loan 关在更小的范围里，这往往比与编译器争论更有效。</p>
+<p>需要澄清的是，NLL 改变的是「借用活多久」的推算方式，而不是「引用能指向什么」。引用本身仍然不能指向已经失效的局部变量，不能悬垂，也不能越过它所引用的数据的生命周期——这些约束由生命周期推理负责。NLL 只是把原本按词法作用域一刀切的活动区间，换成了按使用点精确裁剪的区间。所以你在报错里看到的「borrow later used here」并不是编译器在找茬，而是在告诉你：正因为你后面还要用，这条借用的 region 才必须延伸到这里，冲突才不可避免。把这句话当成诊断信息的阅读入口，绝大多数借用错误都能自己定位。</p>
+<h2 id="rust-ch01-borrowing-and-references-3-3-两阶段借用-方法调用里的-先订后取">3.3 两阶段借用：方法调用里的「先订后取」</h2>
+<p>如果规则这么严格，下面这行看起来应该报错：<code>v.push(v.len())</code>。<code>push</code> 需要 <code>&amp;mut v</code>，<code>len</code> 需要 <code>&amp;v</code>，两个借用出现在同一条语句里。但它能编译，而且结果正确。秘密在于<strong>两阶段借用（two-phase borrow）</strong>：编译器把方法接收者的可变借用拆成两个阶段——先做 reservation（预约），此刻它只表现为一个共享借用，允许其它共享借用存在；等到真正要写入时才 activation（激活）为独占可变借用。预约阶段用于计算参数，激活阶段用于执行方法体。</p>
+<p>这个机制主要是为人机工程做的妥协：开发者习惯于 <code>v.push(v.len())</code>、<code>v.resize(v.len() * 2, 0)</code> 这种写法，如果一律禁止，就会逼出大量「先存到临时变量」的样板代码。两阶段借用只适用于「方法调用中编译器自动生成的 <code>&amp;mut self</code> 借用」，而且预约像共享借用一样不能和别的可变借用共存。理解边界的最好方式就是看它什么时候失效。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">5 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut v = vec![1, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    v.push(v.len());   // 预约 &amp;mut v → 调用 v.len() → 激活 &amp;mut v</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    println!(&quot;{v:?}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 two_phase.rs -o two_phase &amp;&amp; ./two_phase</span></div>
+<div class="cl is-text"><span class="code">[1, 2, 3, 3]</span></div></div></div>
+<p>下面这个变体就不能编译：<code>v.push(v.pop().unwrap())</code>。<code>pop()</code> 返回的是 <code>Option&lt;T&gt;</code>，调用它需要<strong>真正的</strong> <code>&amp;mut v</code>（不是预约），这与 <code>push</code> 的预约共享借用直接冲突。编译器的诊断也明确说「borrow <code>v</code> as mutable more than once at a time」，并建议先把参数存到局部变量。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0499]: cannot borrow `v` as mutable more than once at a time</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_twophase.rs:3:12</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 |     v.push(v.pop().unwrap());</span></div>
+<div class="cl is-text"><span class="code">  |     - ---- ^ second mutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">  |     | |</span></div>
+<div class="cl is-text"><span class="code">  |     | first borrow later used by call</span></div>
+<div class="cl is-text"><span class="code">  |     first mutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">help: try adding a local storing this argument...</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 |     v.push(v.pop().unwrap());</span></div>
+<div class="cl is-text"><span class="code">  |            ^^^^^^^</span></div>
+<div class="cl is-text"><span class="code">help: ...and then using that local as the argument to this call</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 |     v.push(v.pop().unwrap());</span></div>
+<div class="cl is-text"><span class="code">  |     ^^^^^^^^^^^^^^^^^^^^^^^^</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>修复方式正是诊断建议的：先 <code>let last = v.pop().unwrap();</code>，再 <code>v.push(last);</code>。这不是编译器不够聪明，而是两阶段借用刻意保守——它只放宽「共享读取参数」这一种常见情形，不试图理解「参数的计算过程本身需要写」这种复杂情况。在需要严格保证别名安全的语言里，这种「放一个小口子、边界画得很清楚」的设计比「尽量聪明但行为难预测」更可取。</p>
+<p>还要留意，两阶段借用只针对编译器自动生成的接收者借用。如果你提前把 <code>&amp;mut v</code> 存进变量 <code>let rv = &amp;mut v;</code>，再写 <code>rv.push(rv.len())</code>，情况就变了：此刻 <code>rv</code> 是一个普通的 <code>&amp;mut</code> 变量，<code>push</code> 调用会消耗或 reborrow 它，与参数里的共享借用之间的交互不再享有同样的豁免规则。遇到这类写法编译不过时，不要试图从「两阶段借用」里找解释，直接拆成两条语句最省事。规则越精细，越需要在边界处保持简单。</p>
+<h2 id="rust-ch01-borrowing-and-references-3-4-reborrow-mut-的临时让渡">3.4 reborrow：<code>&amp;mut</code> 的临时让渡</h2>
+<p><code>&amp;mut T</code> 不是 Copy，把它赋给另一个变量会转移所有权。但日常代码里经常写 <code>fn bump(x: &amp;mut i32)</code> 然后 <code>bump(r); bump(r);</code>——调用两次居然也能通过，因为编译器在把 <code>r</code> 传给一个期望 <code>&amp;mut</code> 的参数时，会自动插入一次 <strong>reborrow</strong>：相当于传 <code>&amp;mut *r</code>，借用的 region 只覆盖这次调用，调用结束后控制权回到 <code>r</code>。这解决了「把独占引用交出去用一下，之后自己还要用」的普遍需求。</p>
+<p>显式的 reborrow 写作 <code>&amp;mut *r</code>：先解引用再重新借用，得到的是一个新的、更短生命周期的可变引用。隐式 reborrow 的触发条件很具体——形参或接收者明确期望 <code>&amp;mut</code>，编译器才知道要插入。下面这段程序同时演示隐式、显式和直接对原变量取借用三种写法，结果都是累加。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">12 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn bump(slot: &amp;mut i32) { *slot += 1; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut n = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let r = &amp;mut n;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    bump(r);            // 隐式 reborrow：借用只在调用期间存活</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    bump(&amp;mut *r);      // 显式 reborrow：语义与上一行相同</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    *r += 1;            // r 仍然可用</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;n = {n}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    bump(&amp;mut n);       // 重新从原变量取借用，与 r 无关</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;n = {n}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 reborrow.rs -o reborrow &amp;&amp; ./reborrow</span></div>
+<div class="cl is-text"><span class="code">n = 3</span></div>
+<div class="cl is-text"><span class="code">n = 4</span></div></div></div>
+<p>什么时候不发生 reborrow？当你把 <code>&amp;mut</code> 赋给另一个变量，或者把它存进结构体、放进 <code>Vec</code> 时，那是真正的移动。下面这段代码先 <code>let moved = r;</code>，再 <code>bump(r);</code>，编译器会报 <code>E0382</code>：因为赋值已经把 <code>r</code> 的独占权限交出去了。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0382]: borrow of moved value: `r`</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_mutmove.rs:6:10</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">4 |     let r = &amp;mut n;</span></div>
+<div class="cl is-text"><span class="code">  |         - move occurs because `r` has type `&amp;mut i32`, which does not implement the `Copy` trait</span></div>
+<div class="cl is-text"><span class="code">5 |     let moved = r;</span></div>
+<div class="cl is-text"><span class="code">  |                 - value moved here</span></div>
+<div class="cl is-text"><span class="code">6 |     bump(r);</span></div>
+<div class="cl is-text"><span class="code">  |          ^ value borrowed here after move</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>reborrow 与两阶段借用解决的是不同层面的问题：前者让一个已经存在的可变引用可以「分时段出租」，后者让方法调用的接收者借用可以先以共享形态计算参数。两者共同的目标是：在不破坏独占性语义的前提下，减少无意义的样板代码。副作用是初学阶段的困惑——「为什么这个 <code>&amp;mut</code> 能用两次？」答案永远是：看它有没有被真正移动，还是被编译器插入了一次短命的 reborrow。</p>
+<h2 id="rust-ch01-borrowing-and-references-3-5-从权限角度看-t-与-mut-t">3.5 从权限角度看 <code>&amp;T</code> 与 <code>&amp;mut T</code></h2>
+<p>把引用理解成一组权限，很多规则会变得自洽。<code>&amp;T</code> 授予「读取 T、与其他 <code>&amp;T</code> 共存」的权限；<code>&amp;mut T</code> 授予「读取、写入、不可与其他借用共存」的权限。共享引用之间可以再共享借用（例如 <code>&amp;String</code> 通过 deref coercion 变成 <code>&amp;str</code>），<code>&amp;mut T</code> 也能被强制转换（coerce）成 <code>&amp;T</code>，交出写权限，但反过来不行——从 <code>&amp;T</code> 得到 <code>&amp;mut T</code> 需要内部可变性或 unsafe。</p>
 <table>
 <thead>
 <tr>
-<th>引用类型</th>
-<th>写法</th>
-<th>同一时刻数量</th>
-<th>典型用途</th>
+<th>性质</th>
+<th><code>&amp;T</code></th>
+<th><code>&amp;mut T</code></th>
 </tr>
 </thead>
 <tbody><tr>
-<td>不可变引用</td>
-<td><code>&amp;T</code></td>
-<td>可以有多个</td>
-<td>读取、遍历、计算长度</td>
+<td>同时存在多个</td>
+<td>可以</td>
+<td>不可以</td>
 </tr>
 <tr>
-<td>可变引用</td>
-<td><code>&amp;mut T</code></td>
-<td>只能有一个</td>
-<td>修改内容、追加元素</td>
+<td>能否写数据</td>
+<td>不能（除内部可变性）</td>
+<td>能</td>
 </tr>
 <tr>
-<td>不可变切片</td>
-<td><code>&amp;[T]</code></td>
-<td>可以有多个</td>
-<td>只读地访问一段连续元素</td>
+<td>是否 <code>Copy</code></td>
+<td>是</td>
+<td>否（但可隐式 reborrow）</td>
 </tr>
 <tr>
-<td>可变切片</td>
-<td><code>&amp;mut [T]</code></td>
-<td>只能有一个</td>
-<td>原地修改一段连续元素</td>
+<td>能否转成另一种引用</td>
+<td>可再共享借用</td>
+<td>可强制转换成 <code>&amp;T</code></td>
+</tr>
+<tr>
+<td>典型用途</td>
+<td>只读遍历、查询</td>
+<td>原地修改、构建</td>
 </tr>
 </tbody></table>
 
-<p>试着同时持有一个不可变引用和一个可变引用，编译器会给出类似下面的报错（示意输出，行号因文件而异）：</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main</span></div>
-<div class="cl is-text"><span class="code">error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable</span></div>
-<div class="cl is-text"><span class="code"> --&gt; main.rs:4:5</span></div>
-<div class="cl is-text"><span class="code">  |</span></div>
-<div class="cl is-text"><span class="code">3 | let first = &amp;v[0];</span></div>
-<div class="cl is-text"><span class="code">  |             - immutable borrow occurs here</span></div>
-<div class="cl is-text"><span class="code">4 | v.push(4);</span></div>
-<div class="cl is-text"><span class="code">  | ^^^^^^^^^ mutable borrow occurs here</span></div>
-<div class="cl is-text"><span class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</span></div></div></div>
-<p>初学者常被这条规则「卡住」，但它其实是好事：这类并发与内存错误在其他语言里往往要等到线上偶发崩溃才暴露，而 Rust 让你在敲代码时就撞上它。</p>
-<p>这条规则还是 Rust 并发安全的基础。所谓数据竞争，指的是两个线程同时访问同一份数据，其中至少一个在写，且没有同步措施。借用规则在编译期就排除了「同时有多个写入者」或「一边读一边写」的可能，于是 Rust 敢说「如果代码能编译通过，共享可变状态就受到约束」。这正是它不靠垃圾回收也能保证安全的另一半答案：所有权管释放，借用规则管并发与别名。</p>
-<h2 id="rust-ch01-borrowing-and-references-3-4-nll-借用没你想的那么长">3.4 NLL：借用没你想的那么长</h2>
-<p>早期的 Rust 里，借用的有效期严格跟随变量的作用域（从声明到花括号结束）。这带来了一些反直觉的失败：明明最后一次使用引用之后你已经不再碰它了，编译器却认为借用还活着。后来的改进叫 NLL（Non-Lexical Lifetimes，非词法作用域生命周期）：借用的有效期从「变量作用域」缩短为「最后一次使用引用之前」。</p>
-<p>下面的例子就是 NLL 的典型受益者。<code>first</code> 引用了 <code>v</code> 的第一个元素，打印一次之后就不再使用；紧接着 <code>v.push(4)</code> 取得可变借用。按老规则这会冲突，但在 NLL 下，编译器看到 <code>first</code> 之后没再用，就判定不可变借用已经结束，于是放行。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">7 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut v = vec![1, 2, 3];</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let first = &amp;v[0];</span></div>
-<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    println!(&quot;first={first}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    v.push(4); // first 不再使用，借用到此结束</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;v={v:?}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div></div></div>
-<p>理解 NLL 的一个实用技巧是：把借用的有效期想象成「从取引用到最后一次使用这段区间」，而不是整个大括号。写代码时如果遭遇借用冲突，先看看能不能把某次使用提前，或者把引用的作用域用一对额外的小括号缩紧，很多问题就迎刃而解。</p>
-<p>要注意，NLL 只看「引用有没有被使用」，不看变量是否还在作用域里。所以像 <code>let r = &amp;mut v; println!(&quot;{r}&quot;); v.push(1);</code> 这种顺序能过编译，因为 <code>r</code> 在 <code>push</code> 之前就最后一次出现了。但如果你在 <code>push</code> 之后又用了 <code>r</code>，借用就重新「活」到了那里，冲突立刻出现。把这点想清楚，大部分借用报错都能自己推断出原因。</p>
-<h2 id="rust-ch01-borrowing-and-references-3-5-as_ref-与-as_mut-从容器里借出引用">3.5 as_ref 与 as_mut：从容器里借出引用</h2>
-<p>有些类型既持有所有权，又需要「借用里面的内容」，<code>Option&lt;T&gt;</code> 是最常见的例子。<code>Option&lt;String&gt;</code> 里的字符串是被 <code>Some</code> 包着的，直接 <code>map</code> 会把所有权 consume 掉；如果你只是想读长度、还想保留原来的 <code>Option</code>，就该用 <code>as_ref()</code>——它把 <code>Option&lt;T&gt;</code> 变成 <code>Option&lt;&amp;T&gt;</code>，借用里面的值而不是拿走它。</p>
-<p>对应的 <code>as_mut()</code> 把 <code>Option&lt;T&gt;</code> 变成 <code>Option&lt;&amp;mut T&gt;</code>，让你在 <code>Some</code> 里修改内容。下面这段程序同时演示了两者：<code>show</code> 用 <code>as_ref().map(...)</code> 读长度而不消耗参数；<code>main</code> 里用 <code>as_mut()</code> 拿到可变引用，往字符串后面追加一个字符。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn show(opt: Option&lt;String&gt;) -&gt; Option&lt;usize&gt; {</span></div>
-<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    opt.as_ref().map(|s| s.len())</span></div>
-<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let a = Some(String::from(&quot;hi&quot;));</span></div>
-<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let b: Option&lt;String&gt; = None;</span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;{:?}, {:?}&quot;, show(a), show(b));</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut c = Some(String::from(&quot;x&quot;));</span></div>
-<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    if let Some(s) = c.as_mut() {</span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        s.push('y');</span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;{c:?}&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
-<p><code>as_ref</code> / <code>as_mut</code> 不是 <code>Option</code> 的专利，<code>Box</code>、<code>Rc</code> 等智能指针也提供类似方法，套路是一致的：当你手上有「拥有者」，但下游只需要「借用」时，就找找有没有 <code>as_ref</code> 这类转换。养成这个习惯，能省掉大量不必要的 clone。</p>
+<p>一个高频边界是「引用的引用」。例如 <code>&amp; &amp;mut T</code> 里，外层的共享引用指向一个可变引用变量：你可以读这个变量，但不能通过它写数据，因为拿到写权限需要移动或 reborrow 那个 <code>&amp;mut</code>。这类嵌套类型在写泛型代码时容易出现，理解权限层级比死记规则更有用。</p>
+<p>权限表还解释了一个常见困惑：为什么 <code>let s: &amp;str = &amp;String::from(&quot;hi&quot;);</code> 能编译？因为 <code>&amp;String</code> 可以通过 deref coercion 自动变成 <code>&amp;str</code>：共享引用保留了「只读」权限，把具体类型换成它解引用后的目标类型不会带来额外风险。反过来，若想从 <code>&amp;str</code> 拿到 <code>&amp;mut str</code>，就必须先拥有可变权限（例如先把 <code>String</code> 声明成 <code>mut</code>），共享引用本身无法凭空生成写权限。再往前一步就是<strong>方差（variance）</strong>：为什么 <code>&amp;&#39;a mut T</code> 对 <code>T</code> 是不变的、不能把 <code>&amp;mut &amp;&#39;static str</code> 当成 <code>&amp;mut &amp;&#39;short str</code> 用——那关系到生命周期子类型，留给下一单元。</p>
+<h2 id="rust-ch01-borrowing-and-references-3-6-共享可变性-把检查从编译期搬到运行期">3.6 共享可变性：把检查从编译期搬到运行期</h2>
+<p><code>Cell</code> 和 <code>RefCell</code> 常被说成「绕过借用检查」，更准确的说法是：它们<strong>改变了检查发生的时刻</strong>。<code>RefCell&lt;T&gt;</code> 内部维护一个借用状态（共享计数或独占标记），<code>borrow()</code> 和 <code>borrow_mut()</code> 在运行时读写这个状态；违反独占规则时 <code>borrow_mut()</code> 直接 panic，<code>try_borrow_mut()</code> 则返回 <code>Err</code>。于是「我有一个 <code>&amp;RefCell&lt;T&gt;</code>，却可以修改里面的 T」不再矛盾——因为真正的借用检查被推迟到了方法调用那一刻，编译期只知道你在调用 <code>borrow_mut</code>。</p>
+<p>下面的程序把同一个 <code>&amp;RefCell&lt;_&gt;</code> 复制成两个共享引用 <code>a</code> 和 <code>b</code>，分别传给函数写入日志。两次 <code>borrow_mut()</code> 发生在不同时刻、互不重叠，所以都能成功；如果某个调用者忘记释放守卫就再次借用，就会在运行时收到 panic 或 <code>Err</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::cell::RefCell;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn record(log: &amp;RefCell&lt;Vec&lt;&amp;'static str&gt;&gt;, msg: &amp;'static str) {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    log.borrow_mut().push(msg);   // 守卫在语句结束时释放</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let log = RefCell::new(Vec::new());</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let a = &amp;log;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let b = &amp;log;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    record(a, &quot;start&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    record(b, &quot;end&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;{:?}&quot;, log.borrow());</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 shared_mut.rs -o shared_mut &amp;&amp; ./shared_mut</span></div>
+<div class="cl is-text"><span class="code">[&quot;start&quot;, &quot;end&quot;]</span></div></div></div>
+<p><code>Cell</code> 与 <code>RefCell</code> 的取舍也很清晰：<code>Cell&lt;T&gt;</code> 要求 <code>T: Copy</code>，<code>get</code> / <code>set</code> 是直接读写一份位模式，没有守卫、没有借用状态，开销几乎为零；<code>RefCell&lt;T&gt;</code> 支持任意 <code>T</code>，但每次借用都要读写状态字并返回一个守卫，代价是几个机器指令加上可能的 panic。计数器、标志位用 <code>Cell</code>，容器、字符串、结构体用 <code>RefCell</code>——按数据是否 Copy 来选，比按「哪个更好用」来选靠谱得多。</p>
+<p>代价必须说清：第一，借用冲突从编译错误变成运行时 panic，可能直到某个罕见分支才暴露；第二，<code>RefCell</code> 的守卫会让借用存活到守卫 <code>drop</code>，把守卫存进结构体或跨过 <code>.await</code> 时尤其容易踩坑；第三，<code>Cell</code> / <code>RefCell</code> 都不是 <code>Sync</code>，无法跨线程共享，线程场景要换成 <code>Mutex</code> / <code>RwLock</code>。它们的底层是 <code>UnsafeCell&lt;T&gt;</code>，这是标准库唯一允许「通过共享引用修改内部数据」的合法入口；自己写 unsafe 代码时若试图用别的技巧达到同样效果，通常意味着你在制造未定义行为。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p><code>RefCell</code> 像一个带登记本的阅览室。门口的共享通行证谁都能拿，但要动笔写批注时得先在登记本上登记「独占使用」，此时别人不能再进；登记本由运行时管理，冲突当场发现。好处是门口不用复杂手续，坏处是你只有真的撞上了才知道今天不能写。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-borrowing-and-references-3-7-裸指针与-unsafe-引子-编译器不再替你记账">3.7 裸指针与 unsafe 引子：编译器不再替你记账</h2>
+<p>引用携带生命周期信息，编译器据此发放和回收 loan。裸指针 <code>*const T</code> / <code>*mut T</code> 则把这些信息全部丢掉：它不保证非空、不保证对齐、不保证指向有效内存、不保证没有别名冲突，也不参与借用检查。这让它们成为和 C 互操作、实现底层容器、访问硬件寄存器的必要工具，但也意味着所有不变式都由程序员自己维护。</p>
+<p><code>unsafe</code> 关键字不等于「关闭借用检查」。它只解锁一小簇能力：解引用裸指针、调用 unsafe 函数、访问可变静态变量、实现 unsafe trait、访问 union 字段。下面这段程序通过 <code>as_mut_ptr()</code> 拿到 <code>Vec</code> 的裸指针，在 <code>unsafe</code> 块里写入三个元素。它之所以安全，是因为我们人工满足了全部条件：指针由 <code>Vec</code> 分配、长度是 3、三次写入分别是下标 0/1/2、且 <code>Vec</code> 在这段时间内没有被其它借用使用。任何一条不成立（比如写入 <code>ptr.add(5)</code>）都是未定义行为——编译器不会拦你，程序可能看似正常，也可能在优化后以诡异方式崩溃。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut data = vec![1u32, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let ptr: *mut u32 = data.as_mut_ptr();</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    unsafe {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        *ptr = 10;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        *ptr.add(1) = 20;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        *ptr.add(2) = 30;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;{data:?}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 raw_ptr.rs -o raw_ptr &amp;&amp; ./raw_ptr</span></div>
+<div class="cl is-text"><span class="code">[10, 20, 30]</span></div></div></div>
+<p>写 unsafe 的工程纪律是「最小包围」：把 unsafe 块压到尽可能小的范围，在它上方用注释写清所依赖的不变式，并把安全接口暴露给调用方——标准库的 <code>Vec</code> 就是这么做的，它内部用裸指针管理缓冲区，但对外只提供借用检查保护的安全 API。第 13 单元会系统展开 unsafe 与 FFI；这里只要建立一个判断：每当你想用裸指针绕开借用错误时，先问自己「我是否真的理解了编译器在保护什么不变式」。大多数情况下答案是「可以用 <code>split_at_mut</code>、索引或重新组织数据结构解决」，不必动用 unsafe。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：以为把所有代码包进 <code>unsafe { }</code> 就能让借用检查器闭嘴。裸指针之间的别名冲突、悬垂、越界都会变成未定义行为，而且 <code>unsafe</code> 不会阻止编译器基于「引用不别名」做优化——错误的别名假设经常在 release 构建下才显形。正确做法是先尝试用安全抽象（如 <code>Vec::split_at_mut</code> 把可变借用切成两段、<code>RefCell</code> 推迟检查、重新设计结构体避免同时需要两个可变借用），只有确实需要底层操作时才写 unsafe，并为每一处 unsafe 写下可核对的不变式清单。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-borrowing-and-references-3-8-遇到借用错误时的排查顺序">3.8 遇到借用错误时的排查顺序</h2>
+<p>把前面的机制串起来，可以得到一套实用的排查流程：先看诊断里的 loan 产生点和使用点，确认冲突的到底是读还是写；再看最后一次使用发生在哪里，判断能否靠提前 <code>drop</code> 或缩小作用域让 region 结束；如果是方法调用参数导致的冲突，想想两阶段借用是否适用，不适用就先把参数存到局部变量；如果同一个 <code>&amp;mut</code> 要交给多个函数，检查是 reborrow 还是被移动了；如果确实需要共享可变性，改用 <code>RefCell</code>（单线程）或 <code>Mutex</code>（多线程），并明确运行期检查的代价。只有这些都走不通，才考虑 unsafe。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">发现冲突 → 定位 loan 的发放点与使用点 → 缩短 region（提前 drop / 缩小作用域）
+        → 方法调用冲突？拆出局部变量 → 多个 &amp;mut？确认 reborrow 还是 move
+        → 真的需要共享可变？RefCell/Mutex → 最后才考虑 unsafe</pre></figure>
+<p>借用检查的严格不是刁难，它把「同一块内存在同一时刻被谁改」这个最容易出错的问题变成了编译期可判定的性质。NLL 让 region 更贴近真实使用，两阶段借用和 reborrow 在保持安全的前提下找回人体工学，内部可变性则给出了「把检查推迟到运行时」的正规通道。把引用当作一种<strong>有时限的权限凭证</strong>来理解会很顺：借用是发出凭证，NLL 决定凭证的有效期，reborrow 是短期转借，两阶段借用是先登记后盖章，而 <code>RefCell</code> 把验票员从编译期搬到了运行期。</p>
+<p>下一单元会把 region 本身推到台前：当你必须跨越函数边界传递引用时，如何向编译器证明它足够长寿。你会发现，所谓生命周期标注并不是「让引用活得更久」的魔法，而是把调用方和被调用方之间关于 region 的约束写成可检查的契约——这正是本单元 loans 与 region 模型的自然延伸。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把 3.2 节 NLL 例子里的 <code>println!(&quot;first = {first}&quot;)</code> 删掉，改用 <code>let _ = first;</code>，观察 <code>first</code> 的 loan 在哪一行结束；再把它放到一个内层作用域里，确认 <code>scores.push(40)</code> 仍然合法，并解释两种写法在 region 计算上的共同点。</li>
+<li>亲手编译 <code>v.push(v.len())</code> 与 <code>v.push(v.pop().unwrap())</code>，把后者的真实报错贴出来；按诊断建议改成先存局部变量，再验证结果一致。</li>
+<li>在 3.4 节程序里把 <code>bump(r)</code> 改成 <code>let s = r; bump(s);</code>，预测并验证接下来 <code>bump(r)</code> 会发生什么；再加上 <code>bump(&amp;mut *r)</code>，说明显式 reborrow 为什么能继续使用 <code>r</code>。</li>
+<li>用 <code>RefCell</code> 写一个只接受 <code>&amp;RefCell&lt;Vec&lt;i32&gt;&gt;</code> 的函数，先让两个守卫同时存活并触发 <code>try_borrow_mut()</code> 的 <code>Err</code>，再释放守卫后重试成功；记录错误信息原文，并解释为什么这个错误不会在编译期出现。</li>
+</ul>
+
+</div></div>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">
 <ul>
-<li><code>&amp;T</code> 和 <code>&amp;mut T</code> 在「同一时刻能存在几个」上有什么区别？</li>
-<li>为什么持有 <code>&amp;v[0]</code> 时不能调用 <code>v.push(4)</code>？</li>
-<li>NLL 把借用的有效期缩短到了什么时候？</li>
+<li>借用检查器判断冲突的「同一时刻」是由什么决定的？为什么 NLL 比词法作用域更精确？</li>
+<li>两阶段借用的 reservation / activation 分别允许什么？为什么 <code>v.push(v.pop().unwrap())</code> 不适用？</li>
+<li>reborrow 和「移动 <code>&amp;mut</code>」的区别是什么？隐式 reborrow 在什么情况下自动发生？</li>
+<li><code>&amp;T</code> 与 <code>&amp;mut T</code> 在权限、Copy 性、共存性上有哪些差别？</li>
+<li><code>RefCell</code> 把检查放在什么时候？它的三个主要代价是什么？</li>
+<li>裸指针缺失了引用携带的哪些保证？为什么说 <code>unsafe</code> 没有关闭借用检查？</li>
 </ul>
 
 </div>
 </section>
 </article>
-<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__variables-types-and-ownership.md.html">← 变量、类型与所有权</a><a href="rust__chapters__ch01__lifetimes.md.html">生命周期 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__types-and-ownership.md.html">← 类型系统与所有权</a><a href="rust__chapters__ch01__lifetimes.md.html">生命周期 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
 </main>
 </body>
 </html>

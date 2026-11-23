@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生态实战：一个真正能跑的 CLI</title>
+<meta name="description" content="第 15 单元 · 建议 90 分钟 · 把 clap、serde、tracing、anyhow 缝进一个可维护的命令行工具">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">生态实战：一个真正能跑的 CLI</h1><p class="doc-sub">第 15 单元 · 建议 90 分钟 · 把 clap、serde、tracing、anyhow 缝进一个可维护的命令行工具</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 15-ecosystem-in-practice.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-1-项目全貌与依赖取舍">15.1 项目全貌与依赖取舍</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-2-clap-把命令行变成类型">15.2 clap：把命令行变成类型</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-3-serde-配置加载与默认值">15.3 serde：配置加载与默认值</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-4-tracing-结构化日志而不是-println">15.4 tracing：结构化日志而不是 println</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-5-anyhow-错误链与边界">15.5 anyhow：错误链与边界</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-6-错误链在终端上长什么样">15.6 错误链在终端上长什么样</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-7-真跑一遍-完整命令序列">15.7 真跑一遍：完整命令序列</a></li><li class="toc-l2"><a href="#rust-ch02-ecosystem-in-practice-15-8-测试与工程化收尾">15.8 测试与工程化收尾</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能用 clap 的 derive API 把命令、位置参数与全局选项建模成类型，并读懂生成的帮助文本</li>
+<li>能用 serde 定义带默认值的配置，理解 <code>#[serde(default)]</code> 与字段级默认的区别</li>
+<li>能用 tracing 的 span 与事件替换 <code>println!</code>，用 EnvFilter 在运行时调级别</li>
+<li>能用 anyhow 在应用层附加上下文、在库层保留领域错误，并读懂错误链</li>
+<li>能把上面四者组织成一个真实 cargo 项目，编译、运行、测试都留下可复现的记录</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-ecosystem-in-practice-15-1-项目全貌与依赖取舍">15.1 项目全貌与依赖取舍</h2>
+<p>这一单元不再讲孤立的概念，而是把前面几编的工程机制落到一个能真正运行的小工具上。目标是一个极简的笔记管理器：支持新增、列出、标记完成，配置文件决定数据文件位置与日志级别。刻意保持功能小，是为了让每个 crate 的职责边界看得清楚——参数解析归 clap，配置反序列化归 serde，可观测性归 tracing，错误上下文归 anyhow。</p>
+<p>选这四个 crate 还有一层考虑：它们都是各自领域的事实标准，文档与社区资源丰富，遇到问题容易查到答案。Rust 生态里有不少功能相似的库，但&quot;能跑起来&quot;和&quot;长期可维护&quot;是两回事。对工程开发者而言，依赖的稳定性、维护活跃度、与工具链的兼容性往往比某个 API 更漂亮更重要。本单元刻意不引入数据库、HTTP 客户端或配置中心，因为这些会把主线淹没在基础设施细节里。</p>
+<p>目录结构如下。这是 <code>_verify/cli-app/</code> 下真实验证过的布局，不是示意。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">_verify/cli-app/
+├── Cargo.toml          # 依赖与包元数据
+├── settings.json       # 真实运行的配置文件
+├── notes.json          # 运行产生的数据文件
+├── src/
+│   ├── main.rs         # clap 定义 + tracing 初始化 + 命令分派
+│   ├── config.rs       # serde 配置加载
+│   └── store.rs        # serde 持久化 + anyhow 错误上下文
+└── target/release/notes-cli.exe</pre></figure>
+<p>对应的依赖清单如下。<code>clap</code> 打开 <code>derive</code> feature 才能用 <code>#[derive(Parser)]</code>；<code>serde</code> 同样需要 <code>derive</code>；<code>serde_json</code> 负责把配置与数据落盘；<code>tracing-subscriber</code> 的 <code>env-filter</code> feature 让日志级别可以通过字符串配置。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">12 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[package]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">name = &quot;notes-cli&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">version = &quot;0.1.0&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">edition = &quot;2021&quot;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">[dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">anyhow = &quot;1&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">clap = { version = &quot;4&quot;, features = [&quot;derive&quot;] }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">serde = { version = &quot;1&quot;, features = [&quot;derive&quot;] }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">serde_json = &quot;1&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">tracing = &quot;0.1&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">tracing-subscriber = { version = &quot;0.3&quot;, features = [&quot;env-filter&quot;] }</span></div></div></div>
+<p>依赖取舍上有一条经验：应用可以直接依赖高层 crate（<code>anyhow</code>、<code>tracing-subscriber</code>），库则应尽量只依赖最小集合并把错误类型暴露给上层。本项目里 <code>config.rs</code> 与 <code>store.rs</code> 虽然也用了 <code>anyhow</code>，但它们都在同一个二进制 crate 内，不涉及对外 API 稳定性。如果拆成库，就应该改用 <code>thiserror</code> 定义领域错误。</p>
+<p>四个 crate 的职责边界可以用一张表固定下来。表里&quot;失败时的表现&quot;一列尤其有用：它提醒我们参数错误应该在进程启动阶段就被拦下，而数据损坏必须作为可恢复错误交给 main 处理。</p>
+<table>
+<thead>
+<tr>
+<th>crate</th>
+<th>负责</th>
+<th>不负责</th>
+<th>失败时的表现</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>clap</td>
+<td>参数建模、帮助文本、类型校验</td>
+<td>业务逻辑、配置</td>
+<td>打印用法并退出</td>
+</tr>
+<tr>
+<td>serde</td>
+<td>结构与 JSON 的双向转换</td>
+<td>文件定位、错误解释</td>
+<td>返回解析错误</td>
+</tr>
+<tr>
+<td>tracing</td>
+<td>事件采集、级别过滤、格式化</td>
+<td>业务决策</td>
+<td>静默降级</td>
+</tr>
+<tr>
+<td>anyhow</td>
+<td>附加上下文、组织错误链</td>
+<td>定义领域错误变体</td>
+<td>打印 <code>Caused by</code> 链</td>
+</tr>
+</tbody></table>
+
+<p>版本约束都写成主版本号（<code>clap = &quot;4&quot;</code>、<code>serde = &quot;1&quot;</code>），这是 crates.io 上最常见的做法，既允许兼容性更新，又避免意外跨越大版本。<code>Cargo.lock</code> 会锁定实际解析出的版本，二进制项目应当把它提交进仓库；本单元的真实构建解析到 clap 4.6.9、serde 1.0.229、tracing-subscriber 0.3.23 等版本，全部记录在项目目录里。库项目通常不提交锁文件，因为下游需要自行解析；这个差别经常让初学者困惑，记住&quot;二进制要锁，库不锁&quot;就够了。</p>
+<p><code>cargo build --release</code> 的真实输出显示整个依赖图在 16.30 秒内编译完成，其中 clap 的派生宏与 tracing-subscriber 的过滤器占了相当一部分。这个数字不是重点，重点是它说明&quot;引入四个高层 crate&quot;在现代 Rust 工程里是很轻的决定——编译成本可以接受，换来的是大量经过实战检验的基础设施。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>写 CLI 就像开一家小餐馆。clap 是点菜单，客人怎么点都被整理成固定的格式；serde 是进货单，把外面送来的原始材料变成厨房认识的样子；tracing 是监控摄像头，出事时能回看；anyhow 是事故报告，把&quot;哪一步、因为什么失败&quot;写在一起。四个角色各管一摊，谁也不抢谁的活。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-ecosystem-in-practice-15-2-clap-把命令行变成类型">15.2 clap：把命令行变成类型</h2>
+<p>clap 的 derive API 核心是&quot;结构体即接口&quot;。<code>#[derive(Parser)]</code> 把字段映射成选项或位置参数，<code>#[command(subcommand)]</code> 字段映射成子命令。下面这段是 <code>src/main.rs</code> 的完整内容，已经用 <code>cargo build --release</code> 真编译通过。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">67 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">mod config;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">mod store;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">use anyhow::Result;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">use clap::{Parser, Subcommand};</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">use config::Config;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">use std::path::PathBuf;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">use store::Store;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">use tracing_subscriber::EnvFilter;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">#[derive(Debug, Parser)]</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">#[command(name = &quot;notes&quot;, version, about = &quot;真实 CLI：clap + serde + tracing + anyhow&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">struct Cli {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    /// 配置文件路径</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    #[arg(long, global = true)]</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    config: Option&lt;PathBuf&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    /// 覆盖日志级别，例如 debug</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    #[arg(long, global = true)]</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    log: Option&lt;String&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    #[command(subcommand)]</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    command: Command,</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">#[derive(Debug, Subcommand)]</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">enum Command {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    /// 新增一条笔记</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    Add { title: String },</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    /// 列出所有笔记</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    List,</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    /// 标记完成</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    Done { id: usize },</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="33"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">fn main() -&gt; Result&lt;()&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let cli = Cli::parse();</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let cfg = Config::load(cli.config.as_deref())?;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    let level = cli.log.as_deref().unwrap_or(&amp;cfg.log_level);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    tracing_subscriber::fmt()</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        .with_env_filter(EnvFilter::new(level))</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        .with_target(false)</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        .with_ansi(false)</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        .init();</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    tracing::debug!(?cli, &quot;命令行参数解析完成&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    tracing::info!(store = %cfg.store, &quot;配置已加载&quot;);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="45"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut store = Store::open(&amp;cfg.store)?;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    match cli.command {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        Command::Add { title } =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">            let note = store.add(title)?;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            println!(&quot;added #{} {}&quot;, note.id, note.title);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        Command::List =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">            let notes = store.list();</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            if notes.is_empty() {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">                println!(&quot;(empty)&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            for n in notes {</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">                println!(&quot;{} [{}] {}&quot;, n.id, if n.done { &quot;x&quot; } else { &quot; &quot; }, n.title);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        Command::Done { id } =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">            store.finish(id)?;</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">            println!(&quot;done #{}&quot;, id);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    Ok(())</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">}</span></div></div></div>
+<p>几个设计点值得展开。<code>global = true</code> 让 <code>--config</code> 与 <code>--log</code> 可以写在子命令前后任意位置，这对使用者很友好；如果省掉它，选项就必须紧跟在主命令之后。<code>Option&lt;PathBuf&gt;</code> 表达&quot;可给可不给&quot;，<code>usize</code> 让 clap 自动拒绝负数与非法字符串——参数校验在解析阶段就完成，业务代码拿到的一定是合法类型。文档注释直接变成帮助文本，因此不需要再维护一份说明。注意 <code>Cli::parse()</code> 在参数非法时会自动打印帮助并退出进程，这是 CLI 的正确行为，库代码不应模仿。</p>
+<p>参数解析的失败路径也值得验证。给 <code>done</code> 传一个非数字时，clap 会打印带具体错误原因的提示，并指出期望的类型；这比让业务代码用 <code>parse::&lt;usize&gt;()</code> 再自己拼错误信息可靠得多。真正的工程收益在于：参数错误的处理代码完全不需要写，clap 把它统一成一致的体验。需要自定义校验时，优先用 <code>value_parser</code> 把约束前移到解析阶段，而不是在 <code>match</code> 分支里返回错误——前者的失败发生在程序做任何其他事情之前，不会产生半成品状态。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --help</span></div>
+<div class="cl is-text"><span class="code">真实 CLI：clap + serde + tracing + anyhow</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">Usage: notes-cli.exe [OPTIONS] &lt;COMMAND&gt;</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">Commands:</span></div>
+<div class="cl is-text"><span class="code">  add   新增一条笔记</span></div>
+<div class="cl is-text"><span class="code">  list  列出所有笔记</span></div>
+<div class="cl is-text"><span class="code">  done  标记完成</span></div>
+<div class="cl is-text"><span class="code">  help  Print this message or the help of the given subcommand(s)</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">Options:</span></div>
+<div class="cl is-text"><span class="code">      --config &lt;CONFIG&gt;  配置文件路径</span></div>
+<div class="cl is-text"><span class="code">      --log &lt;LOG&gt;        覆盖日志级别，例如 debug</span></div>
+<div class="cl is-text"><span class="code">  -h, --help             Print help</span></div>
+<div class="cl is-text"><span class="code">  -V, --version          Print version</span></div></div></div>
+<p>还看到一个细节：<code>#[command(name = &quot;notes&quot;, version, ...)]</code> 决定了 <code>--version</code> 输出的是 <code>notes 0.1.0</code>，但可执行文件名仍是 <code>notes-cli.exe</code>（由包名决定）。帮助文本里的 <code>Usage:</code> 用的是真实文件名。这种&quot;展示名与文件名不同&quot;是允许的，但文档里要说清，否则使用者会困惑。</p>
+<p>derive 宏还解决了另一类问题：参数命名为 CLI 风格而字段命名为 Rust 风格。<code>--log-level</code> 会自动映射到字段 <code>log_level</code>，不需要手写转换。需要限制取值范围时可以用 <code>value_parser</code>，例如把 id 字段声明为 <code>usize</code> 已经排除负数，再配合枚举类型就能把字符串限制在固定集合内。子命令用枚举表示还带来一个额外好处：穷尽性检查保证新增子命令时编译器会提示你补上对应的 <code>match</code> 分支，不会出现&quot;帮助里显示了但执行时什么都没做&quot;的功能。这种&quot;类型系统替你检查 UI 完整性&quot;的体验，是 derive API 最值得保留的部分。</p>
+<h2 id="rust-ch02-ecosystem-in-practice-15-3-serde-配置加载与默认值">15.3 serde：配置加载与默认值</h2>
+<p>配置文件是最容易被低估的部分。下面这段 <code>src/config.rs</code> 展示了三个关键决定：<code>#[serde(default)]</code> 让缺失字段回落到 <code>Default</code> 实现，<code>with_context</code> 给 IO 与解析错误加上&quot;是哪个文件&quot;的上下文，日志事件放在加载之后——因为日志订阅器还没初始化时发出的事件会丢失。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">37 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use anyhow::{Context, Result};</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use serde::Deserialize;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::path::Path;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">#[derive(Debug, Deserialize)]</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">#[serde(default)]</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">pub struct Config {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    pub store: String,</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    pub log_level: String,</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">impl Default for Config {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn default() -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        Self {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            store: &quot;notes.json&quot;.into(),</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            log_level: &quot;info&quot;.into(),</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">impl Config {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    pub fn load(path: Option&lt;&amp;Path&gt;) -&gt; Result&lt;Self&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        match path {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            None =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">                tracing::debug!(&quot;未指定配置文件，使用默认值&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">                Ok(Self::default())</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">            Some(p) =&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                let text = std::fs::read_to_string(p)</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                    .with_context(|| format!(&quot;读取配置文件 {} 失败&quot;, p.display()))?;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                let cfg: Config = serde_json::from_str(&amp;text)</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                    .with_context(|| format!(&quot;解析配置文件 {} 失败&quot;, p.display()))?;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                Ok(cfg)</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">}</span></div></div></div>
+<p><code>#[serde(default)]</code> 放在结构体上表示&quot;任何缺失字段都用 <code>Default::default()</code> 对应字段&quot;。如果只给某个字段加，就写成 <code>#[serde(default = &quot;default_store&quot;)]</code> 并单独提供函数。两者的取舍在于：结构体级默认简洁，但新增字段时必须同步更新 <code>Default</code> 实现；字段级默认更显式，适合字段之间相对独立的配置。</p>
+<p>配置格式的另一个选择是 TOML。如果用 <code>toml</code> crate，清单会变成 <code>toml = &quot;0.8&quot;</code>，反序列化代码完全不变——这正是 serde 抽象的价值。JSON 的优势是生态通用、容易用其他语言生成；TOML 的优势是可读性与注释。本项目选 JSON 是因为数据文件也用它，减少一个依赖。</p>
+<p>serde 的常用属性还有几个值得记住。<code>#[serde(rename_all = &quot;kebab-case&quot;)]</code> 让 Rust 的 <code>log_level</code> 对应 JSON 的 <code>log-level</code>；<code>#[serde(flatten)]</code> 把嵌套结构摊平到同一层；<code>#[serde(skip_serializing_if = &quot;Vec::is_empty&quot;)]</code> 在序列化时省略空数组。反序列化失败时的错误信息会包含行号与列名，这正是前面错误链里那段 <code>key must be a string at line 1 column 2</code> 的来源。配置结构应当尽量扁平且只包含基本类型：嵌套越深，用户手写配置时越容易出错，而 serde 能给出的定位信息也越有限。最后一点：默认值与显式零值要区分清楚，缺失字段走 <code>Default</code>，写了 <code>0</code> 就按 <code>0</code> 处理，不要混淆两者。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：把日志初始化放在配置加载之后，会导致配置加载过程中的日志事件丢失。本项目里 <code>Config::load</code> 在没有配置文件时发出的 <code>debug!</code> 就落在订阅器初始化之前，因此 <code>--log debug</code> 也看不到它。这是真实现象：只有 <code>main</code> 里初始化之后的那条 <code>debug!(?cli, ...)</code> 会出现。解决办法是先用一个最小订阅器初始化，再根据配置重新配置；或者在解析命令行后先初始化一个临时订阅器。对多数 CLI 来说，把关键信息放到初始化之后的事件里更简单。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-ecosystem-in-practice-15-4-tracing-结构化日志而不是-println">15.4 tracing：结构化日志而不是 println</h2>
+<p><code>println!</code> 与日志的差别不只是&quot;能不能关掉&quot;。日志带级别、目标、结构化字段，并且可以被过滤与聚合。下面的初始化链做了几件事：<code>EnvFilter::new(level)</code> 把字符串（如 <code>debug</code>）转成过滤规则；<code>with_target(false)</code> 隐藏模块路径让输出短一些；<code>with_ansi(false)</code> 关闭颜色，保证 CI 日志与重定向到文件时没有转义序列；<code>init()</code> 把它设为全局默认订阅器。关闭 ANSI 是本单元在真实运行中刻意加入的调整：最初的日志带有彩色转义序列，直接贴进文档或 CI 报告会变成乱码，关掉之后输出干净且可复现。</p>
+<p><code>tracing::info!(store = %cfg.store, &quot;配置已加载&quot;)</code> 是一条结构化事件：消息是固定的，变量以键值对形式单独携带。这样日志系统可以按字段过滤、聚合，而不是靠正则去解析文本。<code>%</code> 表示用 <code>Display</code> 格式化，若换成 <code>?</code> 则用 <code>Debug</code>；对 <code>PathBuf</code> 这类类型通常用 <code>Display</code> 更易读。</p>
+<p>tracing 还有 <strong>span</strong> 这一层，它表示&quot;一段时间范围&quot;而不是单个事件。例如把一次 <code>Store::open</code> 包成 <code>#[tracing::instrument]</code>，进入与退出时都会自动记录事件，并带上耗时。事件在 span 内部发生时会自动携带 span 的字段，因此同一个请求的所有日志可以串起来。本项目功能简单，只用事件就够；一旦引入并发或多步骤流程，span 的价值会迅速显现。</p>
+<p>用 <code>--log debug</code> 覆盖配置里的 <code>warn</code>，可以立刻看到更多信息——这在排查线上问题时非常有用，因为不需要重新编译或改配置文件。下面是真实运行输出，时间戳来自 tracing-subscriber 的默认格式。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json --log debug list</span></div>
+<div class="cl is-text"><span class="code">2026-11-23T12:29:00.380979Z DEBUG 命令行参数解析完成 cli=Cli { config: Some(&quot;settings.json&quot;), log: Some(&quot;debug&quot;), command: List }</span></div>
+<div class="cl is-text"><span class="code">2026-11-23T12:29:00.381029Z  INFO 配置已加载 store=mydata.json</span></div>
+<div class="cl is-text"><span class="code">1 [ ] 第一条</span></div></div></div>
+<p>日志级别的选择本身也有工程含义。<code>error</code> 只记录必须处理的问题，<code>warn</code> 记录可疑但不致命的情况，<code>info</code> 记录关键生命周期事件（启动、配置加载、任务完成），<code>debug</code> 记录排查用的细节，<code>trace</code> 记录高频内部状态。CLI 的默认级别通常设为 <code>warn</code> 或 <code>info</code>：太吵会淹没业务输出，太安静会让使用者不知道程序在做什么。把级别做成命令行选项，等于把决定权交给使用者。</p>
+<p>默认配置下 <code>settings.json</code> 里的 <code>log_level</code> 是 <code>warn</code>，因此 <code>info!</code> 不会输出，终端只有业务结果。这一行为也真实记录过：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json add &quot;第一条&quot;</span></div>
+<div class="cl is-text"><span class="code">added #1 第一条</span></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p><code>println!</code> 是把话喊出来，听不听由天；日志是把话写进带编号的广播系统，谁想听、听哪一级自己调。结构化字段就像广播里附带的身份证号，机器也能准确筛选，而不是靠人肉读句子。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-ecosystem-in-practice-15-5-anyhow-错误链与边界">15.5 anyhow：错误链与边界</h2>
+<p><code>anyhow::Result</code> 是 <code>Result&lt;T, anyhow::Error&gt;</code> 的别名。<code>Error</code> 类型内部保存一个错误链：最外层是我们用 <code>with_context</code> 添加的解释，里层是真正的 IO 错误或解析错误。当 <code>main</code> 返回 <code>Result&lt;()&gt;</code> 时，Rust 会用 <code>Debug</code> 打印错误，而 anyhow 的 <code>Debug</code> 实现会把整条链漂亮地展开。</p>
+<p>下面这段来自 <code>src/store.rs</code>。<code>ok_or_else</code> 把&quot;找不到 id&quot;转换成领域错误，<code>with_context</code> 给文件操作加上下文。注意 <code>save</code> 用 <code>serde_json::to_string_pretty</code> 而非 <code>to_string</code>：数据文件会被人打开查看，可读性比几个字节更重要。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">65 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use anyhow::{anyhow, Context, Result};</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use serde::{Deserialize, Serialize};</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::path::{Path, PathBuf};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">#[derive(Debug, Clone, Serialize, Deserialize)]</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">pub struct Note {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    pub id: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    pub title: String,</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    pub done: bool,</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">#[derive(Debug, Default, Serialize, Deserialize)]</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">struct Db {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    next_id: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    notes: Vec&lt;Note&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">pub struct Store {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    path: PathBuf,</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    db: Db,</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">impl Store {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    pub fn open(path: impl AsRef&lt;Path&gt;) -&gt; Result&lt;Self&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let path = path.as_ref().to_path_buf();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        let db = if path.exists() {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            let text = std::fs::read_to_string(&amp;path)</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                .with_context(|| format!(&quot;读取存储 {} 失败&quot;, path.display()))?;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">            serde_json::from_str(&amp;text)</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                .with_context(|| format!(&quot;解析存储 {} 失败&quot;, path.display()))?</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            Db::default()</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        };</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        Ok(Self { path, db })</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="36"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    pub fn add(&amp;mut self, title: String) -&gt; Result&lt;Note&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        if title.trim().is_empty() {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            return Err(anyhow!(&quot;标题不能为空&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        self.db.next_id += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        let note = Note { id: self.db.next_id, title, done: false };</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        self.db.notes.push(note.clone());</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        self.save()?;</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        Ok(note)</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    pub fn list(&amp;self) -&gt; &amp;[Note] {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        &amp;self.db.notes</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="51"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    pub fn finish(&amp;mut self, id: usize) -&gt; Result&lt;()&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let note = self.db.notes.iter_mut()</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            .find(|n| n.id == id)</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">            .ok_or_else(|| anyhow!(&quot;没有 id={} 的笔记&quot;, id))?;</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        note.done = true;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        self.save()</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="59"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    fn save(&amp;self) -&gt; Result&lt;()&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        let text = serde_json::to_string_pretty(&amp;self.db)?;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        std::fs::write(&amp;self.path, text)</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">            .with_context(|| format!(&quot;写入存储 {} 失败&quot;, self.path.display()))</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">}</span></div></div></div>
+<h2 id="rust-ch02-ecosystem-in-practice-15-6-错误链在终端上长什么样">15.6 错误链在终端上长什么样</h2>
+<p>错误链的价值只有在真实失败时才看得出来。下面是三种失败路径的真实输出：配置文件不存在、配置 JSON 损坏、目标 id 不存在。每一行 <code>Caused by</code> 都对应链上的一层，最内层保留了操作系统原始错误或 serde 的具体位置。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config nope.json list</span></div>
+<div class="cl is-text"><span class="code">Error: 读取配置文件 nope.json 失败</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">Caused by:</span></div>
+<div class="cl is-text"><span class="code">    系统找不到指定的文件。 (os error 2)</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config broken.json list   # broken.json 内容是 {bad</span></div>
+<div class="cl is-text"><span class="code">Error: 解析配置文件 broken.json 失败</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">Caused by:</span></div>
+<div class="cl is-text"><span class="code">    key must be a string at line 1 column 2</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json done 99</span></div>
+<div class="cl is-text"><span class="code">Error: 没有 id=99 的笔记</span></div></div></div>
+<p>注意第三条没有 <code>Caused by</code>：它是用 <code>anyhow!</code> 直接构造的领域错误，没有更底层的原因。这种分层很合理——领域错误本身已经足够表达问题，强行再包一层只会让输出变噪。</p>
+<p>错误链可以从代码里遍历：anyhow 的 <code>Error::chain()</code> 返回一个迭代器，从最外层依次走到最内层；<code>downcast_ref::&lt;io::Error&gt;()</code> 则尝试取出某个具体类型。CLI 通常只需要打印，但库代码可能需要根据底层错误做恢复——例如区分&quot;文件不存在&quot;和&quot;权限不足&quot;时，链遍历就派上用场。日志里打印错误链时要用 <code>{:#}</code> 格式（<code>Debug</code> 的替代展示），否则只会看到最外层一句话。本项目依赖 <code>main</code> 的默认打印行为，所以没有额外写日志错误的代码。</p>
+<p>库与应用的分工在这里体现得很清楚：如果 <code>config.rs</code> 是一个独立库，它应该定义 <code>ConfigError::{Io, Parse}</code> 这样的 <code>thiserror</code> 枚举，让调用方可以按变体匹配；作为应用内部的模块，用 <code>anyhow</code> 加上下文更省事。选择标准是&quot;有没有人需要以编程方式区分错误&quot;——有就用领域错误，没有就用 anyhow。</p>
+<p>错误处理的另一条纪律是&quot;尽早失败，但不要在底层 panic&quot;。<code>Store::add</code> 对空标题返回错误而不是 <code>assert!</code>，因为用户输入是外部数据；<code>Store::open</code> 对损坏的文件返回带上下文的错误，而不是让 serde 的 panic 冒出来。相对地，程序内部的逻辑不变量（例如 <code>next_id</code> 不应倒退）可以用 <code>assert!</code>，因为它们反映的是代码 bug 而非输入问题。把这个边界画清楚，日志与错误就不会互相打架：错误链负责解释&quot;为什么这次操作失败&quot;，日志负责记录&quot;发生了什么&quot;，二者不要互相替代。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：<code>anyhow!</code> 与 <code>Context</code> 很方便，但不要在库 API 里把 <code>anyhow::Error</code> 作为公开返回类型。它没有结构化变体，调用方只能打印字符串，无法针对不同错误做恢复。另一个坑是在循环里反复 <code>with_context</code>，会让错误链变得很长且重复；只在跨越模块边界的地方加一次上下文通常就够了。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-ecosystem-in-practice-15-7-真跑一遍-完整命令序列">15.7 真跑一遍：完整命令序列</h2>
+<p>把前面的片段串起来，可以看一条完整的使用路径。下面的输出全部来自同一份构建产物，依次是新增两条、列出、标记完成、再列出。因为 <code>settings.json</code> 把日志级别设为 <code>warn</code>，所以只有业务结果出现在终端——这正是日志级别设计的意义。每条命令都通过 <code>--config settings.json</code> 指向同一份配置，说明全局选项确实可以稳定地放在子命令之前。如果帮助文本说错了选项名，clap 会在第一步就报错，不会静默使用默认配置。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ printf '{\n  &quot;store&quot;: &quot;mydata.json&quot;,\n  &quot;log_level&quot;: &quot;warn&quot;\n}\n' &gt; settings.json</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json add &quot;第一条&quot;</span></div>
+<div class="cl is-text"><span class="code">added #1 第一条</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json add &quot;第二条&quot;</span></div>
+<div class="cl is-text"><span class="code">added #2 第二条</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json list</span></div>
+<div class="cl is-text"><span class="code">1 [ ] 第一条</span></div>
+<div class="cl is-text"><span class="code">2 [ ] 第二条</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json done 1</span></div>
+<div class="cl is-text"><span class="code">done #1</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./target/release/notes-cli.exe --config settings.json list</span></div>
+<div class="cl is-text"><span class="code">1 [x] 第一条</span></div>
+<div class="cl is-text"><span class="code">2 [ ] 第二条</span></div></div></div>
+<p>数据文件本身也是 serde 往返的产物，内容与结构体字段一一对应：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cat mydata.json</span></div>
+<div class="cl is-text"><span class="code">{</span></div>
+<div class="cl is-text"><span class="code">  &quot;next_id&quot;: 2,</span></div>
+<div class="cl is-text"><span class="code">  &quot;notes&quot;: [</span></div>
+<div class="cl is-text"><span class="code">    {</span></div>
+<div class="cl is-text"><span class="code">      &quot;id&quot;: 1,</span></div>
+<div class="cl is-text"><span class="code">      &quot;title&quot;: &quot;第一条&quot;,</span></div>
+<div class="cl is-text"><span class="code">      &quot;done&quot;: true</span></div>
+<div class="cl is-text"><span class="code">    },</span></div>
+<div class="cl is-text"><span class="code">    {</span></div>
+<div class="cl is-text"><span class="code">      &quot;id&quot;: 2,</span></div>
+<div class="cl is-text"><span class="code">      &quot;title&quot;: &quot;第二条&quot;,</span></div>
+<div class="cl is-text"><span class="code">      &quot;done&quot;: false</span></div>
+<div class="cl is-text"><span class="code">    }</span></div>
+<div class="cl is-text"><span class="code">  ]</span></div>
+<div class="cl is-text"><span class="code">}</span></div></div></div>
+<p>数据文件的设计也值得注意。<code>Db</code> 把 <code>next_id</code> 与 <code>notes</code> 放在同一个结构里序列化，好处是重启后 id 不会重复；代价是并发进程同时写同一个文件会互相覆盖。对单人 CLI 这完全够用，但如果要支持多进程，就需要文件锁或改用 SQLite。工程判断的标准是&quot;使用场景是否会产生并发&quot;：为不存在的并发加锁只是增加复杂度。</p>
+<p>构建过程本身也是可复现记录的一部分。下面是真实的编译输出尾部，依赖版本由 Cargo.lock 固定。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo build --release</span></div>
+<div class="cl is-text"><span class="code">   Compiling clap v4.6.9</span></div>
+<div class="cl is-text"><span class="code">   Compiling serde_json v1.0.154</span></div>
+<div class="cl is-text"><span class="code">   Compiling notes-cli v0.1.0</span></div>
+<div class="cl is-text"><span class="code">    Finished `release` profile [optimized] target(s) in 16.30s</span></div></div></div>
+<h2 id="rust-ch02-ecosystem-in-practice-15-8-测试与工程化收尾">15.8 测试与工程化收尾</h2>
+<p>一个能跑的 CLI 还不足以称为工程化产物，测试是下一步。下面这段集成测试直接调用 <code>Store</code> 的公开方法，验证&quot;新增后 id 递增&quot;与&quot;标记完成后可从列表看到&quot;两个行为。它用临时目录避免污染开发数据，是文件型存储测试的标准做法。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">25 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#[cfg(test)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">mod tests {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    use super::*;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    use std::fs;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn temp_db(name: &amp;str) -&gt; std::path::PathBuf {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut p = std::env::temp_dir();</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        p.push(format!(&quot;notes-cli-test-{name}.json&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        let _ = fs::remove_file(&amp;p);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        p</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    #[test]</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn add_and_finish() {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        let path = temp_db(&quot;add&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        let mut store = Store::open(&amp;path).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let a = store.add(&quot;A&quot;.into()).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        let b = store.add(&quot;B&quot;.into()).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        assert_eq!((a.id, b.id), (1, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        store.finish(1).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        assert!(store.list()[0].done);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        assert!(!store.list()[1].done);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let _ = fs::remove_file(&amp;path);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div></div></div>
+<p>测试分层要清楚：clap 的参数解析通常靠向二进制传参的集成测试验证；serde 的配置与数据往返适合单元测试；<code>main</code> 里的日志初始化使用全局状态，不适合在单元测试里反复调用。把逻辑下沉到 <code>config.rs</code> 与 <code>store.rs</code>，会让大部分行为都能在不启动进程的情况下测试。CI 里至少跑 <code>cargo test --all-features</code> 与 <code>cargo clippy --all-targets -- -D warnings</code>；前者覆盖所有路径，后者防止警告堆积。上面这段测试已经在本项目中真实运行通过，输出为 <code>test result: ok. 1 passed; 0 failed</code>。</p>
+<p>临时文件测试有个常见坑：不同测试并行运行时如果共用同一个文件名，会互相删除对方的数据。用测试名做文件名前缀只是权宜之计，更稳妥的做法是让每个测试创建独立临时目录，或用 <code>tempfile</code> crate 自动管理生命周期。另一个细节是测试结束后的清理：即使断言失败也要删除临时文件，否则连续运行几次后 <code>temp_dir()</code> 会积累一堆垃圾。把这些基础工作做好，测试才会成为可信赖的门禁而不是偶发失败的来源。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>给 CLI 增加 <code>search &lt;关键词&gt;</code> 子命令：用 <code>Iterator::filter</code> 在 <code>Store::list()</code> 上筛选标题，返回匹配项；为它写一条集成测试。</li>
+<li>把配置格式从 JSON 换成 TOML：只改 <code>Cargo.toml</code> 与 <code>config.rs</code> 的反序列化调用，观察其他模块是否完全不用改。记录真实编译输出。</li>
+<li>让 <code>Store::save</code> 先写临时文件再原子重命名，避免进程中断留下半个 JSON。用一次人工中断测试验证旧文件仍然可读。</li>
+</ul>
+
+</div></div>
+<p>把四层职责分开之后，代码评审也变得更容易：参数问题只看 <code>main.rs</code> 的类型定义，配置问题只看 <code>config.rs</code>，数据问题只看 <code>store.rs</code>。这种&quot;按关注点切分&quot;的习惯，比把所有事情塞进一个 main 函数要耐久得多。随着功能增长，这个好处会越来越明显，重构时也不容易牵一发而动全身。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>clap 的 <code>global = true</code> 解决了什么问题？省略它会怎样影响使用者？</li>
+<li><code>#[serde(default)]</code> 放在结构体上与放在字段上有什么差别？</li>
+<li>为什么配置加载阶段的日志事件可能丢失？如何验证这一点？</li>
+<li><code>anyhow</code> 的 <code>Caused by</code> 链是从哪来的？为什么领域错误有时不需要附加上下文？</li>
+<li>为什么库 API 不应公开返回 <code>anyhow::Error</code>？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__shipping-and-ci.md.html">← 发布与 CI 工程</a><a href="rust__chapters__ch02__async-runtime-and-performance.md.html">异步运行时与性能 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

@@ -147,8 +147,8 @@ const offlineItems = [
   },
   {
     tag: 'PDF',
-    label: 'Rust · 82 页',
-    note: 'A4 · 真编译校验',
+    label: 'Rust · 351 页',
+    note: 'A4 · 真编译真对拍',
     collection: rustEngineering,
     file: 'rust.pdf',
   },
@@ -255,7 +255,7 @@ function scrollToLibrary(): void {
 
         <p class="notes-lede">
           六种笔记来自同一套 Markdown 写作流水线：模型先把晦涩的教材语言重写成人话，
-          再由复核与机械验算把结论钉住。Rust 笔记的 71 份代码清单全部过 rustc 真编译，正文不出现跑不通的示例。选一种，直接在站内翻开——没有跳转，没有另一套网页界面。
+          再由复核与机械验算把结论钉住。Rust 笔记的 175 份代码清单全部真编译、真运行，算法单元另配随机对拍，正文输出由真实运行结果回写。选一种，直接在站内翻开——没有跳转，没有另一套网页界面。
         </p>
 
         <div class="hero-actions">
@@ -329,7 +329,7 @@ function scrollToLibrary(): void {
         <h2 id="library-title">六种笔记，按需翻开</h2>
         <p>
           不是重复的教材：正课版负责把每一步讲透，复习版只留概念与做题路径，
-          C 与 C++ 笔记分别从编译器 / 对象生命周期的视角讲工程，算法笔记用对拍把结论钉在随机数据上，Rust 笔记把语法、工程组织与算法实现串成一条线。
+          C 与 C++ 笔记分别从编译器 / 对象生命周期的视角讲工程，算法笔记用对拍把结论钉在随机数据上，Rust 笔记把机制、工程组织与算法实现串成一条线：34 个单元、18 万字、351 页。
         </p>
       </div>
 
@@ -460,7 +460,7 @@ function scrollToLibrary(): void {
           <span>02 / 复核</span>
           <h3>公式与代码逐条验算</h3>
           <p>
-            高数两版由独立复核员逐条重算，253 条机械验算守住可验证的结论；C 与 C++ 笔记把代码清单放进真编译、真运行闸门；算法笔记要求每份结论被 200 组随机数据对拍；Rust 笔记的 71 份清单逐段交给 rustc --edition 2021 校验。
+            高数两版由独立复核员逐条重算，253 条机械验算守住可验证的结论；C 与 C++ 笔记把代码清单放进真编译、真运行闸门；算法笔记要求每份结论被 200 组随机数据对拍；Rust 笔记的 175 份清单逐段交给 rustc 真编译真运行，算法单元再用随机数据对拍。
           </p>
         </article>
         <article class="method-step">
@@ -478,8 +478,8 @@ function scrollToLibrary(): void {
         <p class="section-kicker">TAKE IT OFFLINE</p>
         <h2 id="offline-title">六套笔记，都可以带走</h2>
         <p>
-          正课 464 页、复习 102 页、C 语言 512 页、C++ 语言 170 页、算法 522 页、Rust 82 页，各有一份 A4 PDF；
-          高数、C 与 C++ 都有样式全部内联的单文件 HTML，C 与 C++ 另有一份合书 HTML；Rust 笔记提供 82 页 PDF、单文件 HTML 与合书 HTML。
+          正课 464 页、复习 102 页、C 语言 512 页、C++ 语言 170 页、算法 522 页、Rust 351 页，各有一份 A4 PDF；
+          高数、C 与 C++ 都有样式全部内联的单文件 HTML，C 与 C++ 另有一份合书 HTML；Rust 笔记提供 351 页 PDF、单文件 HTML 与合书 HTML。
           站内读的就是下载的，排版保持原样。
         </p>
       </div>
@@ -514,7 +514,7 @@ function scrollToLibrary(): void {
 
     <p class="notes-source">
       六套笔记都以 Markdown 维护：高数经 markdown-it + KaTeX 渲染，C / C++ / 算法经 markdown-it + Shiki
-      与自建闸门生成，再由 headless Chrome 打印为 PDF；Rust 笔记经 marked 渲染，代码清单由 rustc 真编译校验。站内阅读器只负责把同一份纸面内容装进深色阅读面板：
+      与自建闸门生成，再由 headless Chrome 打印为 PDF；Rust 笔记经 marked 渲染，代码清单由 rustc 真编译真运行，工程单元含真实 cargo 项目。站内阅读器只负责把同一份纸面内容装进深色阅读面板：
       隐藏原来的站内导航、注入深色版式，正文、公式与锚点保持原样。
     </p>
 

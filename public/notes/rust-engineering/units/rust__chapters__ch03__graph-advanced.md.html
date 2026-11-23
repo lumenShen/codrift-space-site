@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高级图论：低链接值、缩点与最小生成树</title>
+<meta name="description" content="第 24 单元 · 建议 100 分钟 · 把 Tarjan 的不变量、拓扑序与 MST 的贪心一次讲清">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">高级图论：低链接值、缩点与最小生成树</h1><p class="doc-sub">第 24 单元 · 建议 100 分钟 · 把 Tarjan 的不变量、拓扑序与 MST 的贪心一次讲清</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 24-graph-advanced.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-1-dfs-生成树上的-dfn-与-low-强连通的判据">24.1 DFS 生成树上的 dfn 与 low：强连通的判据</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-2-缩点-把强连通分量压成一个点">24.2 缩点：把强连通分量压成一个点</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-3-无向图的桥与割点-边号-重边与根的特例">24.3 无向图的桥与割点：边号、重边与根的特例</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-4-对拍抓到的两个真实-bug-哨兵与零点">24.4 对拍抓到的两个真实 bug：哨兵与零点</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-5-拓扑排序-kahn-入度与-dfs-逆完成序">24.5 拓扑排序：Kahn 入度与 DFS 逆完成序</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-6-kruskal-按边排序与并查集的切分不变式">24.6 Kruskal：按边排序与并查集的切分不变式</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-7-prim-从已选集合向外的另一种贪心">24.7 Prim：从已选集合向外的另一种贪心</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-8-随机对拍-四类算法对暴力裁判">24.8 随机对拍：四类算法对暴力裁判</a></li><li class="toc-l2"><a href="#rust-ch03-graph-advanced-24-9-工程取舍-复杂度-连通性与失败状态">24.9 工程取舍：复杂度、连通性与失败状态</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>说清 dfn/low 的定义与 Tarjan 强连通分量的栈不变量，能写出迭代版实现</li>
+<li>掌握无向图桥与割点的判定式，解释为什么必须用边号跳过父边、根要单独处理</li>
+<li>会用 Kahn 与 DFS 逆完成序两种拓扑排序，并解释环检测的差异</li>
+<li>能实现 Kruskal 与 Prim，用随机对拍核验 SCC、桥割点、MST 与拓扑判据</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-graph-advanced-24-1-dfs-生成树上的-dfn-与-low-强连通的判据">24.1 DFS 生成树上的 dfn 与 low：强连通的判据</h2>
+<p>Tarjan 的所有变体都建立在一次 DFS 上。给每个点两个时间戳：<code>dfn[u]</code> 是首次访问的次序，<code>low[u]</code> 是 u 或其子树内的点通过<strong>至多一条非树边</strong>能回到的最小 dfn。树边构成 DFS 生成树；非树边分三类：指向祖先的回边、指向子树中已访问点的前向边、指向已完成其他分支点的横叉边。只有回边能降低 low，因为前向边与横叉边指向 dfn 更大的点，取 min 没有意义。</p>
+<p>从定义可推出强连通分量的判据：当 DFS 从 u 的一棵子树返回时，若 <code>low[u] == dfn[u]</code>，说明 u 的子树没有任何边能逃到更早的祖先，u 就是它所在分量的&quot;根&quot;。把从 u 开始、仍在辅助栈上的点全部弹出，恰好得到一个强连通分量。反过来，若 <code>low[u] &lt; dfn[u]</code>，u 的子树与更早的祖先互通，暂不能封口。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">dfn：首次进入的次序（全局递增）
+low：子树内经至多一条非树边可达的最小 dfn
+  ┌── tree edge u→v：low[u] = min(low[u], low[v])（v 返回后）
+  └── back edge u→anc：low[u] = min(low[u], dfn[anc])（扫描时）
+  low[u] == dfn[u]  ⇒  u 是 SCC 的根，弹栈成环</pre></figure>
+<p>实现有几个必须固化的细节。第一，<code>dfn[v] == 0</code> 表示未访问，所以计时器必须从 1 开始——若从 0 开始，0 号点会被反复当成未访问而重复入栈，这是真会出错的坑。第二，辅助栈用 <code>in_stack</code> 布尔数组标记，扫描到指向栈内点的边才更新 low；指向已弹出点的边不更新，否则会把两个不同的分量错误合并。第三，子树的 low 在<strong>孩子帧弹出时</strong>才能合并到父，且必须先判断孩子是否封口弹栈，再按 <code>in_stack[child]</code> 决定是否传播——顺序反了就会把不该继承的低值传给父节点。</p>
+<p>帧 <code>(u, next_idx)</code> 里的下标在扫描每条边之前先加一，这样即使遇到需要 <code>continue</code> 的回边或已访问点，也不会把同一条边处理两次。帧数最多等于当前 DFS 路径的长度，而不是已访问点的总数，因此在星形图上内存依然很小。若改用递归写法，代码会短三分之一，但十万节点的链会让调用栈溢出；Rust 主线程栈有限，这一点在工程里不是理论风险。对不连通的有向图，外层循环必须对每个未访问点重新启动一次 DFS，并在每轮开始时把辅助栈清空——虽然上一轮结束时它本应为空，但显式保证能省去调试时的猜测。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">74 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// Tarjan 强连通分量：迭代版，避免深图爆栈</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn tarjan_scc(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;Vec&lt;usize&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut dfn = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut low = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut in_stack = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut stack: Vec&lt;usize&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut comps: Vec&lt;Vec&lt;usize&gt;&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut timer = 1usize;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    for root in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        if dfn[root] != 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            continue;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        dfn[root] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        low[root] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        stack.push(root);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        in_stack[root] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let mut frames: Vec&lt;(usize, usize)&gt; = vec![(root, 0)];</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        while let Some(&amp;(u, idx)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            if idx &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">                frames.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">                let v = g[u][idx];</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                if dfn[v] == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                    dfn[v] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                    low[v] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                    timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                    stack.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                    in_stack[v] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                    frames.push((v, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                } else if in_stack[v] {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                    low[u] = low[u].min(dfn[v]); // 指向栈内点 = 回边/横叉边</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">                let u = frames.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                if low[u] == dfn[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                    let mut comp = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                    while let Some(v) = stack.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">                        in_stack[v] = false;</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">                        comp.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">                        if v == u {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">                            break;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">                        }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">                    comps.push(comp);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">                if let Some(&amp;(p, _)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">                    if in_stack[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">                        low[p] = low[p].min(low[u]);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    comps</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="61"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    let edges = [</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        (0usize, 1usize), (1, 2), (2, 0), // 环 {0,1,2}</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        (2, 3), (3, 4), (4, 3),           // 环 {3,4}</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        (5, 4),                           // 单点 {5}</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    let mut comps = tarjan_scc(6, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    for c in comps.iter_mut() {</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        c.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    comps.sort();</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    println!(&quot;sccs = {:?}&quot;, comps);</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">sccs = [[0, 1, 2], [3, 4], [5]]</span></div></div></div>
+<h2 id="rust-ch03-graph-advanced-24-2-缩点-把强连通分量压成一个点">24.2 缩点：把强连通分量压成一个点</h2>
+<p>Tarjan 返回的分量表可以立即用于&quot;缩点&quot;：把每个分量看作一个超级节点，原图中跨分量的边变成超级节点之间的有向边，得到的必然是有向无环图（DAG）。若有环，环上的分量会互相可达，它们在 Tarjan 里本应属于同一个分量，矛盾。缩点后可以做很多原图上困难的事：统计&quot;入度为 0 的分量个数&quot;就是至少要选多少个起点才能遍历全图；在 DAG 上做拓扑 DP，可以求最长可达链、可达点集大小等。</p>
+<p>正确性论证依赖两条：其一，同一 SCC 内的点互相可达，压缩不会丢失内部连通信息；其二，跨 SCC 的边方向单一，若存在 u∈A、v∈B 的边和 v&#39;∈B、u&#39;∈A 的边，则 A、B 互通，应合并为同一分量。实践中给每个点记 <code>comp[v]</code>，遍历原边只在 <code>comp[u] != comp[v]</code> 时建缩点边，并用集合去重。分量编号的顺序是逆拓扑序（Tarjan 先弹出下游分量），直接拿来当拓扑序往往也成立，但不依赖这个性质更安全。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>强连通分量就是&quot;互相能走到的一伙人&quot;。把每伙人看成一个整体，整体之间只可能单向通行——否则两伙人就该合成一伙。这样一来，复杂的有向图就变成了一条没有环的依赖链，很多原本绕来绕去的问题在链上一下就清楚了。</p>
+
+</div>
+</section>
+<p>复杂度 O(n+m)：每点入栈出栈各一次，每条边扫描一次。迭代版用帧 <code>(u, next_idx)</code> 显式记录&quot;下一次该检查哪个邻居&quot;，栈深等于当前 DFS 路径长度；与递归版相比，它把最坏 O(n) 的调用栈搬到堆上的 <code>Vec</code>，避免深链爆栈。外层 <code>for root in 0..n</code> 保证不连通图也被完整覆盖——这是有向图算法常被忽略的一点：从 0 号点出发的 DFS 看不到其他弱连通块。</p>
+<p>缩点的应用很广。最经典的是 2-SAT：每个变量拆成&quot;取真&quot;与&quot;取假&quot;两个点，蕴含关系建成有向边，若某个变量的两种取值落在同一 SCC 则无解；否则按 SCC 的逆拓扑序给每个分量赋值。另一个常见场景是&quot;可达性统计&quot;：在缩点 DAG 上按拓扑序做集合并，复杂度从原图上的 O(nm) 降到 O(n+m) 级别。把分量编号规范化（例如按最小点号）能让对拍与调试更容易，但正式的缩点图只用 <code>comp[u]</code> 这个编号即可，不必真的排序。</p>
+<h2 id="rust-ch03-graph-advanced-24-3-无向图的桥与割点-边号-重边与根的特例">24.3 无向图的桥与割点：边号、重边与根的特例</h2>
+<p>无向图的 Tarjan 与有向版形态相似但语义不同。<code>low[u]</code> 定义为 u 的子树经至多一条非树边能回到的最小 dfn；判据是：对树边 u→v，若 <code>low[v] &gt; dfn[u]</code>，说明 v 的子树没有任何边能回到 u 或更早，删掉这条边就把图切开，它是桥；若 <code>low[v] &gt;= dfn[u]</code> 且 u 不是 DFS 根，说明删掉 u 后 v 那一支与 u 的父方向断开，u 是割点。根是特例：它只有一个孩子时不是割点，只有孩子数 ≥2 才是。</p>
+<p>关键实现细节是<strong>用边号跳过父边</strong>，而不是用父节点编号。无向图的每条逻辑边往邻接表加两次，若只按&quot;邻居等于父&quot;跳过，一条重边的另一份会被当成回边，错误地降低 low，把本该是桥的边判成非桥。给每条输入边编号 id，邻接表存 <code>(neighbor, id)</code>，扫描时 <code>if eid == parent_edge[u] { continue; }</code> 只跳过来自父的那一份，重边的另一份照常参与更新。这个细节在随机对拍里很容易被构造出来。</p>
+<p>自环也值得单独考虑：自环在邻接表里出现两次，指向自己，会把 low[u] 更新为 dfn[u]，不改变任何判定，因此桥与割点算法无需特判自环。但&quot;删掉一条边后是否连通&quot;的暴力裁判要小心：自环删掉后图当然不变，暴力判定与 Tarjan 一致。根的孩子数 <code>children[root]</code> 只在每个根的本轮 DFS 里计数，换根时要重新累计；若图不连通，每个弱连通块各有一个根，割点只可能出现在自己那一块里，外层循环天然处理了这种情况。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">      0
+     / \      （三角形的 DFS 树：0→1→2，另有回边 2→0）
+    1   2
+   dfn[0]=1  dfn[1]=2  dfn[2]=3
+   low[2]=1（回边 2→0）  ⇒ low[2] &lt; dfn[1]，1 不是割点</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">71 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// 无向图的桥与割点：用边号跳过parent边，正确处理器重边</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn bridges_and_articulations(n: usize, edges: &amp;[(usize, usize)]) -&gt; (Vec&lt;(usize, usize)&gt;, Vec&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut g = vec![Vec::&lt;(usize, usize)&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    for (id, &amp;(u, v)) in edges.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        g[u].push((v, id));</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        g[v].push((u, id));</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut dfn = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut low = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut parent_edge = vec![usize::MAX; n];</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut children = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let mut is_art = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let mut bridges = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let mut timer = 1usize;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    for root in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        if dfn[root] != 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        dfn[root] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        low[root] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        let mut frames: Vec&lt;(usize, usize)&gt; = vec![(root, 0)];</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        while let Some(&amp;(u, idx)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            if idx &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">                frames.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">                let (v, eid) = g[u][idx];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">                if eid == parent_edge[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                if dfn[v] == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                    parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                    parent_edge[v] = eid;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                    children[u] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                    dfn[v] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                    low[v] = timer;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                    timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                    frames.push((v, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                } else {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                    low[u] = low[u].min(dfn[v]);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                let u = frames.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                if let Some(&amp;(p, _)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                    if low[u] &gt; dfn[p] {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">                        bridges.push((p.min(u), p.max(u)));</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">                    if p != root &amp;&amp; low[u] &gt;= dfn[p] {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">                        is_art[p] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">                    low[p] = low[p].min(low[u]);</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        if children[root] &gt; 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">            is_art[root] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let arts: Vec&lt;usize&gt; = (0..n).filter(|&amp;i| is_art[i]).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    (bridges, arts)</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="59"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    let edges = [</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        (0usize, 1usize), (1, 2), (2, 0), // 三角形</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        (2, 3),                          // 桥</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        (3, 4), (4, 5), (5, 3),          // 三角形</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        (5, 6),                          // 桥</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    let (mut bridges, arts) = bridges_and_articulations(7, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    bridges.sort();</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    println!(&quot;bridges = {:?}&quot;, bridges);</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    println!(&quot;arts    = {:?}&quot;, arts);</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">bridges = [(2, 3), (5, 6)]</span></div>
+<div class="cl is-text"><span class="code">arts    = [2, 3, 5]</span></div></div></div>
+<p>手验：2 连接左侧三角形与 3，删掉它就把 {0,1} 与其余分离，故 2 是割点；3 与 5 同理；(2,3) 与 (5,6) 是桥，其余边都在环上。注意桥一定是割点的必要条件不成立：删桥分离的是两个连通块，但端点未必各自是割点。</p>
+<h2 id="rust-ch03-graph-advanced-24-4-对拍抓到的两个真实-bug-哨兵与零点">24.4 对拍抓到的两个真实 bug：哨兵与零点</h2>
+<p>本节值得单独记一笔，因为下面 24.8 的对拍在开发中真的抓到过两个 bug，而且都不是&quot;算法思路错&quot;，而是边界约定没对齐。第一个：根的父节点初始化为哨兵 <code>n</code>，割点判定写成 <code>if parent[p] != root</code> 时，根 p 的 <code>parent[p] = n</code>，于是 <code>n != root</code> 恒成立，根被错误标记为割点。正确写法是直接比较 <code>p != root</code>，或者把根的父设为它自己。第二个：<code>dfn</code> 用 0 表示未访问，但计时器也从 0 开始，导致 0 号点的 dfn 为 0，被后续扫描误判为&quot;未访问&quot;而重复入栈，low 值被污染。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：这两个 bug 的共同点是&quot;0 和哨兵撞车&quot;。Rust 的 <code>usize</code> 没有负值，习惯用 0 或 <code>n</code> 当哨兵时，必须确认真实数据不会取到同一个值。若用 <code>parent[root] = root</code>、<code>dfn</code> 从 1 开始计数，这类冲突就从根上避免了。对拍用&quot;暴力删边/删点&quot;作裁判，几秒内就能把错误定位到具体点号，比盯着 low 的递推式有用得多。</p>
+
+</div>
+</section>
+<p>这也说明为什么算法笔记不能只贴&quot;看起来对&quot;的代码：把两个实现放在同一组随机输入上比一比，很多隐蔽的约定错误会立刻现形，尤其是那些在最小样例上恰好不触发的边界。写模板时把&quot;未访问用什么表示&quot;&quot;根的父亲是谁&quot;这两句话写在注释里，是性价比极高的防御。</p>
+<p>推广开来，凡是&quot;哨兵值与合法值可能撞车&quot;的地方都要先列一张表：<code>usize::MAX</code>、<code>n</code>、0 各自代表什么，真实数据能否取到这些值。<code>parent[root] = root</code> 让根的父指针落在合法点号上，是最省心的约定；<code>dfn</code> 从 1 开始让 0 专门表示未访问，同样干净。相比之下，<code>parent[root] = n</code> 加 <code>dfn</code> 从 0 开始虽然也能工作，但要求每一处判定都记得排除哨兵，任何一处漏掉就是隐蔽的错。Rust 的类型系统不会替你检查这种语义约定，只有对拍和注释能守住。</p>
+<h2 id="rust-ch03-graph-advanced-24-5-拓扑排序-kahn-入度与-dfs-逆完成序">24.5 拓扑排序：Kahn 入度与 DFS 逆完成序</h2>
+<p>拓扑排序针对有向无环图（DAG），输出一个序列使每条边 u→v 都满足 u 在 v 前。Kahn 算法从入度为 0 的点开始：把它们全入队，依次弹出并记录，每弹出一个点就把后继的入度减一，减到 0 的再入队。若最终输出点数不足 n，说明有环。<code>indeg[v] -= 1</code> 在 <code>usize</code> 上安全，因为 v 出现在 u 的后继表里就表示有一条来自 u 的入边尚未扣减，而 u 只弹出一次。</p>
+<p>DFS 版的依据是：在有向图中，点的完成时间逆序就是拓扑序——先完成的点不可能有一条指向未完成点的边（否则它会等那点完成）。实现时把三色 DFS 的完成序列整体反转。三色中的灰色（在栈中）还顺带提供了环检测：遇到灰点即存在回边。Kahn 按入度剥层，结果常不唯一；DFS 的结果依赖邻接表顺序。两者都是 O(n+m)，返回 <code>Option</code> 把&quot;有环&quot;编码进类型，比返回空 Vec 更不易误用。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">Kahn：入度 0 入队 → 弹出记录 → 后继入度 −1 → 新入度 0 入队
+       结果长度 &lt; n ⇒ 有环
+DFS ：三色标记 → 完成序 push → 整体 reverse
+       遇到灰点 ⇒ 有环（提前返回 None）</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">61 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn topo_kahn(n: usize, edges: &amp;[(usize, usize)]) -&gt; Option&lt;Vec&lt;usize&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut indeg = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        indeg[v] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        if indeg[i] == 0 { q.push_back(i); }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let mut order = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        order.push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            indeg[v] -= 1; // v 出现在 u 的后继里，说明这条入边尚未扣减</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            if indeg[v] == 0 { q.push_back(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    if order.len() == n { Some(order) } else { None }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">fn topo_dfs(n: usize, edges: &amp;[(usize, usize)]) -&gt; Option&lt;Vec&lt;usize&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    for &amp;(u, v) in edges { g[u].push(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut color = vec![0u8; n]; // 0 白 1 灰 2 黑</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let mut finish = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    for s in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        if color[s] != 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        color[s] = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        let mut frames = vec![(s, 0usize)];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        while let Some(&amp;(u, idx)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            if idx &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                frames.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                let v = g[u][idx];</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">                match color[v] {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">                    0 =&gt; { color[v] = 1; frames.push((v, 0)); }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                    1 =&gt; return None, // 灰点 = 环</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                    _ =&gt; {}</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">                color[u] = 2;</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">                finish.push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">                frames.pop();</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    finish.reverse();</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    Some(finish)</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="53"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    let dag = [(0usize, 1usize), (0, 2), (1, 3), (2, 3), (3, 4)];</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let cyclic = [(0usize, 1usize), (1, 2), (2, 0)];</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    println!(&quot;kahn dag    = {:?}&quot;, topo_kahn(5, &amp;dag));</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    println!(&quot;dfs  dag    = {:?}&quot;, topo_dfs(5, &amp;dag));</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    println!(&quot;kahn cyclic = {:?}&quot;, topo_kahn(3, &amp;cyclic));</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    println!(&quot;dfs  cyclic = {:?}&quot;, topo_dfs(3, &amp;cyclic));</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">kahn dag    = Some([0, 1, 2, 3, 4])</span></div>
+<div class="cl is-text"><span class="code">dfs  dag    = Some([0, 2, 1, 3, 4])</span></div>
+<div class="cl is-text"><span class="code">kahn cyclic = None</span></div>
+<div class="cl is-text"><span class="code">dfs  cyclic = None</span></div></div></div>
+<p>两个 DAG 序列不同但都合法：Kahn 用队列，DFS 用完成序逆序。若题目要求&quot;字典序最小的拓扑序&quot;，把 Kahn 的队列换成 <code>BinaryHeap&lt;Reverse&lt;usize&gt;&gt;</code> 即可；平行边会让入度多加多减，不影响结果。</p>
+<p>Kahn 的四类数据结构里，<code>VecDeque</code> 与 <code>BinaryHeap</code> 都只存点号，空间 O(n)；若需要在拓扑序上做 DP（例如求最长路径），可在弹出的同时把状态转移写到后继上，与入度递减合并在同一个循环里。DFS 版在遇到灰点时立即返回 <code>None</code>，不需要等整个遍历结束——这让它能更早发现环，但也意味着它不会给出&quot;已处理部分&quot;的信息。两种实现的结果顺序都依赖邻接表的插入顺序，若要求输出确定，应在建图后对内层向量排序，或改用优先队列固定选择规则。</p>
+<h2 id="rust-ch03-graph-advanced-24-6-kruskal-按边排序与并查集的切分不变式">24.6 Kruskal：按边排序与并查集的切分不变式</h2>
+<p>最小生成树（MST）在无向连通带权图上选 n−1 条边，使总权最小且连通无环。Kruskal 的贪心是：把边按权从小到大排序，逐条尝试加入，若两端尚未连通就合并。正确性由切分定理保证：对任意一个切分，跨越它的最小权边必属于某棵 MST；每次选当前最短的&quot;安全边&quot;不会破坏这个性质。实现上&quot;是否连通&quot;用并查集回答，路径压缩加按大小合并的摊还复杂度是 O(α(n))，几乎常数。</p>
+<p>代码里 <code>Dsu::find</code> 写成两段循环：第一趟找到根 r，第二趟把沿途节点直接挂到 r（路径压缩）。不能写成递归，因为深链仍可能爆栈；也不能只在第一趟改父指针而不继续走到根，否则返回的是半压缩路径上的中间点。<code>union</code> 按 <code>sz</code> 合并小树到大树，避免退化成链。<code>for (k, &amp;(w,u,v)) in es.iter().enumerate()</code> 里的 k 是排序后的边号，用来在返回值中记录选了哪些边；若只要总权值，可以省掉 <code>used</code>。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>并查集像一群小帮派，开始时每人自成一派。Kruskal 把道路按造价从便宜到贵排好，一条条看：如果这条路连接两个不同帮派，就合并它们并收下这条路；如果两端本来就是一个帮派，收下它会形成环，果断丢掉。最后剩下 n−1 条路，所有点合成一派，总造价最小。</p>
+
+</div>
+</section>
+<p>复杂度 O(m log m) 主要来自排序。注意 <code>kruskal</code> 对不连通图会返回一片森林：<code>used.len() &lt; n−1</code> 时说明图不连通，调用方必须检查这个计数，不能只看总权值。示例里断开的图返回 <code>(2, [0,1])</code>，正是森林的权值与选边数。</p>
+<p><code>find</code> 的两趟循环值得再解释：第一趟沿父指针走到根 r，第二趟把沿途每个节点的父指针直接改成 r。若边走边改而不先找到根，就会把半途节点当成根返回，合并出错误的树。<code>sz</code> 数组记录每棵树的节点数，合并时把小的挂到大的下面，保证树高是 O(log n)；再加上路径压缩，m 次操作的摊还复杂度接近 O(m)。若边权相等，<code>sort_unstable</code> 会任意打乱同权边的次序，MST 的总权仍然唯一，但具体选边可能不同；想让输出确定可用稳定排序或把边号作为 tie-breaker。边权为负也不影响 Kruskal，排序后照常处理即可。</p>
+<h2 id="rust-ch03-graph-advanced-24-7-prim-从已选集合向外的另一种贪心">24.7 Prim：从已选集合向外的另一种贪心</h2>
+<p>Prim 换了一个角度：维护一棵不断长大的树，初始只有源点，每轮选一条&quot;一端在树内、一端在树外&quot;的最小权边，把外面的点加进来。正确性同样来自切分定理——这条边正是跨越&quot;树内/树外&quot;切分的最小边。<code>low[v]</code> 表示 v 当前到树内点的最小边权，用 <code>BinaryHeap&lt;Reverse&lt;(w,v)&gt;&gt;</code> 每次取最小；点入树后打 <code>in_tree</code> 标记，堆里的旧记录用 <code>in_tree[u] || d &gt; low[u]</code> 跳过，与 Dijkstra 的过期项模式一致。</p>
+<p>与 Kruskal 相比：Prim 不需要先把所有边排序，复杂度 O(m log n)，在稠密图上更优；Kruskal 需要排序 O(m log m)，但实现更简单、更容易并行。Prim 若不连通，<code>cnt &lt; n</code>，示例返回 −1 表示无生成树；这个失败状态必须显式返回，不能默默给一个偏小的总权值。选哪个取决于图的疏密与是否需要&quot;边的集合&quot;：Kruskal 天然给出边表，Prim 更擅长从小源点扩展。</p>
+<p>Prim 的起点可以任取，因为生成树总要覆盖所有连通点；换一个起点只改变加入顺序，不改变最小总权。堆里的重复项与 Dijkstra 同理：一条边可能让同一个点多次降低 low，旧记录弹出时 <code>d &gt; low[u]</code> 即丢弃。若图权全相等，Prim 等价于从源出发的 BFS 生成树；若边权有负，Prim 依然正确，因为它只依赖切分定理而非贪心的&quot;距离单调&quot;。空间上，<code>low</code>、<code>in_tree</code> 各 O(n)，堆 O(m)；在稠密图里堆里同时存在 O(m) 条记录，是 Prim 的主要内存开销。若要点数极大而边相对稀疏，可把邻接表换成分层存储来改善局部性，但算法本身不变。生成树的边表可以在成功加入点 v 时顺带记录 <code>parent[v] = u</code>，回溯即得选边集合，无需额外排序。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">79 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::cmp::Reverse;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::collections::BinaryHeap;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Dsu { p: Vec&lt;usize&gt;, sz: Vec&lt;usize&gt; }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl Dsu {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn new(n: usize) -&gt; Self { Dsu { p: (0..n).collect(), sz: vec![1; n] } }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        let mut r = x;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        while self.p[r] != r { r = self.p[r]; }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let mut v = x;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        while self.p[v] != v { let next = self.p[v]; self.p[v] = r; v = next; }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        r</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        let (mut ra, mut rb) = (self.find(a), self.find(b));</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        if ra == rb { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        if self.sz[ra] &lt; self.sz[rb] { std::mem::swap(&amp;mut ra, &amp;mut rb); }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        self.p[rb] = ra;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        self.sz[ra] += self.sz[rb];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        true</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">fn kruskal(n: usize, edges: &amp;[(usize, usize, i64)]) -&gt; (i64, Vec&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let mut es: Vec&lt;(i64, usize, usize)&gt; = edges.iter().map(|&amp;(u, v, w)| (w, u, v)).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    es.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    let mut dsu = Dsu::new(n);</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut total = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let mut used = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    for (k, &amp;(w, u, v)) in es.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        if dsu.union(u, v) {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            total += w;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            used.push(k);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            if used.len() == n - 1 { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    (total, used)</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="39"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">fn prim(n: usize, edges: &amp;[(usize, usize, i64)], src: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let mut g = vec![Vec::&lt;(usize, i64)&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    for &amp;(u, v, w) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        g[u].push((v, w));</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        g[v].push((u, w));</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let inf = i64::MAX / 4;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut low = vec![inf; n];</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    let mut in_tree = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    let mut pq: BinaryHeap&lt;Reverse&lt;(i64, usize)&gt;&gt; = BinaryHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    low[src] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    pq.push(Reverse((0, src)));</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let mut total = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    let mut cnt = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    while let Some(Reverse((d, u))) = pq.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        if in_tree[u] || d &gt; low[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        in_tree[u] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        total += d;</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        cnt += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        for &amp;(v, w) in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">            if !in_tree[v] &amp;&amp; w &lt; low[v] {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">                low[v] = w;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">                pq.push(Reverse((w, v)));</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    if cnt == n { total } else { -1 }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="68"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    let edges = [</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        (0usize, 1usize, 4i64), (0, 2, 2), (1, 2, 1),</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        (1, 3, 5), (2, 3, 8), (2, 4, 10), (3, 4, 3),</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    println!(&quot;kruskal = {:?}&quot;, kruskal(5, &amp;edges));</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    println!(&quot;prim    = {:?}&quot;, prim(5, &amp;edges, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    let disc = [(0usize, 1usize, 1i64), (2, 3, 1)];</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    println!(&quot;kruskal(disconnected) = {:?}&quot;, kruskal(4, &amp;disc));</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    println!(&quot;prim(disconnected)    = {:?}&quot;, prim(4, &amp;disc, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">kruskal = (11, [0, 1, 2, 4])</span></div>
+<div class="cl is-text"><span class="code">prim    = 11</span></div>
+<div class="cl is-text"><span class="code">kruskal(disconnected) = (2, [0, 1])</span></div>
+<div class="cl is-text"><span class="code">prim(disconnected)    = -1</span></div></div></div>
+<p>两种算法在连通图上都是 11，互为印证。注意 Kruskal 对不连通图返回森林权值 2 与两条边，Prim 返回 −1，两者对&quot;无生成树&quot;的表示不同，调用方要按各自约定处理。</p>
+<h2 id="rust-ch03-graph-advanced-24-8-随机对拍-四类算法对暴力裁判">24.8 随机对拍：四类算法对暴力裁判</h2>
+<p>这一单元的算法都适合用&quot;慢但显然对&quot;的对照验证。对拍程序生成 1500 组数据，每组同时检查四件事：其一，随机有向图的 SCC——Tarjan 的分量编号与 Floyd 求出的互达关系对照；其二，随机连通无向图的桥与割点——与&quot;逐条删边后是否仍连通&quot;&quot;逐点删除后是否仍连通&quot;的暴力结果对照；其三，同图的带权 MST——Kruskal 与 Prim 总权必须相等且边数为 n−1；其四，随机 DAG——Kahn 必须成功且结果长度等于 n。</p>
+<p>生成器用 xorshift，连通无向图先造随机生成树（令点 i 的父在 <code>[0,i)</code> 中选）再加随机额外边，既保证连通又能制造环与重边。暴力删边/删点用 BFS 判连通，n≤9 时开销可忽略。Floyd 的互达闭包把 <code>reach[i][i]</code> 初始化为 true，两层循环传递闭包后，<code>i</code> 与 <code>j</code> 同分量当且仅当 <code>reach[i][j] &amp;&amp; reach[j][i]</code>。把 Tarjan 每个分量规范化为&quot;最小点号&quot;，就能与暴力分组逐位比较。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：剖分&quot;不连通/连通&quot;的图要做成两类独立数据。若只在不连通图上测桥与割点，根的特例会被大量无意义的孤立点淹没；若只在连通图上测，又漏掉&quot;多根 DFS&quot;的覆盖。本对拍对无向图保证连通（因为桥割点语义在这种图上最清晰），对 SCC 则允许任意不连通——不同算法用不同数据分布，是对拍设计的基本功。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">230 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        let mut x = self.0;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        x ^= x &lt;&lt; 13;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &gt;&gt; 7;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        self.0 = x;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        x</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn below(&amp;mut self, n: usize) -&gt; usize { (self.next() % n as u64) as usize }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">// 有向图：Tarjan SCC（与正文同一模板，计时器从 1 开始）</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn tarjan_scc(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;Vec&lt;usize&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    for &amp;(u, v) in edges { g[u].push(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let (mut dfn, mut low) = (vec![0usize; n], vec![0usize; n]);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut ins = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let mut stk = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let mut comps = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let mut timer = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    for root in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        if dfn[root] != 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        dfn[root] = timer; low[root] = timer; timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        stk.push(root); ins[root] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let mut fr = vec![(root, 0usize)];</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        while let Some(&amp;(u, i)) = fr.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            if i &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                fr.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                let v = g[u][i];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                if dfn[v] == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                    dfn[v] = timer; low[v] = timer; timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                    stk.push(v); ins[v] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                    fr.push((v, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">                } else if ins[v] { low[u] = low[u].min(dfn[v]); }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                let u = fr.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                if low[u] == dfn[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                    let mut c = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">                    while let Some(v) = stk.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">                        ins[v] = false; c.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">                        if v == u { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">                    comps.push(c);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">                if let Some(&amp;(p, _)) = fr.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">                    if ins[u] { low[p] = low[p].min(low[u]); }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    comps</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="57"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">fn brute_scc(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    let mut r = vec![vec![false; n]; n];</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    for i in 0..n { r[i][i] = true; }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    for &amp;(u, v) in edges { r[u][v] = true; }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    for k in 0..n { for i in 0..n { for j in 0..n { if r[i][k] &amp;&amp; r[k][j] { r[i][j] = true; } } } }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    (0..n).map(|i| (0..n).find(|&amp;j| r[i][j] &amp;&amp; r[j][i]).unwrap()).collect()</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="65"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">// 无向图：桥与割点（与正文同一模板，根用 p != root 判定）</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">fn bridge_art(n: usize, edges: &amp;[(usize, usize)]) -&gt; (Vec&lt;(usize, usize)&gt;, Vec&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    let mut g = vec![Vec::&lt;(usize, usize)&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    for (id, &amp;(u, v)) in edges.iter().enumerate() { g[u].push((v, id)); g[v].push((u, id)); }</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    let (mut dfn, mut low) = (vec![0usize; n], vec![0usize; n]);</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    let (mut par, mut pe) = (vec![n; n], vec![usize::MAX; n]);</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    let mut ch = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    let mut art = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    let mut br = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    let mut timer = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    for root in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">        if dfn[root] != 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">        dfn[root] = timer; low[root] = timer; timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">        let mut fr = vec![(root, 0usize)];</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        while let Some(&amp;(u, i)) = fr.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">            if i &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">                fr.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">                let (v, id) = g[u][i];</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">                if id == pe[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">                if dfn[v] == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">                    par[v] = u; pe[v] = id; ch[u] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">                    dfn[v] = timer; low[v] = timer; timer += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">                    fr.push((v, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">                } else { low[u] = low[u].min(dfn[v]); }</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">                let u = fr.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">                if let Some(&amp;(p, _)) = fr.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">                    if low[u] &gt; dfn[p] { br.push((p.min(u), p.max(u))); }</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">                    if p != root &amp;&amp; low[u] &gt;= dfn[p] { art[p] = true; }</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">                    low[p] = low[p].min(low[u]);</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">        if ch[root] &gt; 1 { art[root] = true; }</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">    (br, (0..n).filter(|&amp;i| art[i]).collect())</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="103"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">fn connected(n: usize, edges: &amp;[(usize, usize)], skip_edge: Option&lt;usize&gt;, skip_node: Option&lt;usize&gt;) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">    let start = match skip_node { Some(0) if n &gt; 1 =&gt; 1, _ =&gt; 0 };</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">    let mut seen = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">    let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">    seen[start] = true; q.push_back(start);</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">    while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">        for (id, &amp;(a, b)) in edges.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">            if Some(id) == skip_edge { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">            let v = if a == u { b } else if b == u { a } else { continue };</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">            if Some(v) == skip_node { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">            if !seen[v] { seen[v] = true; q.push_back(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">    (0..n).all(|i| Some(i) == skip_node || seen[i])</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="119"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">fn brute_bridge_art(n: usize, edges: &amp;[(usize, usize)]) -&gt; (Vec&lt;(usize, usize)&gt;, Vec&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">    let mut br = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">    for id in 0..edges.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">        if !connected(n, edges, Some(id), None) {</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">            let (u, v) = edges[id];</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">            br.push((u.min(v), u.max(v)));</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">    let art = (0..n).filter(|&amp;v| !connected(n, edges, None, Some(v))).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">    (br, art)</span></div>
+<div class="cl"><span class="ln" data-ln="130"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="131"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">// 带权 MST：Kruskal 与 Prim</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">fn kruskal(n: usize, edges: &amp;[(usize, usize, i64)]) -&gt; (i64, usize) {</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">    let mut es: Vec&lt;_&gt; = edges.iter().map(|&amp;(u, v, w)| (w, u, v)).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">    es.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">    let mut p: Vec&lt;usize&gt; = (0..n).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">    fn root(p: &amp;mut [usize], x: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">        let mut r = x; while p[r] != r { r = p[r]; }</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">        let mut v = x; while p[v] != v { let nx = p[v]; p[v] = r; v = nx; }</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">        r</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">    let (mut total, mut cnt) = (0i64, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">    for (w, u, v) in es {</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">        let (a, b) = (root(&amp;mut p, u), root(&amp;mut p, v));</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">        if a != b { p[b] = a; total += w; cnt += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">    (total, cnt)</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="149"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="150"></span><span class="code">fn prim(n: usize, edges: &amp;[(usize, usize, i64)]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="151"></span><span class="code">    use std::cmp::Reverse;</span></div>
+<div class="cl"><span class="ln" data-ln="152"></span><span class="code">    use std::collections::BinaryHeap;</span></div>
+<div class="cl"><span class="ln" data-ln="153"></span><span class="code">    let mut g = vec![Vec::&lt;(usize, i64)&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="154"></span><span class="code">    for &amp;(u, v, w) in edges { g[u].push((v, w)); g[v].push((u, w)); }</span></div>
+<div class="cl"><span class="ln" data-ln="155"></span><span class="code">    let inf = i64::MAX / 4;</span></div>
+<div class="cl"><span class="ln" data-ln="156"></span><span class="code">    let (mut low, mut used) = (vec![inf; n], vec![false; n]);</span></div>
+<div class="cl"><span class="ln" data-ln="157"></span><span class="code">    let mut pq = BinaryHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="158"></span><span class="code">    low[0] = 0; pq.push(Reverse((0i64, 0usize)));</span></div>
+<div class="cl"><span class="ln" data-ln="159"></span><span class="code">    let (mut total, mut cnt) = (0i64, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="160"></span><span class="code">    while let Some(Reverse((d, u))) = pq.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="161"></span><span class="code">        if used[u] || d &gt; low[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="162"></span><span class="code">        used[u] = true; total += d; cnt += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="163"></span><span class="code">        for &amp;(v, w) in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="164"></span><span class="code">            if !used[v] &amp;&amp; w &lt; low[v] { low[v] = w; pq.push(Reverse((w, v))); }</span></div>
+<div class="cl"><span class="ln" data-ln="165"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="166"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="167"></span><span class="code">    if cnt == n { total } else { -1 }</span></div>
+<div class="cl"><span class="ln" data-ln="168"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="169"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="170"></span><span class="code">fn topo_kahn(n: usize, edges: &amp;[(usize, usize)]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="171"></span><span class="code">    let mut deg = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="172"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="173"></span><span class="code">    for &amp;(u, v) in edges { g[u].push(v); deg[v] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="174"></span><span class="code">    let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="175"></span><span class="code">    for i in 0..n { if deg[i] == 0 { q.push_back(i); } }</span></div>
+<div class="cl"><span class="ln" data-ln="176"></span><span class="code">    let mut cnt = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="177"></span><span class="code">    while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="178"></span><span class="code">        cnt += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="179"></span><span class="code">        for &amp;v in &amp;g[u] { deg[v] -= 1; if deg[v] == 0 { q.push_back(v); } }</span></div>
+<div class="cl"><span class="ln" data-ln="180"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="181"></span><span class="code">    cnt == n</span></div>
+<div class="cl"><span class="ln" data-ln="182"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="183"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="184"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="185"></span><span class="code">    let mut rng = Rng(0x1234ABCD_EF012345);</span></div>
+<div class="cl"><span class="ln" data-ln="186"></span><span class="code">    let (mut scc_g, mut und_g, mut dag_g, mut bad) = (0, 0, 0, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="187"></span><span class="code">    for _ in 0..1500 {</span></div>
+<div class="cl"><span class="ln" data-ln="188"></span><span class="code">        // 有向图：Tarjan SCC 对暴力互达</span></div>
+<div class="cl"><span class="ln" data-ln="189"></span><span class="code">        let n = 2 + rng.below(8);</span></div>
+<div class="cl"><span class="ln" data-ln="190"></span><span class="code">        let m = rng.below(14);</span></div>
+<div class="cl"><span class="ln" data-ln="191"></span><span class="code">        let mut de: Vec&lt;(usize, usize)&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="192"></span><span class="code">        for _ in 0..m { de.push((rng.below(n), rng.below(n))); }</span></div>
+<div class="cl"><span class="ln" data-ln="193"></span><span class="code">        let want = brute_scc(n, &amp;de);</span></div>
+<div class="cl"><span class="ln" data-ln="194"></span><span class="code">        let comps = tarjan_scc(n, &amp;de);</span></div>
+<div class="cl"><span class="ln" data-ln="195"></span><span class="code">        let mut got = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="196"></span><span class="code">        for c in comps { let mn = *c.iter().min().unwrap(); for v in c { got[v] = mn; } }</span></div>
+<div class="cl"><span class="ln" data-ln="197"></span><span class="code">        if got != want { bad += 1; if bad &lt;= 3 { println!(&quot;BAD scc n={} got={:?} want={:?}&quot;, n, got, want); } }</span></div>
+<div class="cl"><span class="ln" data-ln="198"></span><span class="code">        scc_g += 1;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="199"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="200"></span><span class="code">        // 连通无向图：桥与割点对照暴力删边/删点</span></div>
+<div class="cl"><span class="ln" data-ln="201"></span><span class="code">        let mut ue: Vec&lt;(usize, usize)&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="202"></span><span class="code">        for i in 1..n { let p = rng.below(i); ue.push((i, p)); }</span></div>
+<div class="cl"><span class="ln" data-ln="203"></span><span class="code">        for _ in 0..rng.below(6) { ue.push((rng.below(n), rng.below(n))); }</span></div>
+<div class="cl"><span class="ln" data-ln="204"></span><span class="code">        let (mut gb, mut ga) = bridge_art(n, &amp;ue);</span></div>
+<div class="cl"><span class="ln" data-ln="205"></span><span class="code">        let (mut wb, mut wa) = brute_bridge_art(n, &amp;ue);</span></div>
+<div class="cl"><span class="ln" data-ln="206"></span><span class="code">        gb.sort(); wb.sort(); ga.sort(); wa.sort();</span></div>
+<div class="cl"><span class="ln" data-ln="207"></span><span class="code">        if gb != wb || ga != wa {</span></div>
+<div class="cl"><span class="ln" data-ln="208"></span><span class="code">            bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="209"></span><span class="code">            if bad &lt;= 3 { println!(&quot;BAD bridge/art n={} gb={:?} wb={:?} ga={:?} wa={:?}&quot;, n, gb, wb, ga, wa); }</span></div>
+<div class="cl"><span class="ln" data-ln="210"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="211"></span><span class="code">        und_g += 1;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="212"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="213"></span><span class="code">        // 带权连通图：Kruskal 与 Prim 的总权对照</span></div>
+<div class="cl"><span class="ln" data-ln="214"></span><span class="code">        let we: Vec&lt;_&gt; = ue.iter().map(|&amp;(u, v)| (u, v, rng.below(20) as i64 + 1)).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="215"></span><span class="code">        let (kt, kcnt) = kruskal(n, &amp;we);</span></div>
+<div class="cl"><span class="ln" data-ln="216"></span><span class="code">        let pt = prim(n, &amp;we);</span></div>
+<div class="cl"><span class="ln" data-ln="217"></span><span class="code">        if kcnt != n - 1 || kt != pt || pt &lt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="218"></span><span class="code">            bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="219"></span><span class="code">            if bad &lt;= 3 { println!(&quot;BAD mst n={} k={}/{} p={}&quot;, n, kt, kcnt, pt); }</span></div>
+<div class="cl"><span class="ln" data-ln="220"></span><span class="code">        }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="221"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="222"></span><span class="code">        // 随机 DAG：Kahn 判据与图论定义一致性</span></div>
+<div class="cl"><span class="ln" data-ln="223"></span><span class="code">        let mut de2 = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="224"></span><span class="code">        for i in 0..n { for j in i + 1..n { if rng.below(4) == 0 { de2.push((i, j)); } } }</span></div>
+<div class="cl"><span class="ln" data-ln="225"></span><span class="code">        if !topo_kahn(n, &amp;de2) { bad += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="226"></span><span class="code">        dag_g += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="227"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="228"></span><span class="code">    println!(&quot;scc_graphs={} und_graphs={} dag_graphs={} mismatches={}&quot;, scc_g, und_g, dag_g, bad);</span></div>
+<div class="cl"><span class="ln" data-ln="229"></span><span class="code">    if bad == 0 { println!(&quot;RESULT: PASS&quot;); }</span></div>
+<div class="cl"><span class="ln" data-ln="230"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">scc_graphs=1500 und_graphs=1500 dag_graphs=1500 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">RESULT: PASS</span></div></div></div>
+<p>三类图共 4500 组，加上 MST 的 1500 组，零分歧。这组对拍在开发中先报出 900 余次割点不一致，才引出 24.4 的两个 bug；修正后一次性清零。它同时验证了 24.4 强调的&quot;用边号跳过父边&quot;——随机的额外边经常制造重边，若写成按父节点跳过，这里必然报错。</p>
+<p>读对拍输出时，<code>mismatches=0</code> 只是必要条件，还要确认每类计数都非零：若某类生成器因为参数写错而从不产生有效输入，零分歧毫无意义。本例里 <code>neg_cycles</code> 之类的分支在 23 单元出现过，这里四类图都稳定生成 1500 组。若出现 MISMATCH，打印的 n 与具体数组能让你用同种子重放，先缩小到最小反例，再决定是改算法还是改裁判——这个流程在 24.4 的排错里被完整走了一遍。</p>
+<h2 id="rust-ch03-graph-advanced-24-9-工程取舍-复杂度-连通性与失败状态">24.9 工程取舍：复杂度、连通性与失败状态</h2>
+<p>把四类算法的适用边界列成表，选型时先对照数据形态再动手。Tarjan SCC 与桥割点都是一次 DFS 的副产品，线性时间，适合超大图；缩点后的 DAG 可以衔接拓扑 DP。Kruskal 的瓶颈是排序，Prim 的瓶颈是堆，按图密度选择即可。所有实现都必须处理不连通图：SCC 用外层循环遍历所有根，桥割点同理，Kruskal 要检查选边数，Prim 要检查计数。</p>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>对象</th>
+<th>复杂度</th>
+<th>失败/边界信号</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tarjan SCC</td>
+<td>有向图</td>
+<td>O(n+m)</td>
+<td>分量表覆盖所有点</td>
+<td>缩点、入度为 0 的分量数</td>
+</tr>
+<tr>
+<td>桥与割点</td>
+<td>无向图</td>
+<td>O(n+m)</td>
+<td>根孩子数、边号跳父边</td>
+<td>网络可靠性</td>
+</tr>
+<tr>
+<td>拓扑排序</td>
+<td>DAG</td>
+<td>O(n+m)</td>
+<td>结果长度 &lt; n 即有环</td>
+<td>依赖调度</td>
+</tr>
+<tr>
+<td>Kruskal</td>
+<td>无向带权图</td>
+<td>O(m log m)</td>
+<td>选边数不足即不连通</td>
+<td>稀疏图 MST</td>
+</tr>
+<tr>
+<td>Prim</td>
+<td>无向带权图</td>
+<td>O(m log n)</td>
+<td>cnt &lt; n 返回 −1</td>
+<td>稠密图 MST</td>
+</tr>
+</tbody></table>
+
+<p>还有一个常被忽略的工程点：失败状态要用类型表达。拓扑排序返回 <code>Option&lt;Vec&lt;usize&gt;&gt;</code>，Prim 返回 −1 或 <code>Option&lt;i64&gt;</code>，Kruskal 返回选边数让调用方判断森林。若把&quot;有环&quot;&quot;不连通&quot;都压成空 Vec 或零权值，上层很容易把错误结果继续参与计算。Rust 的枚举和 <code>Option</code> 在这里不是形式主义，而是把算法的前置条件写进签名——调用方想忽略都难。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>在 <code>tarjan_scc</code> 的结果上实现&quot;缩点&quot;：给每个点标 <code>comp[v]</code>，建缩点 DAG 并去重边，输出入度为 0 的分量个数；用 24.8 的随机有向图框架，与&quot;暴力判断某分量是否有外来入边&quot;对照，贴出真实输出。</li>
+<li>构造一个含重边的无向图（例如两条 2—3 的边），分别用&quot;按父节点跳过&quot;和&quot;按边号跳过&quot;两种写法求桥，记录两者差异；再从 24.8 的生成器里找一个能复现差异的种子。</li>
+<li>把 <code>prim</code> 改成朴素 O(n²) 版本（不堆，每次线性找最小 low[v]），在同一组随机图上与堆版本对拍总权，并如实记录两种规模下的耗时（真实测量，不要编造）。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么 Tarjan 的计时器必须从 1 开始？<code>dfn[v] == 0</code> 代表什么？</li>
+<li>无向图求桥时为什么必须用边号而不是父节点编号跳过父边？根的割点判定为什么要特判？</li>
+<li>Kruskal 为什么不连通时返回森林？Prim 又如何表示&quot;无生成树&quot;？两种表示分别要求调用方检查什么？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__graph-traversal-shortest-paths.md.html">← 图遍历与最短路：从队列不变式到负环判定</a><a href="rust__chapters__ch03__flow-and-matching.md.html">网络流与匹配：增广路、最小割与二分图建模 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

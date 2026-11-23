@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trait 与泛型</title>
+<meta name="description" content="第 6 单元 · 建议 90 分钟 · 从单态化到 vtable，看清 Rust 多态的编译期与运行期代价">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">trait 与泛型</h1><p class="doc-sub">第 6 单元 · 建议 90 分钟 · 从单态化到 vtable，看清 Rust 多态的编译期与运行期代价</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 06-structs-traits-generics.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-1-泛型如何落地-单态化-符号与代码膨胀">6.1 泛型如何落地：单态化、符号与代码膨胀</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-2-dyn-trait-与-vtable-胖指针的两个字">6.2 dyn Trait 与 vtable：胖指针的两个字</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-3-关联类型与-gat-把-输出类型-交给实现者">6.3 关联类型与 GAT：把「输出类型」交给实现者</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-4-supertrait-与约束传播-从-t-describe-到-dy">6.4 supertrait 与约束传播：从 `T: Describe` 到 `dyn Display`</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-5-coherence-与-orphan-rule-谁有资格写-impl">6.5 coherence 与 orphan rule：谁有资格写 impl</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-6-blanket-impl-一条规则覆盖一片类型">6.6 blanket impl：一条规则覆盖一片类型</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-7-impl-trait-与-dyn-trait-静态分派与动态分派的取">6.7 impl Trait 与 dyn Trait：静态分派与动态分派的取舍</a></li><li class="toc-l2"><a href="#rust-ch01-structs-traits-generics-6-8-把多态当作-api-设计工具">6.8 把多态当作 API 设计工具</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>说清单态化做了什么，能解释代码膨胀与编译时间的来源</li>
+<li>画出 <code>&amp;dyn Trait</code> 胖指针的两个字，理解 vtable 的布局与 object safety</li>
+<li>区分关联类型、GAT 与普通泛型参数，知道各自解决什么问题</li>
+<li>理解 coherence 与 orphan rule 为什么存在，能用 newtype 绕开孤儿限制</li>
+<li>在 <code>impl Trait</code> 与 <code>dyn Trait</code> 之间做出有依据的取舍</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-structs-traits-generics-6-1-泛型如何落地-单态化-符号与代码膨胀">6.1 泛型如何落地：单态化、符号与代码膨胀</h2>
+<p>泛型函数 <code>fn describe&lt;T: Area&gt;(x: &amp;T)</code> 在源码里只有一份，但机器码里通常没有「接收任意 T 的通用版本」。Rust 采用 <strong>monomorphization（单态化）</strong>：编译器在调用点把每个具体类型代进去，为 <code>(Circle)</code>、<code>(Square)</code> 各生成一份专用代码。这解释了为什么泛型是零成本的——优化器看到的是 <code>Circle.area()</code> 的直接调用，可以内联、常量折叠，没有间接跳转。</p>
+<p>代价同样是零成本的对立面：<strong>代码按具体类型复制</strong>。下面的代码先跑起来看看行为，再用 <code>--emit asm</code> 看编译器实际生成的符号：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">25 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::size_of;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">trait Area { fn area(&amp;self) -&gt; f64; }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct Circle(f64);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">struct Square(f64);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">impl Area for Circle {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn area(&amp;self) -&gt; f64 { std::f64::consts::PI * self.0 * self.0 }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">impl Area for Square {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    fn area(&amp;self) -&gt; f64 { self.0 * self.0 }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">#[inline(never)]</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn describe&lt;T: Area&gt;(x: &amp;T) -&gt; String {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    format!(&quot;面积 {:.2}&quot;, x.area())</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;{}&quot;, describe(&amp;Circle(1.0)));</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;{}&quot;, describe(&amp;Square(2.0)));</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;size: Circle={} Square={} &amp;dyn Area={} &amp;Circle={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        size_of::&lt;Circle&gt;(), size_of::&lt;Square&gt;(), size_of::&lt;&amp;dyn Area&gt;(), size_of::&lt;&amp;Circle&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b1.rs -o u06_b1 &amp;&amp; ./u06_b1</span></div>
+<div class="cl is-text"><span class="code">面积 3.14</span></div>
+<div class="cl is-text"><span class="code">面积 4.00</span></div>
+<div class="cl is-text"><span class="code">size: Circle=8 Square=8 &amp;dyn Area=16 &amp;Circle=8</span></div></div></div>
+<p>为了把「一份源码生成两份机器码」变成可观察的事实，下面这个库把一个泛型函数实例化为 <code>u32</code> 和 <code>f64</code> 两种类型，再输出汇编：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">12 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![crate_type = &quot;lib&quot;]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">#[inline(never)]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">pub fn add_one&lt;T: std::ops::Add&lt;Output = T&gt; + From&lt;u8&gt;&gt;(x: T) -&gt; T {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    x + T::from(1u8)</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">pub fn demo() {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let _ = add_one(1u32);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let _ = add_one(2.5f64);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O --emit asm u06_mono.rs -o u06_mono.s</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ grep -n 'add_one' u06_mono.s</span></div>
+<div class="cl is-text"><span class="code">18:	.def	_ZN8u06_mono7add_one17h50742560bbb6b516E;</span></div>
+<div class="cl is-text"><span class="code">27:	.section	.text,&quot;xr&quot;,one_only,_ZN8u06_mono7add_one17h50742560bbb6b516E,unique,1</span></div>
+<div class="cl is-text"><span class="code">28:	.globl	_ZN8u06_mono7add_one17h50742560bbb6b516E</span></div>
+<div class="cl is-text"><span class="code">30: _ZN8u06_mono7add_one17h50742560bbb6b516E:</span></div>
+<div class="cl is-text"><span class="code">34:	.def	_ZN8u06_mono7add_one17hceb6a75b91c6d72eE;</span></div>
+<div class="cl is-text"><span class="code">38:	.section	.text,&quot;xr&quot;,one_only,_ZN8u06_mono7add_one17hceb6a75b91c6d72eE,unique,2</span></div>
+<div class="cl is-text"><span class="code">39:	.globl	_ZN8u06_mono7add_one17hceb6a75b91c6d72eE</span></div>
+<div class="cl is-text"><span class="code">41: _ZN8u06_mono7add_one17hceb6a75b91c6d72eE:</span></div></div></div>
+<p>两个不同的符号名（hash 后缀不同）就是两个单态化实例。<code>#[inline(never)]</code> 只是为了防止优化器把它们内联掉、看不到符号；真实代码里优化器会按成本决定是否内联。</p>
+<table>
+<thead>
+<tr>
+<th>观察维度</th>
+<th>泛型（单态化）</th>
+<th><code>dyn Trait</code>（动态分派）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>机器码份数</td>
+<td>每个具体类型一份</td>
+<td>一份通用代码</td>
+</tr>
+<tr>
+<td>调用方式</td>
+<td>直接调用 / 可内联</td>
+<td>经 vtable 间接调用</td>
+</tr>
+<tr>
+<td>二进制体积</td>
+<td>类型多时膨胀明显</td>
+<td>更紧凑</td>
+</tr>
+<tr>
+<td>编译时间</td>
+<td>每份实例都要过一遍优化</td>
+<td>相对短</td>
+</tr>
+<tr>
+<td>异构集合</td>
+<td>需要枚举包装</td>
+<td><code>Vec&lt;Box&lt;dyn Trait&gt;&gt;</code> 天然支持</td>
+</tr>
+</tbody></table>
+
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>泛型像「按尺码定制」。工厂拿到了 S、M、L 三种订单，就开三条产线各做一批，速度飞快、没有转接环节，但产线本身占地方。动态分派像「统一规格 + 说明书」，只有一条产线，每次操作前先翻说明书看该调哪个动作——省地方，但多了翻页的动作。</p>
+
+</div>
+</section>
+<p>泛型与 C++ 的模板在机制上相似，但 Rust 多了一层约束：编译器在单态化之前就已经用 trait bound 检查过函数体，因此报错发生在定义处，而不是等到某个奇怪的实例化才炸开。这也是为什么泛型函数的错误信息往往指向 <code>where</code> 子句缺失，而不是具体调用点——编译器必须先证明「对所有满足约束的 T，这段代码都成立」，才能放心生成代码。</p>
+<p>单态化还带来一个副作用：<strong>私有类型也可能被单态化进公共 API 的机器码</strong>。如果公有泛型函数内部调用了某个私有辅助函数，这个辅助函数也会被复制多份；从性能角度看没有问题，但从符号暴露和缓存局部性看，有时会把热代码撑大。缓解膨胀的常见手段有三类：把大函数体中真正与类型无关的部分抽成非泛型函数；在类型数量多且逻辑相同的情况下改用 <code>dyn Trait</code>；以及依赖增量编译与 LTO 的实际效果做实测，而不是凭直觉裁剪。要注意「代码膨胀」在多数业务程序里远没有编译时间来得痛，优化应该由数据驱动。</p>
+<h2 id="rust-ch01-structs-traits-generics-6-2-dyn-trait-与-vtable-胖指针的两个字">6.2 dyn Trait 与 vtable：胖指针的两个字</h2>
+<p><code>&amp;dyn Draw</code> 的大小是 16 字节（上一个程序的输出已经证明），而 <code>&amp;A</code> 只有 8 字节。多出来的 8 字节是 <strong>vtable 指针</strong>，于是 trait 对象引用成为一个 <strong>胖指针（fat pointer）</strong>：</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">&amp;dyn Draw（x86_64，16 字节）
+
+┌────────────────┬────────────────┐
+│ 数据指针 (8B)   │ vtable 指针 (8B)│
+└────────────────┴────────────────┘
+        │                 │
+        ▼                 ▼
+  具体的 A / B 实例     ┌──────────────────────┐
+                      │ drop_in_place         │
+                      │ size / align          │
+                      │ draw() 函数指针        │
+                      │ id()   函数指针        │
+                      └──────────────────────┘</pre></figure>
+<p>vtable 由编译器为每个「具体类型 + trait」的组合静态生成。它含有析构、大小、对齐等运行时元数据，以及按固定顺序排列的方法函数指针。调用 <code>a.draw()</code> 时，代码先从胖指针的第二个字取出 vtable，再按编译期确定的槽位取函数指针，最后把数据指针作为 <code>self</code> 传进去——一次间接调用，无法内联（除非去虚拟化）。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">28 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::size_of;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">trait Draw {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn draw(&amp;self) -&gt; &amp;'static str;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn id(&amp;self) -&gt; u32 { 0 }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">struct A;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">struct B(u64);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">impl Draw for A {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn draw(&amp;self) -&gt; &amp;'static str { &quot;A&quot; }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn id(&amp;self) -&gt; u32 { 1 }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">impl Draw for B {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    fn draw(&amp;self) -&gt; &amp;'static str { &quot;B&quot; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let a: &amp;dyn Draw = &amp;A;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let b: &amp;dyn Draw = &amp;B(7);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;&amp;dyn Draw = {}&quot;, size_of::&lt;&amp;dyn Draw&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;&amp;A = {}, &amp;B = {}&quot;, size_of::&lt;&amp;A&gt;(), size_of::&lt;&amp;B&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;Box&lt;dyn Draw&gt; = {}, Box&lt;A&gt; = {}&quot;, size_of::&lt;Box&lt;dyn Draw&gt;&gt;(), size_of::&lt;Box&lt;A&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;a.draw()={} a.id()={}&quot;, a.draw(), a.id());</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;b.draw()={} b.id()={}&quot;, b.draw(), b.id());</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b2.rs -o u06_b2 &amp;&amp; ./u06_b2</span></div>
+<div class="cl is-text"><span class="code">&amp;dyn Draw = 16</span></div>
+<div class="cl is-text"><span class="code">&amp;A = 8, &amp;B = 8</span></div>
+<div class="cl is-text"><span class="code">Box&lt;dyn Draw&gt; = 16, Box&lt;A&gt; = 8</span></div>
+<div class="cl is-text"><span class="code">a.draw()=A a.id()=1</span></div>
+<div class="cl is-text"><span class="code">b.draw()=B b.id()=0</span></div></div></div>
+<p><code>a.id()=1</code>、<code>b.id()=0</code> 说明 <code>impl</code> 里的默认方法也走 vtable：B 没有覆盖，vtable 槽位里放的是默认实现的函数指针。<code>Box&lt;dyn Draw&gt;</code> 同样是 16 字节，说明胖指针的属性来自「引用到 trait 对象」，与它指向栈还是堆无关。</p>
+<p>vtable 的精确布局是编译器实现细节，跨版本不保证一致，但组成部分是稳定的：最前面是与 <code>drop_in_place</code> 等价的析构入口，随后是 <code>size</code>、<code>align</code> 两个整数（让 <code>Box&lt;dyn Trait&gt;</code> 能正确释放堆内存），再往后是方法指针，supertrait 的方法通常在子 trait 方法之后。因为 vtable 与具体类型一一对应，同类型不同实例共享同一个 vtable——16 字节里的第二个字只是指向一张只读表的指针，开销非常固定。还可以写 <code>dyn Draw + Send</code> 这样的复合 trait 对象，它要求底层类型实现 <code>Send</code>，vtable 会相应包含必要的自动 trait 信息。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>胖指针像一张「门禁卡」。卡的正面是房间号（数据指针），背面印着这扇门能开哪些锁的清单（vtable）。不同品牌的锁芯（A、B 两种类型）清单内容不同，但卡的大小一模一样，保安只需翻到背面按图索骥。代价是每次开门都得翻卡，而不能像定制钥匙那样直接一拧到底。</p>
+
+</div>
+</section>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：不是所有 trait 都能做成 <code>dyn Trait</code>。编译器要求 trait <strong>object safe</strong>：方法不能有泛型参数（否则 vtable 槽位数量无法固定）；返回 <code>Self</code> 的方法（典型如 <code>Clone</code>）默认不满足；关联类型必须在使用处用 <code>Type = Concrete</code> 指定；方法中若出现 <code>where Self: Sized</code>，该方法会被排除在 vtable 之外（仍可在泛型上下文调用）。把 <code>Clone</code> 这样的 trait 直接写成 <code>dyn Clone</code> 会报 E0038，常见替代是手写一个 <code>fn clone_box(&amp;self) -&gt; Box&lt;dyn MyTrait&gt;</code> 的对象安全方法。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-structs-traits-generics-6-3-关联类型与-gat-把-输出类型-交给实现者">6.3 关联类型与 GAT：把「输出类型」交给实现者</h2>
+<p>泛型参数表示「调用方可以选择类型」，关联类型表示「实现方决定类型」。以 <code>trait Container</code> 为例，若写成 <code>trait Container&lt;Item&gt;</code>，同一个 <code>Boxed&lt;i32&gt;</code> 可以同时实现 <code>Container&lt;i32&gt;</code> 和 <code>Container&lt;String&gt;</code>，遍历时无法知道唯一的元素类型；改为关联类型 <code>type Item</code>，每个实现者只能指定一个，接口因此变得确定。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">trait Container {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    type Item;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn get(&amp;self) -&gt; &amp;Self::Item;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">struct Boxed&lt;T&gt;(T);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">impl&lt;T&gt; Container for Boxed&lt;T&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    type Item = T;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn get(&amp;self) -&gt; &amp;T { &amp;self.0 }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">trait Streaming {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    type Item&lt;'a&gt; where Self: 'a;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    fn peek(&amp;self) -&gt; Self::Item&lt;'_&gt;;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">struct Words(String);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">impl Streaming for Words {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    type Item&lt;'a&gt; = &amp;'a str where Self: 'a;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    fn peek(&amp;self) -&gt; &amp;str { &amp;self.0 }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">fn show&lt;C: Container&gt;(c: &amp;C) where C::Item: std::fmt::Debug {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;item = {:?}&quot;, c.get());</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="28"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let b = Boxed(42u32);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    show(&amp;b);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let w = Words(&quot;hello&quot;.to_string());</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;peek = {}&quot;, w.peek());</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b3.rs -o u06_b3 &amp;&amp; ./u06_b3</span></div>
+<div class="cl is-text"><span class="code">item = 42</span></div>
+<div class="cl is-text"><span class="code">peek = hello</span></div></div></div>
+<p>GAT（generic associated type，泛型关联类型）在关联类型上再加一层参数，本例的 <code>type Item&lt;&#39;a&gt;</code> 让「借出的类型」可以携带生命周期。它解决的是普通关联类型表达不了的场景：** lending iterator（出借型迭代器）**——每次 <code>next</code> 返回的是借用 <code>self</code> 的 <code>&amp;mut T</code>，这个引用的生命周期必须跟这次调用的借用绑定，而不是跟整个迭代器的生命周期绑定。写法上的关键是 <code>where Self: &#39;a</code>，它保证 <code>Self</code> 活得比 <code>&#39;a</code> 久，否则实现里无法返回指向自身的引用。</p>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>谁选择类型</th>
+<th>一个实现者能有几个</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>泛型参数 <code>trait T&lt;A&gt;</code></td>
+<td>调用方/使用处</td>
+<td>多个</td>
+<td><code>From&lt;T&gt;</code>、<code>Add&lt;Rhs&gt;</code></td>
+</tr>
+<tr>
+<td>关联类型 <code>type A</code></td>
+<td>实现方</td>
+<td>一个</td>
+<td><code>Iterator::Item</code></td>
+</tr>
+<tr>
+<td>GAT <code>type A&lt;&#39;a&gt;</code></td>
+<td>实现方 + 生命周期参数</td>
+<td>每个 <code>&#39;a</code> 一个</td>
+<td>出借型集合、异步抽象</td>
+</tr>
+</tbody></table>
+
+<p>关联类型本身也能带约束，写成 <code>type Item: Debug;</code>，这样所有实现者都必须满足，使用处就不必重复写 <code>where C::Item: Debug</code>。这两种风格各有用途：约束写在 trait 定义里，表达「这是该抽象不可分割的要求」；写在函数里，表达「只有这个算法需要这个能力」。标准库的 <code>Iterator</code> 没有给 <code>Item</code> 加约束，所以 <code>collect</code> 等具体方法各自在 <code>where</code> 里声明所需的能力，保持了 trait 的普适性。</p>
+<p><code>show</code> 函数签名里的 <code>where C::Item: Debug</code> 是约束关联类型的标准写法；它告诉编译器「只有元素可打印的容器才能调用我」。没有这条约束，<code>println!(&quot;{:?}&quot;, c.get())</code> 会在泛型函数体内直接报错——编译器不会等到实例化时才检查函数体，它必须在定义处就能证明代码对所有满足约束的 <code>C</code> 都成立。这也解释了泛型代码的一个常见困惑：为什么「我明知道这个类型能打印」还是报错？因为编译器检查的是<strong>约束能否推出结论</strong>，而不是某个具体实例的实际情况；把需要的约束补进签名，才是正确的沟通方式。</p>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>GAT 的稳定化经历了多年打磨，早期方案在生命周期约束上容易触发 unsound 问题。如今写 <code>type Item&lt;&#39;a&gt; where Self: &#39;a</code> 是标准形式；省略 <code>where Self: &#39;a</code> 在大多数简单情况下也能通过，但一旦实现里需要把 <code>&amp;self</code> 存进返回类型，编译器就会要求你补上它。把它当作「借出型抽象的默认模板」即可。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-structs-traits-generics-6-4-supertrait-与约束传播-从-t-describe-到-dy">6.4 supertrait 与约束传播：从 <code>T: Describe</code> 到 <code>dyn Display</code></h2>
+<p><code>trait Describe: Display</code> 表示「实现 Describe 必须先实现 Display」，即 Display 是 Describe 的 <strong>supertrait（父 trait）</strong>。它的直接效果是：在 <code>Describe</code> 的默认方法里可以直接调用 <code>self.show()</code>，不必再加 <code>where Self: Display</code>；在泛型函数里写 <code>T: Describe</code>，编译器也自动知道 <code>T: Display</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">32 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">trait Display {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    fn show(&amp;self) -&gt; String;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">trait Describe: Display {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn describe(&amp;self) -&gt; String {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        format!(&quot;描述：{}&quot;, self.show())</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">struct Point(i32, i32);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">impl Display for Point {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    fn show(&amp;self) -&gt; String { format!(&quot;({}, {})&quot;, self.0, self.1) }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">impl Describe for Point {}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">// 只写 T: Describe 的约束，自动获得 Display 的能力</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn need_display&lt;T: Display&gt;(x: &amp;T) -&gt; String { x.show() }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">fn print_all&lt;T: Describe&gt;(x: &amp;T) {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;{}&quot;, x.describe());</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;supertrait 也可调用 show(): {}&quot;, need_display(x));</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="25"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    print_all(&amp;Point(3, 4));</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let p = Point(1, 2);</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let d: &amp;dyn Describe = &amp;p;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let u: &amp;dyn Display = d; // trait upcasting：子 trait 对象可转成父 trait 对象</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    println!(&quot;upcast: {}&quot;, u.show());</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b4.rs -o u06_b4 &amp;&amp; ./u06_b4</span></div>
+<div class="cl is-text"><span class="code">描述：(3, 4)</span></div>
+<div class="cl is-text"><span class="code">supertrait 也可调用 show(): (3, 4)</span></div>
+<div class="cl is-text"><span class="code">upcast: (1, 2)</span></div></div></div>
+<p>最后三行演示 <strong>trait upcasting（trait 对象上转）</strong>：<code>&amp;dyn Describe</code> 可以自动转成 <code>&amp;dyn Display</code>，因为每个 Describe 都是 Display。这在这里是安全的——编译器要构造新的 vtable 指针，让它只包含 Display 的方法槽位。这也揭示了 supertrait 与类型约束的区别：<code>T: Describe</code> 是编译期约束的传播，<code>dyn Describe -&gt; dyn Display</code> 是运行期对象的安全收窄。</p>
+<p><code>trait Describe: Display</code> 在语义上等价于 <code>trait Describe where Self: Display</code>，前者只是语法糖。若 trait 之间没有父子关系，也可以在选择性调用的地方写 <code>fn f&lt;T&gt;() where T: Display + Describe</code>，两者都列出来即可；区别是 supertrait 把约束固化进了 trait 定义，所有实现者都必须遵守，而 <code>where</code> 子句只约束某个函数。</p>
+<p>需要注意依赖方向是不可逆的：<code>T: Display</code> 不能推出 <code>T: Describe</code>，<code>dyn Display</code> 也不能下转成 <code>dyn Describe</code>（除非用 <code>Any</code> 或自定义下转方案设计）。因此设计 trait 层级时要问：「谁能离开谁而存在？」把最基础的能力放在父 trait，把增强能力放在子 trait。像 <code>Send</code>、<code>Sync</code>、<code>Copy</code> 这样的 **marker trait（标记 trait）**没有方法，只承载编译期事实，也常作为 supertrait 出现：例如 <code>trait MyTask: Send + &#39;static</code>，一次性要求所有实现者都能跨线程传递且拥有数据。这类约束在 <code>dyn</code> 侧同样有效——<code>dyn MyTask</code> 自动带有 <code>Send</code> 的保证，放进线程时不需要额外标注。</p>
+<p>实现 supertrait 时必须先为父 trait 写 impl，哪怕父 trait 的所有方法都有默认实现——Rust 不会因为「有默认值」就自动认为类型实现了该 trait，你必须显式写下 <code>impl Display for Point</code> 这样的空实现。编译器在这里给出的错误往往是「the trait bound <code>Point: Display</code> is not satisfied」，意思就是缺了这一步。这一点在派生宏与 blanket impl 混用时尤其容易踩坑： blanket impl 提供父 trait 的实现，子 trait 再针对具体类型写 impl，顺序和重叠关系都要满足 coherence。把 supertrait 当成「对实现者的硬性前置条件」，而不是「顺便提供的便利」，设计就不会跑偏。</p>
+<h2 id="rust-ch01-structs-traits-generics-6-5-coherence-与-orphan-rule-谁有资格写-impl">6.5 coherence 与 orphan rule：谁有资格写 impl</h2>
+<p>Rust 规定：一个 <code>impl Trait for Type</code> 必须满足 <strong>orphan rule（孤儿规则）</strong>——trait 或类型中至少有一个在当前 crate 定义。写 <code>impl Display for Vec&lt;i32&gt;</code> 时，<code>Display</code> 和 <code>Vec</code> 都来自标准库，本地没有任何「锚点」，编译器直接拒绝：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_orphan_fail.rs -o o</span></div>
+<div class="cl is-text"><span class="code">error[E0117]: only traits defined in the current crate can be implemented for types defined outside of the crate</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u06_orphan_fail.rs:4:1</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">4 | impl Display for Vec&lt;i32&gt; {</span></div>
+<div class="cl is-text"><span class="code">  | ^^^^^^^^^^^^^^^^^--------</span></div>
+<div class="cl is-text"><span class="code">  |                  |</span></div>
+<div class="cl is-text"><span class="code">  |                  `Vec` is not defined in the current crate</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">  = note: impl doesn't have any local type before any uncovered type parameters</span></div>
+<div class="cl is-text"><span class="code">  = note: define and implement a trait or new type instead</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>与 orphan rule 配套的是 <strong>coherence（一致性）</strong>：同一个 trait 对同一个类型不能有两个重叠的 impl。下面两条规则中，第二条是第一条的的特例，编译器能看出来，于是拒绝：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_overlap_fail.rs -o o2</span></div>
+<div class="cl is-text"><span class="code">error[E0119]: conflicting implementations of trait `Local&lt;u8&gt;` for type `i32`</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u06_overlap_fail.rs:7:1</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 | impl&lt;T&gt; Local&lt;T&gt; for i32 {</span></div>
+<div class="cl is-text"><span class="code">  | ------------------------ first implementation here</span></div>
+<div class="cl is-text"><span class="code">...</span></div>
+<div class="cl is-text"><span class="code">7 | impl Local&lt;u8&gt; for i32 {</span></div>
+<div class="cl is-text"><span class="code">  | ^^^^^^^^^^^^^^^^^^^^^^ conflicting implementation for `i32`</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>为什么要这么严格？因为 trait 解析必须在编译期给出<strong>唯一答案</strong>。如果允许任意 crate 给外来类型加外来 trait，那么两个依赖各自实现一个 <code>Display for Vec&lt;i32&gt;</code> 时，主 crate 就无法决定该用哪一个；更糟的是，某天标准库自己加了同样的 impl，所有下游都会冲突。orphan rule 把「谁能写 impl」限定为本地 trait 或本地类型，使整个依赖图的 impl 集合可预测。</p>
+<table>
+<thead>
+<tr>
+<th>想做的事</th>
+<th>是否允许</th>
+<th>替代方案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>本地 trait + 外来类型</td>
+<td>允许</td>
+<td>直接写</td>
+</tr>
+<tr>
+<td>外来 trait + 本地类型</td>
+<td>允许</td>
+<td>直接写</td>
+</tr>
+<tr>
+<td>外来 trait + 外来类型</td>
+<td>禁止</td>
+<td>newtype 包装或定义本地 trait</td>
+</tr>
+<tr>
+<td>一条 blanket impl 加一条更具体的特例</td>
+<td>通常禁止</td>
+<td>用关联类型/类型参数在 impl 内部区分</td>
+</tr>
+</tbody></table>
+
+<p>orphan rule 在涉及泛型参数时更微妙：规则要求「在第一个本地类型之前不能出现未被覆盖的类型参数」。因此 <code>impl&lt;T&gt; MyTrait for Vec&lt;T&gt;</code> 是合法的（本地 trait 在前），而 <code>impl&lt;T&gt; ForeignTrait for MyWrapper&lt;T&gt;</code> 也合法（自类型本地），但 <code>impl&lt;T&gt; ForeignTrait&lt;T&gt; for Vec&lt;T&gt;</code> 就不合法——外来 trait 的参数位置和自类型都不是本地锚点。这条规则看似绕口，实质是保证任何 impl 都能被唯一定位到本地 crate，从而让依赖解析保持确定性。</p>
+<p>从 semver 角度看，给自己的类型新增一个 trait impl 也算潜在的破坏性变更：下游可能刚好有一个 blanket impl 与之冲突。特性门控（feature gate）由此派上用场——把可选 impl 放在 crate feature 后面，让使用者自己决定是否引入。</p>
+<p>绕开孤儿限制的标准手法是 <strong>newtype 模式</strong>：<code>struct MyVec(Vec&lt;i32&gt;);</code> 之后 <code>impl Display for MyVec</code> 就合法了，因为 <code>MyVec</code> 是本地类型。它同时带来一个额外好处：可以用类型系统区分「普通 Vec」和「需要特殊展示的 Vec」，防止语义串味。代价是 <code>MyVec</code> 不再自动拥有 <code>Vec</code> 的方法，需要手动转发或实现 <code>Deref</code>（后者会重新暴露部分语义，慎用）。</p>
+<h2 id="rust-ch01-structs-traits-generics-6-6-blanket-impl-一条规则覆盖一片类型">6.6 blanket impl：一条规则覆盖一片类型</h2>
+<p>orphan rule 限制的是「谁可以写」，blanket impl 则展示「一次可以覆盖多少」。下面的 <code>impl&lt;T: Debug&gt; Dump for T</code> 让所有可调试类型自动获得 <code>dump()</code>，无需逐个实现：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">trait Dump { fn dump(&amp;self) -&gt; String; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl&lt;T: std::fmt::Debug&gt; Dump for T {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn dump(&amp;self) -&gt; String { format!(&quot;{:?}&quot;, self) }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">struct Marker;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;{}&quot;, 42.dump());</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;{}&quot;, Marker.dump());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;{}&quot;, vec![1, 2, 3].dump());</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;{}&quot;, Some(&quot;x&quot;).dump());</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b5.rs -o u06_b5 &amp;&amp; ./u06_b5</span></div>
+<div class="cl is-text"><span class="code">42</span></div>
+<div class="cl is-text"><span class="code">Marker</span></div>
+<div class="cl is-text"><span class="code">[1, 2, 3]</span></div>
+<div class="cl is-text"><span class="code">Some(&quot;x&quot;)</span></div></div></div>
+<p><code>i32</code>、<code>Marker</code>、<code>Vec&lt;i32&gt;</code>、<code>Option&lt;&amp;str&gt;</code> 四种类型共享同一份实现代码，这是 blanket impl 的表达力。标准库中最典型的 blanket impl 是 <code>impl&lt;T&gt; From&lt;T&gt; for T</code>（自反转换），正是它让 <code>?</code> 在同类型错误之间无需额外 <code>From</code>；<code>impl&lt;T&gt; Into&lt;U&gt; for T where U: From&lt;T&gt;</code> 则是另一条，把 <code>From</code> 的实现反向传播给 <code>Into</code>。</p>
+<p>blanket impl 的边界由 coherence 守得很紧：如果 crate 写了 <code>impl&lt;T: Debug&gt; Dump for T</code>，就不能再写 <code>impl Dump for MySpecialType</code>，即便 <code>MySpecialType</code> 想给出更定制的行为——编译器认为两者重叠。这是 Rust 缺乏「负向约束」（negative bounds）的直接后果：编译器不会假设「将来不会有人给 MySpecialType 实现 Debug」。工程上的解法是让 trait 自己带一个策略关联类型，或在 blanket impl 内部通过类型-level 的分支把特殊行为编码进去。</p>
+<p>为什么不能像某些语言那样「更具体的实现优先」？因为 trait 解析要在<strong>泛型上下文</strong>中也给出唯一答案。在 <code>fn f&lt;T: Debug&gt;(x: T)</code> 里调用 <code>x.dump()</code> 时，编译器只知道 <code>T: Debug</code>，不知道 <code>T</code> 将来会不会是 <code>MySpecialType</code>；如果同时存在通用 impl 和特例 impl，它就无法决定选哪一个，也就无法为泛型函数体生成代码。Rust 选择的是「宁可拒绝定义，也不留下歧义」。实验中的 specialization（特化）特性试图在受控条件下放宽这一点，但目前仍未稳定，不应在生产代码中依赖。</p>
+<p>与 blanket impl 互补的是 trait 的<strong>默认方法</strong>：默认方法让实现者可以选择覆盖或不覆盖，而且不会占用 impl 的唯一性。当「不同实现需要不同行为」时，默认方法通常比 blanket impl 更合适；当「所有实现共享同一份逻辑、只是类型不同」时，blanket impl 才是对的。两者的取舍标准可以概括为一句话：行为由类型决定用 blanket，行为由实现者决定用默认方法。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：给本地 trait 写过于宽泛的 blanket impl，会永久占用整个类型的实现空间，下游连「为这个具体类型写特例」都做不到（外来类型 + 本地 trait 的组合会被你的 blanket 覆盖）。发布库前要问：这个 trait 真的对<strong>所有</strong> <code>T</code> 都有唯一合理实现吗？如果答案犹豫，先提供默认方法或适配器函数，把 blanket impl 留到语义确实唯一的地方。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-structs-traits-generics-6-7-impl-trait-与-dyn-trait-静态分派与动态分派的取">6.7 impl Trait 与 dyn Trait：静态分派与动态分派的取舍</h2>
+<p>两种写法都能表达「某个实现了 Speak 的东西」，但生成的代码截然不同。下面的程序把三种形态放在一起：返回值用 <code>impl Speak</code>（RPIT，return-position impl Trait），参数用 <code>impl Speak</code>（等价于泛型），异构集合用 <code>Box&lt;dyn Speak&gt;</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">23 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">trait Speak { fn speak(&amp;self) -&gt; &amp;'static str; }</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">struct Dog;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Cat;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Speak for Dog { fn speak(&amp;self) -&gt; &amp;'static str { &quot;汪&quot; } }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl Speak for Cat { fn speak(&amp;self) -&gt; &amp;'static str { &quot;喵&quot; } }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">// impl Trait 返回：调用方只知道「某个实现了 Speak 的具体类型」</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn make() -&gt; impl Speak { Dog }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">// impl Trait 参数：等价于泛型 T: Speak</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn show_static(x: &amp;impl Speak) -&gt; &amp;'static str { x.speak() }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">// dyn Trait 参数：运行期通过 vtable 分派</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn show_dynamic(x: &amp;dyn Speak) -&gt; &amp;'static str { x.speak() }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let d = make();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;static: {}&quot;, show_static(&amp;d));</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let animals: Vec&lt;Box&lt;dyn Speak&gt;&gt; = vec![Box::new(Dog), Box::new(Cat)];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    for a in &amp;animals {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        println!(&quot;dynamic: {}&quot;, show_dynamic(a.as_ref()));</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u06_b6.rs -o u06_b6 &amp;&amp; ./u06_b6</span></div>
+<div class="cl is-text"><span class="code">static: 汪</span></div>
+<div class="cl is-text"><span class="code">dynamic: 汪</span></div>
+<div class="cl is-text"><span class="code">dynamic: 喵</span></div></div></div>
+<p><code>impl Trait</code> 有几个容易被忽略的性质：作为返回类型时它是 <strong>不透明类型（opaque type）</strong>，调用方不知道具体类型，因此不能写 <code>let x: Dog = make();</code>，但可以用 <code>impl Speak</code> 继续传递；每次返回必须是同一个具体类型（想返回不同类型得用枚举或 <code>Box&lt;dyn Speak&gt;</code>）；作为 <code>Vec&lt;impl Speak&gt;</code> 也不可能，因为容器要求元素类型统一。作为参数时 <code>impl Trait</code> 只是 <code>fn f&lt;T: Trait&gt;(x: &amp;T)</code> 的简写，没有额外语义。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th><code>impl Trait</code> / 泛型</th>
+<th><code>dyn Trait</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>分派时机</td>
+<td>编译期，直接调用</td>
+<td>运行期，vtable 间接调用</td>
+</tr>
+<tr>
+<td>是否可内联</td>
+<td>可以</td>
+<td>通常不行</td>
+</tr>
+<tr>
+<td>异构集合</td>
+<td>不行（除非枚举包装）</td>
+<td>可以</td>
+</tr>
+<tr>
+<td>返回具体类型是否可见</td>
+<td>不可见（不透明）</td>
+<td>可见为 <code>dyn Trait</code></td>
+</tr>
+<tr>
+<td>trait 要求</td>
+<td>无特殊要求</td>
+<td>必须 object safe</td>
+</tr>
+<tr>
+<td>典型场景</td>
+<td>性能敏感的库内部 API</td>
+<td>插件、回调、GUI 组件树</td>
+</tr>
+</tbody></table>
+
+<p><code>impl Trait</code> 还有一个生命周期相关的细节值得记住：在 edition 2021 中，返回位置 <code>impl Trait</code> 默认不会自动捕获函数参数里的所有生命周期，若返回类型借用了参数，需要写成 <code>-&gt; impl Trait + &#39;_</code> 或显式标注生命周期；edition 2024 改变了这一默认行为。写库时显式标出生命周期，能避免跨 edition 迁移时的意外。</p>
+<p>另一个演进方向是 <strong>RPITIT</strong>（trait 方法中的返回位置 impl Trait），例如 <code>trait Stream { fn next(&amp;mut self) -&gt; impl Future&lt;Output = Option&lt;T&gt;&gt;; }</code>。它让 trait 能描述「每个实现者返回自己的具体类型」，避免了装箱 <code>Box&lt;dyn Future&gt;</code> 的开销，代价是这样的 trait 通常不再 object safe——又一次「编译期信息 vs 运行期擦除」的取舍。</p>
+<p>取舍的实质是「把类型信息留在编译期，还是在运行期擦除」。能确定只有一个具体类型、且代码在热路径上时，选 <code>impl Trait</code>；需要把不同类型放进同一个集合、或通过动态库在运行时决定实现时，选 <code>dyn Trait</code>。API 设计中常见的折中是「对外 <code>impl Trait</code> 暴露能力，对内用泛型保持效率」，把 dyn 的开销限制在真正需要异构的边界上。还要考虑可测试性：<code>dyn Trait</code> 让 mock 对象非常容易构造，而泛型 API 的单元测试需要为每个测试替身单态化一份代码，这在大型测试套件里会影响编译时间。</p>
+<h2 id="rust-ch01-structs-traits-generics-6-8-把多态当作-api-设计工具">6.8 把多态当作 API 设计工具</h2>
+<p>回头看整节，泛型、trait、关联类型、supertrait、blanket impl 与 dyn 不是彼此独立的特性，而是一套围绕「抽象成本放在哪个阶段」的工具箱。下面的流程描述编译器面对一次方法调用时的决策路径：</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">调用 `x.method()` 时的解析路径
+
+  x 的具体类型已知？
+      │
+      ├─ 是 ──► 查找该类型的 inherent impl ──► 找到则直接调用
+      │                                       │
+      │                                       └─ 未找到 ──► 查找 trait impl（含 blanket）
+      │                                                        │
+      │                                                        ▼
+      │                                                 单态化 / 静态分派
+      └─ 否（x: &amp;dyn Trait）──► 从胖指针取 vtable ──► 按槽位间接调用</pre></figure>
+<p>设计 API 时，可以遵循几条经验。第一，<strong>先用具体类型写通，再从重复中抽象出 trait</strong>。过早引入泛型会把简单问题变成约束求解问题，而编译器给出的错误信息也会复杂得多。第二，<strong>trait 的名字描述能力而不是实现</strong>，<code>Read + Seek</code> 这样的组合比 <code>MyFileLikeHelper</code> 更容易复用。第三，<strong>约束写到刚好够用</strong>：<code>T: Debug</code> 能解决的不要写 <code>T: Display + Clone + Send</code>，多余的约束会无谓地缩小可用类型集合。</p>
+<p>调试泛型代码时有个实用技巧：先写一个具体类型的版本把逻辑跑通，再逐步把类型参数化；出错时先读「编译器期望的约束是什么」，而不是盯着实例化处的报错。另一个技巧是对复杂约束用 <code>where</code> 子句分行书写，让每个约束单独可删——删掉后若函数体报错，就知道这条约束是真正必需的，否则是冗余的。</p>
+<p>还有一个关于「零成本抽象」的成熟态度：零成本指的是<strong>运行时代价</strong>为零或可控，不是编译时间、代码体积与认知负担都为零。泛型把成本从运行时挪到了编译期与二进制体积，这是很好的交易，但要知道账目放在哪里。真正成熟的 Rust 代码不是「全部泛型」或「全部 dyn」，而是清楚每个边界上多态的收益与代价，在热路径用静态分派、在扩展点用动态分派。</p>
+<p>最后，trait 系统最深的工程价值其实是 coherence：它让不同团队、不同 crate 独立编写的 impl 能够自动拼合成一个全局一致的、无歧义的解析结果。没有这条保证，「给类型加一个 trait 实现」就会像给全局变量重新赋值一样危险，大型项目的依赖组合将寸步难行。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>写一个泛型函数 <code>fn twice&lt;T&gt;(x: T) -&gt; (T, T) where T: Clone</code>，分别用 <code>u32</code> 和 <code>String</code> 调用；再用 <code>rustc -O --emit asm</code> 观察是否为两种类型生成了不同符号。</li>
+<li>定义一个带默认方法的 trait，先验证它不能作为 <code>dyn Trait</code> 使用（提示：加一个泛型方法），再用 <code>where Self: Sized</code> 把该方法排除出 vtable，验证 trait 变得 object safe。</li>
+<li>把 <code>6.3</code> 的 <code>Streaming</code> 改成不用 GAT 的版本（只能用 <code>type Item</code>），观察为什么无法返回借用 <code>self</code> 的引用；记录编译器的报错要点。</li>
+<li>用 newtype 模式为 <code>Vec&lt;i32&gt;</code> 实现本地 trait，并写两条重叠的 impl 触发 E0119，解释 coherence 为什么必须拒绝。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>单态化为什么能带来零运行时代价，它的代价又体现在哪里？</li>
+<li><code>&amp;dyn Draw</code> 为什么是 16 字节？vtable 里大致有什么？</li>
+<li>关联类型与泛型参数在「谁决定类型」上的区别是什么？GAT 多出来的那个参数解决什么问题？</li>
+<li>orphan rule 与 coherence 分别阻止了什么？为什么它们对依赖组合很重要？</li>
+<li>什么情况下必须用 <code>dyn Trait</code> 而不能用 <code>impl Trait</code>？什么情况下反过来？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__enums-and-errors.md.html">← 枚举与错误处理</a><a href="rust__chapters__ch01__closures-and-iterators.md.html">闭包与迭代器 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

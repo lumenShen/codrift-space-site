@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>贪心与构造</title>
+<meta name="description" content="第 30 单元 · 建议 90 分钟 · 交换论证、区间调度、Huffman 与 Havel-Hakimi，把&quot;每一步都选当前最好&quot;讲成可证明的方法">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">贪心与构造</h1><p class="doc-sub">第 30 单元 · 建议 90 分钟 · 交换论证、区间调度、Huffman 与 Havel-Hakimi，把&quot;每一步都选当前最好&quot;讲成可证明的方法</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 30-greedy-and-constructive.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-1-贪心的本质与交换论证范式">30.1 贪心的本质与交换论证范式</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-2-交换论证实例-最小化最大延迟-edd">30.2 交换论证实例：最小化最大延迟（EDD）</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-3-区间调度-按结束时间贪心">30.3 区间调度：按结束时间贪心</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-4-huffman-编码-最优合并模式">30.4 Huffman 编码：最优合并模式</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-5-构造法-havel-hakimi-判定度数序列">30.5 构造法：Havel-Hakimi 判定度数序列</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-6-四种方法的横向对照">30.6 四种方法的横向对照</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-7-边界-陷阱与工程取舍">30.7 边界、陷阱与工程取舍</a></li><li class="toc-l2"><a href="#rust-ch03-greedy-and-constructive-30-8-练习与自检">30.8 练习与自检</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>掌握交换论证的标准套路，能用它证明 EDD 调度与区间调度贪心的正确性</li>
+<li>理解 Huffman 的最优合并模式与堆实现，能用暴力合并顺序对拍最优代价</li>
+<li>会用 Havel-Hakimi 构造性判定度数序列是否可图，并用图枚举对照</li>
+<li>能区分贪心、动态规划与构造法的适用边界，不为&quot;看起来简单&quot;的错误贪心所惑</li>
+<li>对每种方法都能完成&quot;暴力版 → 贪心/构造版 → 随机对拍&quot;的验证闭环</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-greedy-and-constructive-30-1-贪心的本质与交换论证范式">30.1 贪心的本质与交换论证范式</h2>
+<p>贪心法的外观很简单：每一步都选当前看起来最优的决策，且不回头。但&quot;看起来最优&quot;必须被证明为全局最优，否则就是一个漂亮的谎言。证明贪心正确性的主力工具是<strong>交换论证</strong>（exchange argument）：先取某个最优解 O，若 O 的第一步与贪心选择 G 不同，就通过一次局部交换把 O 改造成以 G 开头的新最优解 O′，同时不降低解的质量；对后续步骤重复这个论证，就能把任意最优解逐步变成贪心解，从而证明贪心解最优。</p>
+<p>交换论证的关键不在&quot;交换&quot;动作本身，而在<strong>找到那个不变量</strong>：交换后哪些量保持不变、哪个量单调不增。常见的论证模板有几种。其一是&quot;相邻交换&quot;：若两个相邻决策的顺序违反某个排序规则（如截止时间晚的排在早的前面），交换它们不会让目标变差；反复消除所有逆序就得到排序贪心。其二是&quot;剪切粘贴&quot;：把最优解中某个元素替换成贪心选的元素，用元素的属性（如结束时间最早）证明替换后仍可行。其三是&quot;保留前缀&quot;：证明贪心的第一步出现在某个最优解中，然后递归到子问题。</p>
+<p>与动态规划相比，贪心不做&quot;枚举所有决策再取最好&quot;，而是直接锁定一个决策。这带来 O(n log n) 甚至 O(n) 的速度，也带来更高的证明门槛——只要有一个反例，整个贪心策略就失效。因此写贪心之前，务必先问：这个选择能否用交换论证支撑？它的&quot;不劣性&quot;来自哪个不变量？如果答不上来，先写暴力版或对拍，别急着相信直觉。</p>
+<p>交换论证还有一个容易忽略的前提：子问题必须与原问题同构。EDD 里交换掉前两个任务后，剩下的任务仍是&quot;单机调度、最小化最大延迟&quot;，目标函数形式不变；区间调度里选中一个区间、删掉所有冲突区间后，剩下的仍是&quot;选最多不重叠区间&quot;。若交换后问题的约束发生了变化（比如多出一个跨任务的耦合条件），归纳就断了，证明不成立。识别这一点的方法是：写证明时明确写出&quot;交换后子问题的定义&quot;，并逐字比对它和原问题的定义是否一致。另一个实用技巧是用对拍来&quot;寻找证明&quot;——先让随机测试跑通，观察贪心解与最优解在结构上有什么恒定关系（比如总是某个排序的前缀），这种关系常常就是交换论证里那个不变量的线索。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>贪心就是&quot;每次都拿眼前最好的&quot;，听着很靠谱，其实经常翻车。交换论证是给贪心开的一张证明条：假设有个神仙给出了最优解，我就把它的第一步换成我的贪心选择，然后证明&quot;换完不会更差&quot;。只要每次都能这么换，神仙解就能一步步被改造成我的解，那我的解自然也是最优的。关键是要说清楚&quot;为什么换完不更差&quot;，这句话就是证明的核心。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-greedy-and-constructive-30-2-交换论证实例-最小化最大延迟-edd">30.2 交换论证实例：最小化最大延迟（EDD）</h2>
+<p><strong>问题定义。</strong> 有 n 个任务，任务 i 需要连续处理 t[i] 时间，截止时间 d[i]。单机从第 0 时刻开始，一次只做一个任务且不可中断。任务的完成时刻 C[i] 减去 d[i] 是它的延迟 L[i]（可为负，表示提前完成）。求一个处理顺序，使最大延迟 max L[i] 最小。</p>
+<p><strong>贪心选择。</strong> 按截止时间从早到晚排序（Earliest Due Date，EDD），依次处理。这个规则只依赖 d，与 t 无关——初看有点反直觉，因为长任务似乎该早做。</p>
+<p><strong>交换论证。</strong> 设某最优解中存在相邻两个任务 i、j，满足 d[i] &gt; d[j] 但 i 排在 j 前面（一个&quot;截止时间的逆序&quot;）。交换这两个任务的顺序：交换前它们的完成时刻是 C 与 C + t[i]；交换后变成 C + t[j] 与 C + t[j] + t[i]。由于两个任务的总完成时刻相同，后续任务的完成时刻完全不变，只需检查这两个任务的最大延迟。交换后 j 的完成时刻从 C+t[i] 提前到 C+t[j]（注意 t[j] 不一定小于 t[i]，但 j 的截止更早），其延迟不会变大；而 i 的完成时刻从 C 变为 C+t[j]，延迟增加 t[j]。关键比较：交换前 i 的延迟是 C+t[i]−d[i]，交换后是 C+t[j]−d[i]。因为 d[i] &gt; d[j]，有 t[j]−d[i] &lt; t[j]−d[j]，再结合交换前 j 的延迟 C+t[i]−d[j] ≥ C+t[j]−d[j]（因 t[i] ≥ t[j]?）——更严谨的写法是：令交换前两者最大延迟为 M，交换后 i 的延迟 ≤ 交换前 j 的延迟（因为 d[i] &gt; d[j] 意味着 i 的截止更晚，把 i 往后挪不会让它比原来 j 更糟），且 j 提前完成只会更优。因此交换不增加最大延迟。反复消除所有这样的逆序，得到的就是 EDD 顺序，它必然最优。</p>
+<p><strong>实现与复杂度。</strong> 只需对索引按 d 排序，一遍扫描累加当前时刻并更新最大延迟。时间 O(n log n)（排序），空间 O(n)。</p>
+<p>下面的程序对随机 t∈[1,8]、d∈[1,21]、n∈[1,7] 生成 200 组，用全排列枚举所有顺序的暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">63 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// minimize maximum lateness: EDD (earliest due date) order</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn min_max_lateness(t: &amp;[i64], d: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut idx: Vec&lt;usize&gt; = (0..t.len()).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    idx.sort_by_key(|&amp;i| d[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut worst = i64::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    for i in idx {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        cur += t[i];</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        worst = worst.max(cur - d[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    worst</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn brute(t: &amp;[i64], d: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    fn rec(t: &amp;[i64], d: &amp;[i64], perm: &amp;mut Vec&lt;usize&gt;, used: &amp;mut [bool], best: &amp;mut i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        if perm.len() == t.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            let mut worst = i64::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            for &amp;i in perm.iter() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">                cur += t[i];</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">                worst = worst.max(cur - d[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            if worst &lt; *best { *best = worst; }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">            return;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        for i in 0..t.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">            if used[i] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">            used[i] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            perm.push(i);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            rec(t, d, perm, used, best);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            perm.pop();</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            used[i] = false;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    let mut best = i64::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    rec(t, d, &amp;mut Vec::new(), &amp;mut vec![false; t.len()], &amp;mut best);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    let t = [2i64, 1, 3, 2];</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    let d = [4i64, 3, 5, 6];</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    println!(&quot;demo edd = {}&quot;, min_max_lateness(&amp;t, &amp;d));</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let mut rng = Rng(0x1234_5678_9abc_def0);</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        let n = 1 + rng.range(0, 7) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        let t: Vec&lt;i64&gt; = (0..n).map(|_| rng.range(1, 9) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        let d: Vec&lt;i64&gt; = (0..n).map(|_| rng.range(1, 22) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        let a = min_max_lateness(&amp;t, &amp;d);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        let b = brute(&amp;t, &amp;d);</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        if a != b { println!(&quot;MISMATCH edd={} brute={}&quot;, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    println!(&quot;stress edd: {} (200 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo edd = 2</span></div>
+<div class="cl is-text"><span class="code">stress edd: OK (200 random cases)</span></div></div></div>
+<p>这个例子说明交换论证的典型形态：只要能找到&quot;逆序&quot;并证明交换不劣，贪心就成立。注意这里的排序只按 d，不看 t——如果写成按 t 从小到大排，对拍会立刻给出反例。贪心的&quot;简单&quot;往往来自一个不那么显然的不变量，切忌凭第一直觉改排序键。</p>
+<p>再补充两点边界语义。其一，延迟 L[i] = C[i] − d[i] 允许为负，表示提前完成；目标是让&quot;最坏的那个延迟&quot;尽量小，所以答案可能是负数（所有任务都提前）。程序中用 <code>i64::MIN</code> 初始化 worst、用 <code>i64::MAX</code> 初始化暴力版的 best，正是为了正确处理负值——若误用 0 初始化，所有任务都提前时答案会被错算成 0。其二，任务处理时间允许为 0 吗？本单元对拍取 t∈[1,8]，不为 0；若题目允许 t=0，排序仍然正确，但&quot;完成时刻相同&quot;的边界会让多个任务的延迟相等，交换论证里的不等号要改成非严格形式。写证明时把等号情形纳入考量，是避免&quot;证明看起来对、代码边界错&quot;的关键。</p>
+<h2 id="rust-ch03-greedy-and-constructive-30-3-区间调度-按结束时间贪心">30.3 区间调度：按结束时间贪心</h2>
+<p><strong>问题定义。</strong> 给定 n 个半开区间 [s, e)，从中选尽可能多的互不重叠区间。区间 [1,3) 与 [3,5) 不重叠（前者的右端等于后者的左端）。这是&quot;安排最多会议&quot;&quot;选最多不冲突任务&quot;的抽象。</p>
+<p><strong>贪心选择。</strong> 按区间右端点 e 从小到大排序，每次选结束最早且与已选区间不冲突的那个。直觉是：结束越早，给后面留下的空间越大。</p>
+<p><strong>正确性论证（剪切粘贴）。</strong> 设贪心的第一步选了结束最早的区间 g。取任一最优解 O，设它的第一个区间是 o。因为 g 的结束时间不晚于 o，把 O 中的 o 替换成 g 后：g 与 O 中其余区间仍不冲突（它们原本都在 o 之后开始，而 g 结束更早），且区间数不变。于是存在一个包含 g 的最优解。接着把所有与 g 冲突的区间从解中删去，问题退化为&quot;在 g 之后开始的区间里选最多不重叠区间&quot;——与原问题同构。归纳即得贪心最优。这个论证也说明为什么按开始时间排序不对：开始早的区间可能很长，霸占后续全部空间。</p>
+<p><strong>实现与复杂度。</strong> 排序 O(n log n)，一遍扫描 O(n)。判定不冲突的条件是 <code>s &gt;= last_end</code>（半开区间）。若用闭区间，条件要改成 <code>s &gt; last_end</code>——这是最经典的边界错误之一。</p>
+<p>下面的程序对随机区间（左端 0..19，长度 1..8）n∈[1,14] 生成 300 组，用枚举所有子集、检查子集中区间两两不冲突的暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">61 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// max number of non-overlapping half-open intervals [s, e)</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn max_intervals(mut iv: Vec&lt;(i32, i32)&gt;) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    iv.sort_by_key(|&amp;x| x.1);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut cnt = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut last_end = i32::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    for (s, e) in iv {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        if s &gt;= last_end {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            cnt += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            last_end = e;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    cnt</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn brute(iv: &amp;[(i32, i32)]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let n = iv.len();</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let mut best = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    for mask in 0u32..(1u32 &lt;&lt; n) {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut chosen = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            if mask &amp; (1u32 &lt;&lt; i) != 0 { chosen.push(iv[i]); }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        chosen.sort_by_key(|&amp;x| x.1);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        let mut ok = true;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        let mut last = i32::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        for &amp;(s, e) in &amp;chosen {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">            if s &lt; last { ok = false; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">            last = e;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        if ok &amp;&amp; chosen.len() &gt; best { best = chosen.len(); }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="36"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="42"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    let iv = vec![(1, 4), (2, 3), (3, 5), (0, 6), (5, 7), (6, 9), (8, 10)];</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    println!(&quot;demo max_intervals = {}&quot;, max_intervals(iv.clone()));</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut rng = Rng(0xfeed_beef_1234_5678);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let n = 1 + rng.range(0, 14) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let mut iv = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        for _ in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">            let s = rng.range(0, 20) as i32;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">            let e = s + rng.range(1, 9) as i32;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            iv.push((s, e));</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        let a = max_intervals(iv.clone());</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        let b = brute(&amp;iv);</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        if a != b { println!(&quot;MISMATCH greedy={} brute={}&quot;, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    println!(&quot;stress interval: {} (300 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo max_intervals = 4</span></div>
+<div class="cl is-text"><span class="code">stress interval: OK (300 random cases)</span></div></div></div>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">候选区间按右端排序：
+[0,6) [2,3) [1,4) [3,5) [5,7) [6,9) [8,10)
+  ✗      ✓      ✗      ✓     ✓      ✗      ✓
+选 [2,3) → [3,5) → [5,7) → [8,10)，共 4 个</pre></figure>
+<p>区间调度还有加权版本：每个区间带权重，要最大化权重和。此时&quot;选结束最早&quot;不再最优，因为一个短而轻的区间可能挡住一个长而重的区间。加权版本必须用动态规划（按右端点排序后 <code>dp[i] = max(dp[i-1], w[i] + dp[p(i)])</code>，p(i) 是与 i 不冲突的最后一个区间）。判断该用贪心还是 DP，标准就是看&quot;局部最优是否天然全局最优&quot;——无权时成立，加权时不成立。</p>
+<h2 id="rust-ch03-greedy-and-constructive-30-4-huffman-编码-最优合并模式">30.4 Huffman 编码：最优合并模式</h2>
+<p><strong>问题定义。</strong> 给定 n 个权重 w[0..n)，构造一棵以这些权重为叶子的满二叉树，使带权路径长度最小，即 Σ w[i] × depth[i]。这等价于最优合并模式：每次把两堆合并成一堆，代价是两堆重量之和，求把 n 堆合成一堆的最小总代价。它正是 Huffman 编码压缩后的总码长。</p>
+<p><strong>贪心选择。</strong> 每次取当前最轻的两堆合并，把合并结果放回。这是典型的&quot;最轻优先&quot;贪心，用最小堆（<code>BinaryHeap</code> + <code>Reverse</code>）实现。</p>
+<p><strong>正确性论证。</strong> 关键引理：在最优树中，权重最小的两个叶子一定是兄弟，且位于最深一层。理由是最深层的兄弟可以交换而不改变代价，把两个最小的权重放到那里不会增大总代价（把更大的权重换到较浅层只会减小它的贡献）。于是可以先把这两个最小权重合并成一个新叶子（权重为二者之和），问题规模减一；对新问题重复论证。这就是&quot;贪心选择 + 最优子结构&quot;的标准组合：先锁定最小的两堆，再递归解决剩余问题。</p>
+<p><strong>实现与复杂度。</strong> 用 <code>BinaryHeap&lt;Reverse&lt;u64&gt;&gt;</code> 维护当前堆集合，每次弹两个最小的、求和、累加代价、压回。时间 O(n log n)，空间 O(n)。权重可能很大，累加用 u64。</p>
+<p>下面的程序对随机权重（1..39）n∈[1,7] 生成 200 组，用&quot;枚举所有合并顺序、对排序后的权重向量做记忆化搜索&quot;的暴力法对照——这是真正的最优解，不依赖 Huffman 结论。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">63 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::cmp::Reverse;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::collections::{BinaryHeap, HashMap};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn huffman_cost(w: &amp;[u64]) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut h = BinaryHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    for &amp;x in w { h.push(Reverse(x)); }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut total = 0u64;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    while h.len() &gt; 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let a = h.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let b = h.pop().unwrap().0;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let s = a + b;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        total += s;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        h.push(Reverse(s));</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    total</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">// brute force over all merge orders, memoized on sorted weight vectors</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn brute(w: &amp;[u64]) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    fn rec(mut v: Vec&lt;u64&gt;, memo: &amp;mut HashMap&lt;Vec&lt;u64&gt;, u64&gt;) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        if v.len() &lt;= 1 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        v.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        if let Some(&amp;x) = memo.get(&amp;v) { return x; }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let n = v.len();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        let mut best = u64::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">            for j in i + 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                let cost = v[i] + v[j];</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                let mut nv: Vec&lt;u64&gt; = v.iter().enumerate()</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                    .filter(|&amp;(k, _)| k != i &amp;&amp; k != j)</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                    .map(|(_, &amp;x)| x).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                nv.push(cost);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                let c = rec(nv, memo) + cost;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                if c &lt; best { best = c; }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        memo.insert(v, best);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        best</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    rec(w.to_vec(), &amp;mut HashMap::new())</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="43"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="49"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    let w = [5u64, 9, 12, 13, 16, 45];</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    println!(&quot;demo huffman cost = {}&quot;, huffman_cost(&amp;w));</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    let mut rng = Rng(0xabcd_1234_abcd_1234);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        let n = 1 + rng.range(0, 7) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        let w: Vec&lt;u64&gt; = (0..n).map(|_| rng.range(1, 40) as u64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        let a = huffman_cost(&amp;w);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        let b = brute(&amp;w);</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        if a != b { println!(&quot;MISMATCH huffman={} brute={} w={:?}&quot;, a, b, w); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    println!(&quot;stress huffman: {} (200 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo huffman cost = 224</span></div>
+<div class="cl is-text"><span class="code">stress huffman: OK (200 random cases)</span></div></div></div>
+<p>Huffman 的一个常见误解是把&quot;最小代价&quot;当成&quot;最小码长&quot;本身。实际上我们优化的是 Σ w[i]×depth[i]，出现频率高的符号权重小（因为码长与频率成反比的构造中权重常取频次），所以高频符号分到短码。若权重为 0，合并它不会增加代价，但会增加树高——对编码无影响，对&quot;合并堆数&quot;有细节影响。n=1 时代价为 0（单节点树深度 0），堆里只有一个元素，循环不执行，代码自然正确。</p>
+<p>最优合并问题的暴力对拍之所以有价值，是因为它完全不预设 Huffman 的结论：递归枚举&quot;任选两堆合并&quot;的所有顺序，对合并后排序好的权重向量做记忆化，找到的真正是全局最优代价。当 n 增大到 7 以上，暴力版的分支数迅速膨胀（每一步约有 n²/2 种合并选择），但对拍只需要跑到 7 就足以覆盖绝大多数边界。Huffman 与&quot;合并果子&quot;&quot;石子合并&quot;是同一类问题的不同外衣：前者每次合并代价是两堆之和，后者若限制只能合并相邻两堆就变成区间 DP——是否允许&quot;任意两堆&quot;决定了该用贪心还是 DP，这是判断贪心适用性的好例子。</p>
+<h2 id="rust-ch03-greedy-and-constructive-30-5-构造法-havel-hakimi-判定度数序列">30.5 构造法：Havel-Hakimi 判定度数序列</h2>
+<p><strong>问题定义。</strong> 给定一串非负整数 d[0..n)，判断是否存在一个 n 个顶点的简单无向图（无重边、无自环），使第 i 个顶点的度数恰为 d[i]。这是图论中的&quot;可图性判定&quot;，也是构造法的典型：不仅回答&quot;是或否&quot;，过程本身还能逐步构造出这样的图。</p>
+<p><strong>Havel-Hakimi 算法。</strong> 把序列按度数降序排列，取最大度数 k（对应顶点 u）。若 k ≥ 剩余顶点数，直接返回否（没有足够的点连边）。否则把 u 与度数最大的 k 个其余顶点各连一条边，这些顶点的度数各减一，u 的度数归零（相当于从图中移除）。重复直到全零（可图）或出现负数/不足顶点（不可图）。</p>
+<p><strong>正确性论证。</strong> 这是交换论证在构造问题上的变体。若存在某个图实现当前序列，设顶点 u 度数最大为 k。可以证明存在一个实现图，其中 u 恰好连向度数最大的 k 个其余顶点：若原图里 u 连了某个度数较小的 x 而没连度数较大的 y，由于 deg(y) ≥ deg(x)，y 必有一条连向非 u 顶点 z 的边，而 x 没有连向 z（或可做类似调整），通过一次&quot;边交换&quot;把 (u,x) 和 (y,z) 换成 (u,y) 和 (x,z)，度数序列不变。反复交换即可得到 HH 所需的邻接形式，因此&quot;贪心连向最大的 k 个&quot;不损失可图性。递归地应用这一结论，算法正确。</p>
+<p><strong>实现与复杂度。</strong> 每轮排序 O(n log n)，最多 n 轮，总 O(n² log n)（n 小时足够）。要注意的边界：<code>k &gt;= d.len()</code> 时返回否；连边前检查目标度数为 0（为 0 说明不足顶点）；每轮把 d[0] 置 0 等价于移除该顶点。</p>
+<p>下面的程序对随机度数序列生成 200 组，n∈[1,6]，用枚举 n(n−1)/2 条边的所有子集（最多 2^15=32768 个图）、检查是否存在图的度数序列与目标相同的暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">60 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// Havel-Hakimi: decide whether a degree sequence is graphical</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn havel_hakimi(deg: &amp;[usize]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut d = deg.to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    loop {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        if d.iter().all(|&amp;x| x == 0) { return true; }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        d.sort_unstable_by(|a, b| b.cmp(a));</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        let k = d[0];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if k &gt;= d.len() { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        for i in 1..=k {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            if d[i] == 0 { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            d[i] -= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        d[0] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">// brute: enumerate all simple graphs on n vertices</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn brute_graphical(deg: &amp;[usize]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let n = deg.len();</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    if n == 0 { return true; }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let m = n * (n - 1) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let mut target = deg.to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    target.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    for mask in 0u32..(1u32 &lt;&lt; m) {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        let mut ds = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        let mut bit = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">            for j in i + 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                if mask &amp; (1u32 &lt;&lt; bit) != 0 { ds[i] += 1; ds[j] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                bit += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        ds.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        if ds == target { return true; }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    false</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="40"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="46"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    let d = [3usize, 3, 3, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    println!(&quot;demo K4 graphical = {}&quot;, havel_hakimi(&amp;d));</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    let mut rng = Rng(0x0bad_f00d_0bad_f00d);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let n = 1 + rng.range(0, 6) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        let deg: Vec&lt;usize&gt; = (0..n).map(|_| rng.range(0, n as u64) as usize).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        let a = havel_hakimi(&amp;deg);</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        let b = brute_graphical(&amp;deg);</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        if a != b { println!(&quot;MISMATCH deg={:?} hh={} brute={}&quot;, deg, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    println!(&quot;stress havel-hakimi: {} (200 random sequences)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo K4 graphical = true</span></div>
+<div class="cl is-text"><span class="code">stress havel-hakimi: OK (200 random sequences)</span></div></div></div>
+<p>构造法与判定问题常常是一体两面：Havel-Hakimi 在判定的同时记录了&quot;每一步连了哪些边&quot;，把这些边收集起来就得到了一个具体的图。若题目只问可行性，可以省去边的记录；若要求输出方案，就把每轮连边的顶点对存下来。对拍时用&quot;枚举所有图&quot;的暴力法是最强的验证——它完全不依赖任何图论定理，只要实现正确，就是判定结果的标准答案。</p>
+<h2 id="rust-ch03-greedy-and-constructive-30-6-四种方法的横向对照">30.6 四种方法的横向对照</h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>解决问题</th>
+<th>核心不变量</th>
+<th>时间</th>
+<th>失败信号</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>交换论证 / EDD</td>
+<td>最小化最大延迟</td>
+<td>消除截止时间逆序不劣</td>
+<td>O(n log n)</td>
+<td>排序键选错（如按处理时间）</td>
+</tr>
+<tr>
+<td>区间调度</td>
+<td>最多不重叠区间</td>
+<td>最早结束留出最大空间</td>
+<td>O(n log n)</td>
+<td>半开/闭区间边界混淆</td>
+</tr>
+<tr>
+<td>Huffman</td>
+<td>最优合并 / 编码</td>
+<td>最小两权重必为最深兄弟</td>
+<td>O(n log n)</td>
+<td>权重溢出、n=1 未处理</td>
+</tr>
+<tr>
+<td>Havel-Hakimi</td>
+<td>度数序列可图</td>
+<td>最大度数可连向最大 k 个</td>
+<td>O(n² log n)</td>
+<td>顶点不足、目标度数为 0</td>
+</tr>
+</tbody></table>
+
+<p>四者的共性是&quot;局部最优能推出全局最优&quot;，但支撑它的不变量各不相同：EDD 靠&quot;消除逆序&quot;，区间调度靠&quot;最早结束留空间&quot;，Huffman 靠&quot;最小两权重最深&quot;，HH 靠&quot;边交换可规范化&quot;。写贪心时，先把这句不变量写出来，再用对拍验证——如果找不到一句话支撑，这个贪心多半是错的。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>四种方法都是&quot;每步拿最好的&quot;，但理由完全不一样。调度的理由是&quot;截止早的先做不会让任何人更晚&quot;，区间的理由是&quot;越早结束越给后面留地儿&quot;，Huffman 的理由是&quot;最轻的两个一定在最底层&quot;，构造图的理由是&quot;最高度数的点一定可以连到度数最大的那几个&quot;。把这四句话记住，比背四个模板有用得多——遇到新题时先问自己能不能说出类似的一句话。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-greedy-and-constructive-30-7-边界-陷阱与工程取舍">30.7 边界、陷阱与工程取舍</h2>
+<p><strong>交换论证类。</strong> 逆序的定义要与目标函数匹配：EDD 排的是截止时间，若目标改成&quot;最小化总完成时间&quot;就该按处理时间排序（Shortest Processing Time），排序键一变整个结论就变。对拍时特意生成&quot;处理时间与截止时间反相关&quot;的数据，最容易暴露排序键错误。</p>
+<p><strong>区间调度。</strong> 半开区间 [s,e) 的兼容条件是 <code>s &gt;= last_end</code>；闭区间 [s,e] 则是 <code>s &gt; last_end</code>。用错一个等号，相接的区间会被误判为冲突或重叠。加权版本不能用这个贪心，要退回 DP。区间端点可能相等、区间可能零长，都要在数据生成中覆盖。</p>
+<p><strong>Huffman。</strong> 权重累加用 u64 甚至 u128，避免溢出；叶子数为 1 时循环不执行，返回 0 是正确的；若还要输出编码，需在合并时记录树结构再 DFS 生成码字，并验证前缀无码性。<code>BinaryHeap</code> 默认是最大堆，必须包 <code>Reverse</code> 才是最小堆——忘了包会得到完全相反的&quot;每次合并最大的两堆&quot;，结果远非最优。</p>
+<p><strong>构造法。</strong> HH 每轮要把当前最大度数置零（等价于删点），否则它会反复参与连边；<code>k &gt;= d.len()</code> 与&quot;目标度数为 0&quot;两个失败条件缺一不可；若要输出具体图，须在每轮记录&quot;u 连向了哪 k 个点&quot;，并且注意这些点每轮的顺序会变化，记录的是当前排序后的编号。</p>
+<p><strong>工程取舍。</strong> 贪心通常比 DP 快一个数量级，但证明门槛高。稳妥的开发流程是：先写暴力版并跑通，再写贪心版，然后随机对拍几百到几千组；对拍通过后再试着写出交换论证的文字证明——如果写不出来，往往说明贪心在某个未覆盖的数据上有反例，应扩大对拍规模而不是硬凑证明。本单元四个程序都坚持&quot;暴力与贪心同源对拍&quot;，正是这个流程的落地。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：区间调度的半开/闭区间之争。对拍用的是半开区间 [s,e)，兼容条件是 s &gt;= last_end；如果把输入改成闭区间 [s,e] 却沿用这个条件，两个端点相接的区间（如 [1,3] 与 [3,5]）会被错误地判为兼容，得到偏大的答案。反过来，半开区间用 s &gt; last_end 则漏掉本可相接的区间。写代码前先明确区间语义，并让随机数据里出现端点相等的情况——本单元对拍专门让 e = s + 随机长度，且 s 的取值密集，正是为了覆盖相接与重叠两种边界。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-greedy-and-constructive-30-8-练习与自检">30.8 练习与自检</h2>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把 EDD 改为&quot;最小化总完成时间&quot;（Shortest Processing Time）：写出排序键并证明其交换论证，用全排列暴力版对拍。</li>
+<li>实现加权区间调度：<code>dp[i] = max(dp[i-1], w[i] + dp[p(i)])</code>，其中 p(i) 是与第 i 个区间不冲突的最后一个区间（用二分查找），并用子集枚举对拍小数据。</li>
+<li>在 Huffman 程序中记录树结构并 DFS 生成每个符号的 0/1 码字，验证任意一个码字都不是另一个的前缀（前缀无码性），并用朴素检查对照。</li>
+<li>把 Havel-Hakimi 改成&quot;输出一个具体的邻接表&quot;：每轮记录连边，最后验证输出图的度数序列与输入完全一致，再用暴力图枚举核对可图性判定。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>交换论证的核心步骤是什么？为什么说&quot;把最优解逐步改造成贪心解&quot;就证明了贪心最优？</li>
+<li>EDD 调度为什么按截止时间排序而不是处理时间？若排序键选错，对拍会给出什么现象？</li>
+<li>区间调度按结束时间贪心为什么正确？半开区间与闭区间的兼容条件有何不同？</li>
+<li>Huffman 算法为什么要合并最轻的两堆？支撑它的引理是什么？BinaryHeap 需要包 Reverse 吗？</li>
+<li>Havel-Hakimi 中 k &gt;= d.len() 与目标度数为 0 两个失败条件各防止什么情况？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__strings-advanced.md.html">← 字符串进阶</a><a href="rust__chapters__ch03__advanced-data-structures.md.html">高级数据结构：线段树、二维 BIT 与主席树 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前缀和与差分、双指针</title>
+<meta name="description" content="第 21 单元 · 建议 90 分钟 · 把「重复扫描」换成「一次预处理」与「两个游标」">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">前缀和与差分、双指针</h1><p class="doc-sub">第 21 单元 · 建议 90 分钟 · 把「重复扫描」换成「一次预处理」与「两个游标」</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 21-prefix-diff-two-pointers.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-1-前缀和-不变量-哨兵与一维区间查询">21.1 前缀和：不变量、哨兵与一维区间查询</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-2-二维前缀和-整体右移一位避开下溢">21.2 二维前缀和：整体右移一位避开下溢</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-3-差分-区间加的-o-1-端点修改">21.3 差分：区间加的 O(1) 端点修改</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-4-双指针-相向与同向两种流派">21.4 双指针：相向与同向两种流派</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-5-滑动窗口的不变量与收缩条件">21.5 滑动窗口的不变量与收缩条件</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-6-边界防御-usize-空窗口与溢出">21.6 边界防御：usize、空窗口与溢出</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-7-随机对拍-前缀-差分-双指针一起验">21.7 随机对拍：前缀、差分、双指针一起验</a></li><li class="toc-l2"><a href="#rust-ch03-prefix-diff-two-pointers-21-8-离线与在线的取舍-练习与自检">21.8 离线与在线的取舍、练习与自检</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>理解前缀和的不变量，能写出一维与二维前缀和并解释容斥公式的来由</li>
+<li>会用差分数组把多次区间加变成两次端点修改，再统一前缀还原</li>
+<li>能区分同向双指针与相向双指针，写出滑动窗口类题目的收缩条件</li>
+<li>处理 <code>usize</code> 减法下溢、窗口为空、累加溢出等 Rust 特有的边界问题</li>
+<li>能用随机数据把前缀和、差分、双指针与暴力解法对拍验证</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-1-前缀和-不变量-哨兵与一维区间查询">21.1 前缀和：不变量、哨兵与一维区间查询</h2>
+<p><strong>问题定义</strong>：给定数组，频繁查询任意区间 <code>[l, r)</code> 的元素和。若每次都累加区间内元素，单次是 O(n)，q 次查询就是 O(nq)。</p>
+<p><strong>不变量</strong>：<code>pref[i]</code> 等于原数组前 i 个元素之和，也就是 <code>[0, i)</code> 的和。为了省掉对 <code>i == 0</code> 的特判，预分配 <code>n + 1</code> 个位置并让 <code>pref[0] = 0</code> 当哨兵。建表用一次循环完成，之后任意区间 <code>[l, r)</code> 的和都是 <code>pref[r] - pref[l]</code>，把 O(n) 的查询降到 O(1)。区间统一用<strong>左闭右开</strong>：长度直接是 <code>r - l</code>，两个相邻区间的边界不会重叠，空区间 <code>[i, i)</code> 的和自然是 0。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">13 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let a = [1i64, 3, 5, 7, 9, 11];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut pref = Vec::with_capacity(a.len() + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    pref.push(0i64);</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    for &amp;x in &amp;a {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        let last = *pref.last().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        pref.push(last + x);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let pairs = [(0usize, 3usize), (1, 4), (2, 2), (0, 6)];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    for (l, r) in pairs {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        println!(&quot;[{}, {}) = {}&quot;, l, r, pref[r] - pref[l]);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div></div></div>
+<p>这里没有写 <code>pref.push(pref[pref.len() - 1] + x)</code>，而是先用 <code>last()</code> 取出旧值再 push。虽然 Rust 的两阶段借用通常允许前者，但先取值的写法意图更明确，也避免了在循环中反复索引 <code>len() - 1</code>。如果原数组元素可能很大，前缀和要用 <code>i64</code> 累加，否则 <code>i32</code> 在一百万个 10⁹ 元素上必然溢出。涉及取模的题目（例如统计子数组和能被 k 整除的个数）要在每次累加后立即取模，并用 <code>HashMap&lt;i64, usize&gt;</code> 统计每个余数出现次数，核心思想仍是&quot;两个前缀同余则其差能被 k 整除&quot;。</p>
+<p>复杂度非常清晰：建表 O(n) 时间、O(n) 空间，每次查询 O(1) 时间。当查询次数 q 较大时，总代价从 O(nq) 降到 O(n + q)。这是典型的<strong>离线预处理换查询速度</strong>——只有查询模式允许提前建表时才适用；如果数组会在查询之间被修改，纯前缀和就力不从心，需要改用树状数组或线段树，把单点修改也降到 O(log n)。</p>
+<p>还有一种<strong>原地前缀和</strong>变体：直接把 <code>a[i]</code> 改成前 i 项之和，不再分配新数组，省内存但会破坏原数据。刷题时若后面还要用原数组，就别这么做；若只用一次，原地版本能少一半内存占用。涉及取模的题目要在每次累加后立即取模，避免中间和溢出；同时注意 Rust 的 <code>%</code> 对负数返回负余数（<code>-3 % 5 == -3</code>），若希望余数落在 <code>[0, k)</code> 区间，要写成 <code>((x % k) + k) % k</code>。这个小细节在&quot;统计子数组和能被 k 整除&quot;这类题目里经常导致计数偏差，因为负余数和正余数本质上是同一类，却会被当成不同的键。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>前缀和就像给一排数字提前记好&quot;从开头到每个位置一共多少&quot;。有了这张表，问任意一段的和只要用大计数减小计数，一下就算出来。关键在于多记一个&quot;开头之前是 0&quot;的哨兵，这样连从第一个元素开始的区间也不用特殊处理。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u21_b1.rs -o u21_b1 &amp;&amp; ./u21_b1</span></div>
+<div class="cl is-text"><span class="code">[0, 3) = 9</span></div>
+<div class="cl is-text"><span class="code">[1, 4) = 15</span></div>
+<div class="cl is-text"><span class="code">[2, 2) = 0</span></div>
+<div class="cl is-text"><span class="code">[0, 6) = 36</span></div></div></div>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-2-二维前缀和-整体右移一位避开下溢">21.2 二维前缀和：整体右移一位避开下溢</h2>
+<p>二维前缀和把同样的思想扩展到矩阵。<code>ps[r][c]</code> 表示左上角 <code>(0,0)</code> 到右下角 <code>(r-1,c-1)</code> 的矩形和。递推式是 <code>ps[r][c] = a[r-1][c-1] + ps[r-1][c] + ps[r][c-1] - ps[r-1][c-1]</code>，也就是&quot;自己加上方加左方，再把重复算的左上角减一次&quot;。查询 <code>[r1, r2) × [c1, c2)</code> 用同样的容斥：<code>ps[r2][c2] - ps[r1][c2] - ps[r2][c1] + ps[r1][c1]</code>。</p>
+<p>关键技巧是<strong>把所有下标整体加一</strong>：原矩阵 <code>m × n</code> 存进 <code>(m+1) × (n+1)</code> 的前缀数组，让第 0 行和第 0 列全为 0。这样递推里的 <code>r - 1</code>、<code>c - 1</code> 都变成合法的索引运算，彻底绕开 <code>usize</code> 下溢。如果在 0 基数组里硬写 <code>ps[i-1][j]</code>，那么 <code>i = 0</code> 时程序会当场 panic。这不是麻烦，而是 Rust 帮你把&quot;越界读内存&quot;这类经典 bug 提前到开发阶段。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">二维前缀和的容斥示意（累加到 ps[2][2]）
+
+  (0,0) ────── (0,2)
+    │  +ps[0][2]      ┌─────────┐
+    │                 │  +A     │  A = ps[r-1][c-1] 重复算
+  (2,0) ────── (2,2)  └─────────┘
+    └── +ps[2][0]  ┘
+
+最终 ps[r][c] = a[r-1][c-1] + 上方 + 左方 - 左上角重复部分</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">29 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn build_prefix_2d(grid: &amp;[Vec&lt;i64&gt;]) -&gt; Vec&lt;Vec&lt;i64&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let rows = grid.len();</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let cols = if rows == 0 { 0 } else { grid[0].len() };</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut ps = vec![vec![0i64; cols + 1]; rows + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    for r in 0..rows {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        for c in 0..cols {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            ps[r + 1][c + 1] = grid[r][c]</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">                + ps[r][c + 1]</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">                + ps[r + 1][c]</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">                - ps[r][c];</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    ps</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn sum_2d(ps: &amp;[Vec&lt;i64&gt;], r1: usize, c1: usize, r2: usize, c2: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    ps[r2][c2] - ps[r1][c2] - ps[r2][c1] + ps[r1][c1]</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let g = vec![</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        vec![1i64, 2, 3],</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        vec![4, 5, 6],</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        vec![7, 8, 9],</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let ps = build_prefix_2d(&amp;g);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;whole = {}&quot;, sum_2d(&amp;ps, 0, 0, 3, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    println!(&quot;center = {}&quot;, sum_2d(&amp;ps, 1, 1, 2, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">}</span></div></div></div>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>三个常见错误。其一，二维递推时把 <code>ps[r][c]</code> 写成 <code>ps[r+1][c+1]</code> 之后忘了对应调整查询公式，导致两者下标体系不一致——建表与查询必须共用同一套&quot;整体加一&quot;约定。其二，用 <code>Vec&lt;Vec&lt;i64&gt;&gt;</code> 的 <code>vec![vec![0; cols+1]; rows+1]</code> 初始化时，内层 <code>Vec</code> 会被克隆，对 <code>Copy</code> 类型没问题，但若换成非 <code>Copy</code> 元素要格外小心共享引用。其三，矩阵元素为负时，容斥公式中的减法顺序不能随意交换：<code>ps[r2][c2] - ps[r1][c2] - ps[r2][c1] + ps[r1][c1]</code> 里最后一项是加回被多减一次的左上角，写成减法就会出错。</p>
+
+</div>
+</section>
+<p>查询复杂度 O(1)，建表 O(mn)，空间 O(mn)。二维前缀和常用于&quot;统计满足条件的子矩阵个数&quot;：枚举矩形的上下边界，再把左右边界的判定转化为一维问题。例如求&quot;和不超过 K 的子矩阵个数&quot;，可以先固定上下边界 <code>r1</code>、<code>r2</code>，把每一列 <code>c</code> 上这两行之间的元素和压成一维数组 <code>col[c]</code>，问题就变成&quot;求 <code>col</code> 中和不超过 K 的子数组个数&quot;——用第 20 单元的归并排序或第 19 单元的树状数组都能在 O(n log n) 内解决。整个算法是 O(m² · n log n)，比四重循环的 O(m²n²) 快得多。这个&quot;降维&quot;技巧是二维前缀和最实用的价值：把二维问题拆成若干一维子问题，复用已经掌握的工具。掌握了整体右移这位移技巧，后续二维差分、二维树状数组都能用同样思路处理。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u21_b2.rs -o u21_b2 &amp;&amp; ./u21_b2</span></div>
+<div class="cl is-text"><span class="code">whole = 45</span></div>
+<div class="cl is-text"><span class="code">center = 5</span></div></div></div>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-3-差分-区间加的-o-1-端点修改">21.3 差分：区间加的 O(1) 端点修改</h2>
+<p><strong>问题定义</strong>：给定数组，频繁对区间 <code>[l, r]</code> 整体加一个值，最后查询各点的值。若每次区间加都遍历区间内元素，单次 O(n)，m 次修改就是 O(nm)。</p>
+<p><strong>不变量</strong>：<code>diff[i]</code> 定义为 <code>a[i] - a[i-1]</code>（令 <code>a[-1] = 0</code>），对 <code>diff</code> 做前缀和就还原出 <code>a</code>。由此得到一个极强的操作：要把区间 <code>[l, r]</code> 整体加 <code>delta</code>，只需 <code>diff[l] += delta</code>、<code>diff[r+1] -= delta</code> 两处修改——前缀和扫到 l 时开始生效，扫过 r 后被抵消。多次区间加可以全部 O(1) 处理，最后统一 O(n) 还原，总代价从 O(nm) 降到 O(n + m)。</p>
+<p>下面的实现预分配 <code>n + 1</code> 个位置，让 <code>r + 1 == n</code> 时仍能安全写入差分边界；只有 <code>r + 1 &gt;= diff.len()</code> 才跳过，而这个判断在合法输入下不会触发。还原时维护滚动变量 <code>cur</code>，避免真的去改差分数组本身——这让差分数组保持&quot;只记录修改&quot;的纯粹语义，便于多次复用。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn range_add_diff(n: usize, ops: &amp;[(usize, usize, i64)]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    // 每个三元组 (l, r, delta) 表示对闭区间 [l, r] 加 delta</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut diff = vec![0i64; n + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    for &amp;(l, r, delta) in ops {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        diff[l] += delta;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        if r + 1 &lt; diff.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            diff[r + 1] -= delta;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut out = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        cur += diff[i];</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        out.push(cur);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let ops = [(0usize, 2usize, 3i64), (1, 3, -1), (2, 4, 5)];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;{:?}&quot;, range_add_diff(5, &amp;ops));</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div></div></div>
+<p>差分与前缀和经常组合使用：先对原数组建一次差分，执行若干次区间加，再对差分求前缀得到新数组，最后对新数组求前缀得到区间和查询表，整体仍是 O(n + m)。二维差分同理，区间加 <code>[x1,x2] × [y1,y2]</code> 变成四个角点的符号修改，公式与二维前缀和互为镜像。</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>工具</th>
+<th>单次修改</th>
+<th>单次查询</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>区间和</td>
+<td>前缀和</td>
+<td>建表 O(n)</td>
+<td>O(1)</td>
+</tr>
+<tr>
+<td>区间加、单点值</td>
+<td>差分</td>
+<td>O(1)</td>
+<td>还原后 O(1)</td>
+</tr>
+<tr>
+<td>区间加、区间和</td>
+<td>差分 + 两层前缀</td>
+<td>O(1)</td>
+<td>还原后 O(1)</td>
+</tr>
+<tr>
+<td>单点加、区间和</td>
+<td>树状数组</td>
+<td>O(log n)</td>
+<td>O(log n)</td>
+</tr>
+</tbody></table>
+
+<p>要注意差分的<strong>离线</strong>属性：上面的代码必须先把所有修改收集完，才能统一还原出最终数组。如果题目要求&quot;每做一次区间加就立刻回答一次查询&quot;，纯差分就力不从心了，需要改用树状数组或线段树。区分在线与离线是选择数据结构的第一步：能在读入阶段一次性拿到全部操作时，离线算法往往更简单也更快。另外差分值为负数完全合法，用 <code>i64</code> 存储即可。</p>
+<p>表和里&quot;差分 + 两层前缀&quot;值得展开：完成区间加后先对 <code>diff</code> 求前缀得到最终数组 <code>a&#39;</code>，再对 <code>a&#39;</code> 求前缀得到 <code>pref&#39;</code>，此后任意区间和查询就是 <code>pref&#39;[r] - pref&#39;[l]</code>，全程 O(1) 查询。两层前缀看起来只是把同一件事做两遍，但它们的语义不同——第一层把&quot;增量&quot;还原成&quot;值&quot;，第二层把&quot;值&quot;压缩成&quot;可查询的和&quot;。混用或漏掉其中一层，是初学者最常见的错误。二维差分的构造方式与二维前缀和互为镜像：区间加变成四个角点 <code>(x1,y1)</code> 加 delta、<code>(x2+1,y1)</code> 减 delta、<code>(x1,y2+1)</code> 减 delta、<code>(x2+1,y2+1)</code> 加 delta，最后对两个维度分别求前缀即可还原。</p>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-4-双指针-相向与同向两种流派">21.4 双指针：相向与同向两种流派</h2>
+<p>双指针有两大流派，适用前提和移动方式完全不同。<strong>相向双指针</strong>：左指针从开头、右指针从结尾出发，根据当前状态与目标的关系移动其中一个。典型是排序数组的两数之和：和大于目标就让右指针左移，小于目标就让左指针右移。它要求数组有序，每次移动都单调地缩小搜索范围，因此是 O(n)。写这类代码时，<code>l &lt; r</code> 的循环条件要保证 <code>i + 1</code> 不超过 <code>n - 1</code>，把固定元素的循环上界设为 <code>n - 2</code> 最省心；遇到重复元素要跳过，否则结果里有大量重复三元组。</p>
+<p><strong>同向双指针（滑动窗口）</strong>：左右指针都只向右走，右指针负责扩大窗口，左指针负责在窗口&quot;不合法&quot;时收缩。典型是求最短子数组或无重复最长子串。它的正确性依赖两个不变量：其一，窗口 <code>[left, right]</code> 始终满足题目对右端的扩展要求；其二，每轮收缩后窗口恰好是&quot;以 right 结尾的最优窗口&quot;。左指针绝不回退是关键——如果某个左端位置被排除，那么以更靠右的 right 结尾时它也不可能重新变优。这个单调性一旦不成立（例如窗口合法性与 right 不单调），双指针就会失效，必须换用别的方法。</p>
+<p>两种流派的共同点是&quot;每步都有明确的移动依据，且指针不回头&quot;，这正是把 O(n²) 的暴力枚举压到 O(n) 的根本原因。区分题目属于哪一派，可以先看&quot;答案是否需要两端配合&quot;：两数之和、三数之和、接雨水这类需要两端夹逼的属于相向；最长、最短、计数这类&quot;以某个右端为基准找最优左端&quot;的属于同向。选错流派往往意味着写不出正确的移动条件，而不是仅仅常数差一点。</p>
+<p>以三数之和为例，排序后固定一个数 <code>a[i]</code>，在 <code>i+1..n</code> 区间用 <code>l</code>、<code>r</code> 夹逼：若三数之和大于 0 就 <code>r -= 1</code>，小于 0 就 <code>l += 1</code>，等于 0 则记录答案并同时跳过重复的 <code>a[l]</code> 与 <code>a[r]</code>。这里的 <code>r -= 1</code> 在 <code>usize</code> 上是安全的，因为循环条件是 <code>l &lt; r</code> 且 <code>l ≥ i+1 ≥ 1</code>，所以 <code>r &gt; 0</code> 必然成立；但如果把循环写成 <code>l &lt;= r</code> 且允许 <code>l = 0</code>，<code>r = 0</code> 时的 <code>r - 1</code> 就会下溢。Rust 强迫你把这类前提想清楚，写出的代码反而比 C++ 更不容易出现隐蔽的越界。排序 + 双指针把原本 O(n³) 的暴力枚举压到 O(n²)，也再次说明&quot;有序&quot;是双指针能工作的重要前提。</p>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-5-滑动窗口的不变量与收缩条件">21.5 滑动窗口的不变量与收缩条件</h2>
+<p>下面用两个经典例子展示滑动窗口的写法。<strong>最短子数组和</strong>：<code>right</code> 每纳入一个元素就累加 <code>sum</code>，只要 <code>sum &gt;= target</code> 就不断记录长度并收缩左端。<strong>最长无重复子串</strong>：用定长数组 <code>last[256]</code> 记录每个字节最后出现的位置，<code>usize::MAX</code> 表示&quot;从未出现&quot;；当重复字节的上次位置仍在当前窗口内时，把 <code>left</code> 跳到它后面一位。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">右指针 right 纳入新元素 → 更新窗口状态 → while 窗口不合法 → 记录当前窗口答案 → 左指针收缩并更新状态 → 重复直到合法 → 继续扩展 right</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn min_subarray_sum(a: &amp;[i64], target: i64) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let (mut left, mut sum, mut best) = (0usize, 0i64, usize::MAX);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    for (right, &amp;x) in a.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        sum += x;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        while sum &gt;= target &amp;&amp; left &lt;= right {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">            best = best.min(right - left + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            sum -= a[left];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">            left += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    if best == usize::MAX { 0 } else { best }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn longest_unique(s: &amp;str) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let bytes = s.as_bytes();</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    let mut last = [usize::MAX; 256];</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut left = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let mut best = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    for (right, &amp;b) in bytes.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let idx = b as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        if last[idx] != usize::MAX &amp;&amp; last[idx] &gt;= left {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">            left = last[idx] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        last[idx] = right;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        best = best.max(right - left + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let a = [2i64, 3, 1, 2, 4, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    println!(&quot;min len = {}&quot;, min_subarray_sum(&amp;a, 7));</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;longest unique = {}&quot;, longest_unique(&quot;abcabcbb&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
+<p><code>longest_unique</code> 只适用于 ASCII 字节串；处理中文要用 <code>char</code> 与 <code>HashMap&lt;char, usize&gt;</code>，因为 UTF-8 下一个汉字占多个字节，按字节切片可能切在字符中间导致 panic。判断重复时用 <code>last[idx] &gt;= left</code> 而不是 <code>!= usize::MAX</code>，是为了只在&quot;上次出现位置仍在当前窗口内&quot;时才移动左端——若上次出现已被之前的收缩甩在窗口外，就无需再动。返回值用字节下标差值表示长度，对纯 ASCII 串恰好等于字符数；换成 <code>char</code> 版本后，计数单位变成字符数，答案语义也随之改变，题目若要求&quot;最长子串的字符数&quot;就必须用后者。两种实现的复杂度都是 O(n)，差别只在字符集大小与索引方式。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u21_b4.rs -o u21_b4 &amp;&amp; ./u21_b4</span></div>
+<div class="cl is-text"><span class="code">min len = 2</span></div>
+<div class="cl is-text"><span class="code">longest unique = 3</span></div></div></div>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-6-边界防御-usize-空窗口与溢出">21.6 边界防御：usize、空窗口与溢出</h2>
+<p>这一类题目出错往往不是算法想错，而是边界处理不细。逐项核对能省很多时间：区间是闭区间还是左闭右开；前缀数组是否多开了一格作哨兵；二维递推是否已经整体右移一位以避开 <code>i - 1</code>；差分修改的右端点是 <code>r</code> 还是 <code>r + 1</code>；收缩窗口时 <code>left</code> 是否会越过 <code>right</code> 导致 <code>right - left + 1</code> 下溢；累加和是否需要 <code>i64</code>。</p>
+<p>最危险的三个具体陷阱如下。<strong>其一</strong>，<code>usize::MAX</code> 是合法的哨兵值，但它加一就会回绕成 0。<code>longest_unique</code> 里先判断 <code>last[idx] != usize::MAX</code> 再执行 <code>left = last[idx] + 1</code>，顺序绝不能颠倒。<strong>其二</strong>，<code>right - left + 1</code> 只有在 <code>right &gt;= left</code> 时才有意义，<code>min_subarray_sum</code> 的 while 条件里加一道 <code>left &lt;= right</code> 的防线几乎不花成本。<strong>其三</strong>，累加溢出：<code>sum += x</code> 在 <code>i64</code> 上累加一百万个 10⁹ 也会溢出，若题目数据范围接近类型上限，要用 <code>i128</code> 或在每一步检查 <code>checked_add</code>。</p>
+<p>另一个 Rust 专属细节是用 <code>.get(i)</code> 替代直接下标访问，在边界不确定的地方把 panic 变成显式的 <code>if let</code>，调试时定位问题会快很多。&quot;宁可多判断一次，也不要让 usize 偷偷回绕&quot;是这一单元的黄金准则。写不变量注释尤其有效：在滑动窗口里注明&quot;窗口内和小于 target，且 left 是满足条件的最小位置&quot;，在差分里注明&quot;diff 的前缀等于当前增量&quot;，每次循环体内只做保持不变量的事，代码就很难错。</p>
+<p>手工推演同样不可或缺。拿 <code>min_subarray_sum</code> 的 <code>[2,3,1,2,4,3]</code>、target=7 走一遍：right=0、1、2 时 sum 依次是 2、5、6，都不达标；right=3 纳入 2 后 sum=8 达标，记录窗口 <code>[0,3]</code> 长度 4，去掉 a[0]=2 后 sum=6 停止；right=4 纳入 4 后 sum=10，先记 <code>[1,4]</code> 长度 4，去掉 a[1]=3 后 sum=7 仍达标，再记 <code>[2,4]</code> 长度 3，去掉 a[2]=1 后 sum=6 停止；right=5 纳入 3 后 sum=9，记 <code>[3,5]</code> 长度 3，去掉 a[3]=2 后 sum=7，再记 <code>[4,5]</code> 长度 2，去掉 a[4]=4 后 sum=3 停止。最终 best=2，与程序输出一致。这个推演验证了&quot;每轮收缩后窗口是以 right 结尾的最短达标窗口&quot;这一不变量：窗口 <code>[4,5]</code> 的值 4+3=7 恰好达标，左端再往右移就不满足了。手工模拟比单步调试更快定位逻辑偏差，等推演与输出一致，再交给随机对拍做大范围验证。</p>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-7-随机对拍-前缀-差分-双指针一起验">21.7 随机对拍：前缀、差分、双指针一起验</h2>
+<p>本单元四种工具都容易错在边界，用固定种子 2026 的 LCG 一次性与暴力解法对拍，能把&quot;看起来对&quot;变成&quot;实测都对&quot;。</p>
+<p><strong>对照组设计</strong>：一维前缀对暴力区间累加；二维前缀对暴力矩形累加；差分对&quot;真的把每次区间加写进数组&quot;；最短子数组对枚举所有子段；最长无重复子串对枚举所有子串并检查字节唯一性。随机数据刻意包含负数（前缀、差分）、重复字符（无重复子串）与达不到的 target（最短子数组），专门压测退化分支。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">201 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    *state = state</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">        .wrapping_mul(6364136223846793005)</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        .wrapping_add(1442695040888963407);</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    *state &gt;&gt; 33</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn prefix_1d(a: &amp;[i64]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut pref = Vec::with_capacity(a.len() + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    pref.push(0i64);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    for &amp;x in a { pref.push(*pref.last().unwrap() + x); }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    pref</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">fn prefix_2d(grid: &amp;[Vec&lt;i64&gt;]) -&gt; Vec&lt;Vec&lt;i64&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    let rows = grid.len();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let cols = if rows == 0 { 0 } else { grid[0].len() };</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let mut ps = vec![vec![0i64; cols + 1]; rows + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    for r in 0..rows {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        for c in 0..cols {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            ps[r + 1][c + 1] = grid[r][c] + ps[r][c + 1] + ps[r + 1][c] - ps[r][c];</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    ps</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">fn sum_2d(ps: &amp;[Vec&lt;i64&gt;], r1: usize, c1: usize, r2: usize, c2: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    ps[r2][c2] - ps[r1][c2] - ps[r2][c1] + ps[r1][c1]</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">fn sum_2d_slow(grid: &amp;[Vec&lt;i64&gt;], r1: usize, c1: usize, r2: usize, c2: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let mut s = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    for r in r1..r2 { for c in c1..c2 { s += grid[r][c]; } }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    s</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="34"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">fn diff_apply(n: usize, ops: &amp;[(usize, usize, i64)]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let mut diff = vec![0i64; n + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    for &amp;(l, r, delta) in ops {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        diff[l] += delta;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        if r + 1 &lt; diff.len() { diff[r + 1] -= delta; }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    let mut out = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    for i in 0..n { cur += diff[i]; out.push(cur); }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">fn diff_slow(n: usize, ops: &amp;[(usize, usize, i64)]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut a = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    for &amp;(l, r, delta) in ops { for i in l..=r { a[i] += delta; } }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    a</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="51"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">fn min_subarray(a: &amp;[i64], target: i64) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    let (mut left, mut sum, mut best) = (0usize, 0i64, usize::MAX);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    for (right, &amp;x) in a.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        sum += x;</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        while sum &gt;= target &amp;&amp; left &lt;= right {</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            best = best.min(right - left + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">            sum -= a[left];</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">            left += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    if best == usize::MAX { 0 } else { best }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">fn min_subarray_slow(a: &amp;[i64], target: i64) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    let mut best = usize::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    for i in 0..a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        let mut s = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        for j in i..a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">            s += a[j];</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">            if s &gt;= target { best = best.min(j - i + 1); }</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    if best == usize::MAX { 0 } else { best }</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="75"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">fn longest_unique(s: &amp;str) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    let bytes = s.as_bytes();</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    let mut last = [usize::MAX; 256];</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    let mut left = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">    let mut best = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    for (right, &amp;b) in bytes.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">        let idx = b as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        if last[idx] != usize::MAX &amp;&amp; last[idx] &gt;= left { left = last[idx] + 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">        last[idx] = right;</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">        best = best.max(right - left + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">fn longest_unique_slow(s: &amp;str) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">    let b = s.as_bytes();</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">    let mut best = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">    for i in 0..b.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">        for j in i..b.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">            let mut seen = [false; 256];</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">            let mut ok = true;</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">            for &amp;x in &amp;b[i..=j] {</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">                if seen[x as usize] { ok = false; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">                seen[x as usize] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">            if ok { best = best.max(j - i + 1); }</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="105"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">    let seed0 = 2026u64;</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">    let mut seed = seed0;</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">    let mut bad = 0usize;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="110"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">    // 测试一：一维前缀和 vs 暴力区间和</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">    for _ in 0..2000 {</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">        let n = (lcg(&amp;mut seed) % 12 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">        let a: Vec&lt;i64&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 21) as i64 - 10).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">        let pref = prefix_1d(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">        for _ in 0..5 {</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">            let l = (lcg(&amp;mut seed) % (n as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">            let r = (lcg(&amp;mut seed) % (n as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">            let (lo, hi) = if l &lt;= r { (l, r) } else { (r, l) };</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">            let fast = pref[hi] - pref[lo];</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">            let slow: i64 = a[lo..hi].iter().sum();</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">            if fast != slow {</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">                println!(&quot;PREFIX1 MISMATCH: a={:?} [{},{}) fast={} slow={}&quot;, a, lo, hi, fast, slow);</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">        if bad &gt; 0 { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="130"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">    // 测试二：二维前缀和 vs 暴力矩形和</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">        for _ in 0..1000 {</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">            let r = (lcg(&amp;mut seed) % 5 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">            let c = (lcg(&amp;mut seed) % 5 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">            let grid: Vec&lt;Vec&lt;i64&gt;&gt; = (0..r)</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">                .map(|_| (0..c).map(|_| (lcg(&amp;mut seed) % 11) as i64 - 5).collect())</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">                .collect();</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">            let ps = prefix_2d(&amp;grid);</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">            let r1 = (lcg(&amp;mut seed) % (r as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">            let r2 = (lcg(&amp;mut seed) % (r as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">            let c1 = (lcg(&amp;mut seed) % (c as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">            let c2 = (lcg(&amp;mut seed) % (c as u64 + 1)) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">            let (ra, rb) = if r1 &lt;= r2 { (r1, r2) } else { (r2, r1) };</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">            let (ca, cb) = if c1 &lt;= c2 { (c1, c2) } else { (c2, c1) };</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">            let fast = sum_2d(&amp;ps, ra, ca, rb, cb);</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">            let slow = sum_2d_slow(&amp;grid, ra, ca, rb, cb);</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">            if fast != slow {</span></div>
+<div class="cl"><span class="ln" data-ln="149"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="150"></span><span class="code">                println!(&quot;PREFIX2 MISMATCH: r={} c={} rect=({},{},{},{}) fast={} slow={}&quot;, r, c, ra, ca, rb, cb, fast, slow);</span></div>
+<div class="cl"><span class="ln" data-ln="151"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="152"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="153"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="154"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="155"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="156"></span><span class="code">    // 测试三：差分 vs 暴力区间加</span></div>
+<div class="cl"><span class="ln" data-ln="157"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="158"></span><span class="code">        for _ in 0..2000 {</span></div>
+<div class="cl"><span class="ln" data-ln="159"></span><span class="code">            let n = (lcg(&amp;mut seed) % 12 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="160"></span><span class="code">            let mut ops = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="161"></span><span class="code">            for _ in 0..6 {</span></div>
+<div class="cl"><span class="ln" data-ln="162"></span><span class="code">                let l = (lcg(&amp;mut seed) % n as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="163"></span><span class="code">                let r = (lcg(&amp;mut seed) % n as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="164"></span><span class="code">                let delta = (lcg(&amp;mut seed) % 21) as i64 - 10;</span></div>
+<div class="cl"><span class="ln" data-ln="165"></span><span class="code">                ops.push((l.min(r), l.max(r), delta));</span></div>
+<div class="cl"><span class="ln" data-ln="166"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="167"></span><span class="code">            let fast = diff_apply(n, &amp;ops);</span></div>
+<div class="cl"><span class="ln" data-ln="168"></span><span class="code">            let slow = diff_slow(n, &amp;ops);</span></div>
+<div class="cl"><span class="ln" data-ln="169"></span><span class="code">            if fast != slow {</span></div>
+<div class="cl"><span class="ln" data-ln="170"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="171"></span><span class="code">                println!(&quot;DIFF MISMATCH: n={} ops={:?} fast={:?} slow={:?}&quot;, n, ops, fast, slow);</span></div>
+<div class="cl"><span class="ln" data-ln="172"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="173"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="174"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="175"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="176"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="177"></span><span class="code">    // 测试四：最短子数组 vs 暴力；最长无重复子串 vs 暴力</span></div>
+<div class="cl"><span class="ln" data-ln="178"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="179"></span><span class="code">        for _ in 0..2000 {</span></div>
+<div class="cl"><span class="ln" data-ln="180"></span><span class="code">            let n = (lcg(&amp;mut seed) % 12 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="181"></span><span class="code">            let a: Vec&lt;i64&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 15) as i64 + 1).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="182"></span><span class="code">            let target = (lcg(&amp;mut seed) % 20) as i64 + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="183"></span><span class="code">            if min_subarray(&amp;a, target) != min_subarray_slow(&amp;a, target) {</span></div>
+<div class="cl"><span class="ln" data-ln="184"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="185"></span><span class="code">                println!(&quot;WINDOW MISMATCH: a={:?} target={} fast={} slow={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="186"></span><span class="code">                    a, target, min_subarray(&amp;a, target), min_subarray_slow(&amp;a, target));</span></div>
+<div class="cl"><span class="ln" data-ln="187"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="188"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="189"></span><span class="code">            let s: String = (0..n).map(|_| (b'a' + (lcg(&amp;mut seed) % 5) as u8) as char).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="190"></span><span class="code">            if longest_unique(&amp;s) != longest_unique_slow(&amp;s) {</span></div>
+<div class="cl"><span class="ln" data-ln="191"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="192"></span><span class="code">                println!(&quot;UNIQUE MISMATCH: s={} fast={} slow={}&quot;, s, longest_unique(&amp;s), longest_unique_slow(&amp;s));</span></div>
+<div class="cl"><span class="ln" data-ln="193"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="194"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="195"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="196"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="197"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="198"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="199"></span><span class="code">        println!(&quot;diff seed={}: prefix1 2000 + prefix2 1000 + diff 2000 + window 2000 cases passed&quot;, seed0);</span></div>
+<div class="cl"><span class="ln" data-ln="200"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="201"></span><span class="code">}</span></div></div></div>
+<p>对拍里有一个细节：生成查询区间时先随机取两个数再取 <code>min</code>/<code>max</code> 作为左右端点，这样既覆盖了 <code>l == r</code> 的空区间，又避免了生成非法区间。同理，差分区间也用 <code>l.min(r)</code>、<code>l.max(r)</code> 保证合法。构造数据时&quot;先生成再规范化&quot;比&quot;边生成边判断&quot;更简单，也更不容易漏掉边界情况。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u21_b5.rs -o u21_b5 &amp;&amp; ./u21_b5</span></div>
+<div class="cl is-text"><span class="code">diff seed=2026: prefix1 2000 + prefix2 1000 + diff 2000 + window 2000 cases passed</span></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>前缀和与差分是一对互逆工具——一个负责&quot;快速问&quot;，一个负责&quot;快速改&quot;。双指针则是让两个游标按规矩走路，不走回头路，于是不用把每对组合都试一遍。它们背后的共同思想是：先用预处理或单调性排除掉大量不可能的情况，只在剩下的候选里做文章。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-prefix-diff-two-pointers-21-8-离线与在线的取舍-练习与自检">21.8 离线与在线的取舍、练习与自检</h2>
+<p>前缀和与差分都属于<strong>离线</strong>工具：必须先拿到全部数据才能建表或还原。一旦题目变成&quot;每做一次修改就立刻回答一次查询&quot;，纯前缀和/差分就力不从心，需要树状数组或线段树把单次修改与查询都降到 O(log n)。区分在线与离线是选择数据结构的第一步：能在读入阶段一次性拿到全部操作时，离线算法往往更简单也更快；反之则老老实实上在线结构，不要试图用离线技巧硬凑。双指针则介于两者之间——它是在一次扫描中边走边算，但需要数组静态（或至少窗口状态可增量维护）。</p>
+<p>四类工具的选择可以归纳成一句话：频繁问区间和用前缀和，频繁改区间值用差分，答案具有单调性且可增量维护用双指针，二者都要且必须在线用树状数组。掌握这个分类，遇到区间类问题就能先在纸上画出草图，再决定用哪种结构，而不是上来就套模板。</p>
+<p>复杂度上，一维前缀与差分都是&quot;预处理 O(n)、单次 O(1)&quot;，二维版本是&quot;预处理 O(mn)、单次 O(1)&quot;，双指针是单趟 O(n) 或 O(mn) 加排序的 O(n log n)。写代码时不妨在注释里同时记下不变量与复杂度：不变量证明正确性，复杂度说明适用边界。当查询量从几千涨到几百万时，正是这些预先想清楚的量级决定了方案是否需要推倒重来，而不是等到超时才回头找原因。这些数字本身不难，难的是把它们与约束对应：当区间查询达到 10⁶ 次时，O(1) 与 O(n) 的差距是百万倍，离线预处理的收益无可替代；而当数组每步都在变时，再优雅的离线表也用不上，必须换在线结构。工程判断的核心永远是&quot;先看清操作的时序，再选工具&quot;，这一点比记住任何模板都重要。到第 21 单元为止，算法编前五块基础设施——复杂度与对拍、单调栈队列、并查集与堆、排序二分、前缀差分与双指针——已经齐备，后续树、图、DP、字符串等单元都会反复调用它们。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把第 21.1 节的一维前缀和改成&quot;余数计数&quot;版本：给定数组与 k，统计有多少个子数组的和能被 k 整除（提示：用 <code>HashMap&lt;i64, usize&gt;</code> 统计每个前缀和模 k 的出现次数），并用种子 <code>555</code> 与暴力枚举对拍 2000 组随机数据。</li>
+<li>在第 21.2 节基础上实现二维差分：对 <code>[x1,x2] × [y1,y2]</code> 区间加 delta 只改四个角点，最后还原成矩阵；与&quot;真的逐格加&quot;的暴力版本对拍 1000 组随机小矩阵。</li>
+<li>把第 21.5 节的 <code>longest_unique</code> 改成支持中文字符的版本：用 <code>char</code> 迭代与 <code>HashMap&lt;char, usize&gt;</code> 记录最后位置，注意 <code>char</code> 的计数是字符数而非字节数；用含中文的字符串手工验证结果。</li>
+<li>用<strong>相向双指针</strong>实现三数之和：先排序，固定一个数后用 <code>l = i + 1</code>、<code>r = n - 1</code> 夹逼，跳过重复元素；与 O(n³) 暴力解法对拍 1000 组随机数组。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么一维前缀和要多开一格 <code>pref[0] = 0</code>？区间 <code>[l, r)</code> 的和怎么写？</li>
+<li>二维前缀和为什么要整体右移一位？直接在 0 基数组写 <code>ps[i-1][j]</code> 会怎样？</li>
+<li>差分修改的右端点为什么是 <code>r + 1</code> 而不是 <code>r</code>？它为什么只在 <code>diff</code> 上改两处就够了？</li>
+<li>滑动窗口里为什么左指针只能向右移动，绝不能回退？这个不变量何时会失效？</li>
+<li>前缀和与差分为什么是&quot;离线&quot;工具？题目要求在线修改时应换用什么结构？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__sorting-and-binary-search.md.html">← 排序与二分</a><a href="rust__chapters__ch03__trees-and-lca.md.html">树与 LCA：从迭代遍历到倍增与欧拉序 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

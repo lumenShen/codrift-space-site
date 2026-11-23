@@ -4,32 +4,39 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>复杂度与 Rust 算法工程约定</title>
-<meta name="description" content="第 14 单元 · 建议 60 分钟 · 把 big-O 估算与 Rust 实现细节一起练成肌肉记忆">
+<meta name="description" content="第 17 单元 · 建议 90 分钟 · 把 big-O 估算、Rust 实现约定与随机对拍一并练成肌肉记忆">
 <meta name="author" content="Codrift · Rust 工程笔记">
 <meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
 <link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
 </head>
 <body class="type-unit">
 <a class="skip-link" href="#content">跳到正文</a>
 <nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
 <main class="doc" id="doc">
-<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">复杂度与 Rust 算法工程约定</h1><p class="doc-sub">第 14 单元 · 建议 60 分钟 · 把 big-O 估算与 Rust 实现细节一起练成肌肉记忆</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 14-complexity-and-rust-idioms.md</p></header>
-<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-14-1-复杂度速查与估算手法">14.1 复杂度速查与估算手法</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-14-2-输入输出与整数解析">14.2 输入输出与整数解析</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-14-3-rust-算法工程约定">14.3 Rust 算法工程约定</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-14-4-对拍-让暴力算法当裁判">14.4 对拍：让暴力算法当裁判</a></li></ol></nav>
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">复杂度与 Rust 算法工程约定</h1><p class="doc-sub">第 17 单元 · 建议 90 分钟 · 把 big-O 估算、Rust 实现约定与随机对拍一并练成肌肉记忆</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 17-complexity-and-rust-idioms.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-1-从输入规模倒推算法-复杂度是第一道闸门">17.1 从输入规模倒推算法：复杂度是第一道闸门</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-2-渐进符号的严格含义-o-与四种-复杂度">17.2 渐进符号的严格含义：O、Ω、Θ 与四种"复杂度"</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-3-输入输出-一次性读入与-split_whitespace-解">17.3 输入输出：一次性读入与 split_whitespace 解析</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-4-三条实现约定-预分配-哨兵与左闭右开">17.4 三条实现约定：预分配、哨兵与左闭右开</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-5-usize-下溢与整数回绕-rust-算法最隐蔽的敌人">17.5 usize 下溢与整数回绕：Rust 算法最隐蔽的敌人</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-6-借用冲突的四把钥匙-从-split_at_mut-到-mem">17.6 借用冲突的四把钥匙：从 split_at_mut 到 mem::take</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-7-随机对拍-让暴力解法当裁判">17.7 随机对拍：让暴力解法当裁判</a></li><li class="toc-l2"><a href="#rust-ch03-complexity-and-rust-idioms-17-8-计时与实测-常数-缓存与-看起来更快">17.8 计时与实测：常数、缓存与"看起来更快"</a></li></ol></nav>
 <article class="content" id="content" aria-label="正文">
 <section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
 <div class="box-b">
 <ul>
-<li>能快速估算常见算法的时间与空间复杂度，识别对数、线性、平方与指数级增长</li>
-<li>会写一个基于 <code>split_whitespace</code> 的输入解析器，理解它与逐字符读取的取舍</li>
-<li>掌握 Vec 预分配、<code>usize</code> 下标与有符号数的转换、迭代替代递归等工程约定</li>
-<li>能用简易随机数生成器搭起对拍框架，用暴力算法验证优化算法的正确性</li>
+<li>能用&quot;输入规模倒推法&quot;为常见约束选出可行的复杂度量级，并说清最坏、平均与摊还三种口径的差别</li>
+<li>掌握 std-only 的输入解析与输出批处理，理解 <code>parse::&lt;T&gt;().ok().expect(...)</code> 为何比裸 <code>unwrap()</code> 更稳</li>
+<li>落实预分配、哨兵、左闭右开、<code>usize</code> 防下溢、借用冲突化解这五条 Rust 算法工程约定</li>
+<li>能搭起固定种子的 LCG 随机对拍框架，用暴力解法验证快速解法，并用 <code>Instant</code> 给出真实计时</li>
 </ul>
 
 </div>
 </section>
-<h2 id="rust-ch03-complexity-and-rust-idioms-14-1-复杂度速查与估算手法">14.1 复杂度速查与估算手法</h2>
-<p>big-O 描述的是输入规模 <code>n</code> 趋向无穷时增长速度的<strong>量级</strong>，它刻意忽略常数系数与低阶项。刷题时真正有用的不是精确推导，而是看到一个循环结构就能立刻判断量级：一层循环是线性，两层嵌套通常是平方，每次把规模减半是对数，分治加合并是 <code>n log n</code>。</p>
-<p>复杂度又分时间与空间两侧，两者经常可以互相交换。用一张哈希表把查找降到 O(1)，代价是 O(n) 的额外内存；用 bitset 标记状态能省下布尔数组的开销，却要求值域不能太大。面试与笔试里更常见的是<strong>最坏情况复杂度</strong>：快速排序平均 O(n log n)，但有序输入下退化成 O(n²)，所以在要求稳定上界的场景要改用归并排序，或先打乱输入。空间复杂度要连递归调用栈一起算：一个深度为 n 的递归 DFS，即便每层只存一个变量，也占用 O(n) 的栈空间，这正是后面强调迭代写法的理由。</p>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-1-从输入规模倒推算法-复杂度是第一道闸门">17.1 从输入规模倒推算法：复杂度是第一道闸门</h2>
+<p>拿到一道算法题，第一件事不是想模板，而是看<strong>数据范围</strong>。复杂度分析真正的用途，是在写第一行代码之前就砍掉注定超时的思路。一个 <code>n ≤ 20</code> 的问题可以放心枚举子集，<code>n ≤ 500</code> 容得下三重循环的区间 DP，<code>n ≤ 2000</code> 通常是平方算法的天下，而 <code>n ≥ 10⁵</code> 就必须把目标锁定在 <code>O(n log n)</code> 甚至 <code>O(n)</code>。这种&quot;由约束反推复杂度，再由复杂度反推数据结构&quot;的思路，比背十套模板更能决定解题速度。</p>
+<p>big-O 描述的是 <code>n</code> 趋向无穷时增长速度的<strong>量级</strong>，刻意忽略常数系数与低阶项。刷题时不必逐条做极限推导，但要形成对结构的条件反射：一层循环是线性，两层嵌套通常是平方，每轮规模减半是对数，分治加线性合并是 <code>n log n</code>，而状态数随输入指数膨胀的问题基本不可解。空间一侧同样要算，尤其是递归调用栈——一个深度为 <code>n</code> 的递归函数，即使每层只存一个整数，也占用 <code>O(n)</code> 的栈空间，这正是后面反复强调&quot;用显式栈替代递归&quot;的理由。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>复杂度就是在问&quot;数据量翻十倍，程序会不会慢到没法用&quot;。<code>O(n)</code> 大致慢十倍，<code>O(n²)</code> 大约慢一百倍，<code>O(log n)</code> 几乎感觉不到变化。先花十秒估一下量级，能让你早早放弃那些注定超时的朴素想法，把精力花在正确方向上。</p>
+
+</div>
+</section>
 <table>
 <thead>
 <tr>
@@ -49,7 +56,7 @@
 </tr>
 <tr>
 <td>O(log n)</td>
-<td>binary search、堆调整</td>
+<td>二分、堆调整</td>
 <td>≈10</td>
 <td>≈20</td>
 <td>每轮规模减半</td>
@@ -82,25 +89,23 @@
 <td>不可行</td>
 <td>状态爆炸</td>
 </tr>
-<tr>
-<td>O(n!)</td>
-<td>全排列</td>
-<td>不可行</td>
-<td>不可行</td>
-<td>阶乘增长</td>
-</tr>
 </tbody></table>
 
-<p>估算时有三个容易踩的坑。第一，<strong>对数的底不重要</strong>：<code>log₂n</code>、<code>log₁₀n</code> 只差一个常数，所以统一写成 <code>log n</code>。第二，<strong>均摊复杂度</strong>要单独记：Vec 的 <code>push</code> 在扩容时是 O(n)，但按倍增扩容，均摊下来是 O(1)；并查集的路径压缩加按秩合并也是均摊近乎 O(1)。第三，<strong>复杂度要算到输入读取</strong>：读入一百万个整数本身就是 O(n)，一个 O(n log n) 的算法配上 O(n²) 的字符串拼接，整体依旧是平方级。</p>
-<p>反推法是更实用的技巧：先看 n 的范围，再倒推所需的复杂度。<code>n ≤ 20</code> 暗示子集枚举或状态压缩，<code>n ≤ 500</code> 允许 O(n³) 的区间 DP，<code>n ≤ 2000</code> 大致是 O(n²) 的天下，<code>n ≥ 10⁵</code> 则必须 O(n log n) 甚至 O(n)。看到 <code>n ≤ 10⁶</code> 且内存限制 256 MB，就要警觉一个 <code>Vec&lt;i64&gt;</code> 已经吃掉 8 MB，若干个矩阵式数组很容易超限。把约束翻译成复杂度，再把复杂度翻译成数据结构，这一步比背模板更能决定解题速度。</p>
-<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<p>估错复杂度的常见原因有三类。第一，把&quot;看起来嵌套&quot;误判成平方：单调栈的 <code>while</code> 弹栈写在 <code>for</code> 循环里面，看似嵌套，但每个元素最多进出各一次，摊仍是线性。第二，忘了把输入和输出算进去：读入一百万个整数本身就是 <code>O(n)</code>，一个 <code>O(n log n)</code> 的排序配上 <code>O(n²)</code> 的字符串拼接，整体依旧是平方级。第三，忽视内存：在 256 MB 限制下，一个 <code>Vec&lt;i64&gt;</code> 装一百万个数就吃掉 8 MB，几个二维 <code>Vec&lt;Vec&lt;i64&gt;&gt;</code> 轻松超限，复杂度正确却因内存爆炸而失败。</p>
+<p>反推法在具体题型上有稳定的对应关系：看到&quot;子数组&quot;想到前缀和与滑动窗口，看到&quot;子序列&quot;想到动态规划，看到&quot;连通性&quot;想到并查集或图遍历，看到&quot;最值&quot;想到堆或单调结构。这些对应不是死记硬背的结论，而是复杂度约束筛选后的结果——子序列的数量是指数级，所以只能用 DP 在多项式状态上转移；连通性查询若需要动态合并，逐次重跑 BFS 是 <code>O(mn)</code>，而并查集把它压到近乎线性。把&quot;为什么选这个结构&quot;讲给自己听一遍，才算真正掌握了复杂度分析。内存估算同样要养成习惯：先数清数组个数与元素宽度，再乘以规模，最后加上调用栈与临时缓冲，和限制一对比就知道该不该换更紧凑的表示。</p>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-2-渐进符号的严格含义-o-与四种-复杂度">17.2 渐进符号的严格含义：O、Ω、Θ 与四种&quot;复杂度&quot;</h2>
+<p>严格地说，<code>O(f(n))</code> 只给出<strong>上界</strong>，<code>Ω(f(n))</code> 给出下界，两者同时成立才写作 <code>Θ(f(n))</code>。日常语境里大家把&quot;大 O&quot;当成&quot;精确量级&quot;来用，这是约定俗成的简化；写证明时若被追问，要能说清自己给的是上界还是紧确界。对数的底同样无关紧要：<code>log₂n</code> 与 <code>log₁₀n</code> 只差一个常数因子，所以统一写成 <code>log n</code>；唯独 <code>log log n</code> 与 <code>log²n</code> 不能混为一谈，前者增长极慢，后者是平方对数。</p>
+<p>同一份代码在不同输入下表现可能天差地别，因此要区分四种口径。<strong>最坏情况</strong>是竞赛默认口径，保证任何输入都不超时；<strong>平均情况</strong>假设输入随机分布，快速排序平均 <code>O(n log n)</code> 但有序输入会退化成 <code>O(n²)</code>；<strong>均摊情况</strong>看一串操作的平均代价，<code>Vec::push</code> 在扩容那一次是 <code>O(n)</code>，但按倍增扩容，连续 <code>n</code> 次 push 的总代价是 <code>O(n)</code>，摊下来每次 <code>O(1)</code>；<strong>摊还分析</strong>的另一种典型是并查集的路径压缩加按秩合并，单次操作的摊还代价是反阿克曼函数 <code>α(n)</code>，在实践中可以当作常数。把口径写清楚，比争论&quot;到底是 O(n) 还是 O(n²)&quot;更有意义。</p>
+<p>证明摊还复杂度有三种常用手法。<strong>聚合分析</strong>直接算出 <code>n</code> 次操作的总代价再除以 <code>n</code>，适合 <code>Vec</code> 扩容这类场景：容量依次为 1、2、4、8……，总搬移次数不超过 <code>2n</code>。<strong>势能法</strong>给数据结构定义一个势能函数 <code>Φ</code>，把每次操作的摊还代价记作实际代价加势能变化；并查集的势能取决于树的高度与秩，路径压缩虽然单点代价高，却大幅降低势能，从而摊还下来接近常数。<strong>记账法</strong>可以理解为势能法的具象版本：给每次操作发&quot;虚拟币&quot;，预先为将来可能的昂贵操作存钱。理解这三种手法后，看到&quot;摊还 O(1)&quot;的结论就不会只停留在背诵层面，也能自己论证单调栈里内层 <code>while</code> 为何不破坏线性上界。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
 <div class="box-b">
-<p>复杂度就是在问&quot;数据量翻十倍，程序会不会慢到没法用&quot;。O(n) 大致慢十倍，O(n²) 大约慢一百倍，O(log n) 几乎感觉不到变化。写算法前先花十秒估一下量级，能帮你早早放弃那些注定超时的朴素想法。</p>
+<p>从小到大跨越下标边界时，<code>usize</code> 的回绕是 debug 构建下的 panic、release 构建下的静默错误，而后者更可怕。在 <code>i = 0</code> 时写 <code>i - 1</code>，debug 会当场报错，release 却悄悄变成 <code>18446744073709551615</code>，继而越界访问或者死循环。防御办法是让减法永远在&quot;被减数大于减数&quot;的前提下发生：先 <code>if i &gt; 0</code> 判断，或用 <code>saturating_sub</code>，或把下标转成 <code>isize</code> 做减法。不要把类型检查和边界判断的责任推给运行时。</p>
 
 </div>
 </section>
-<h2 id="rust-ch03-complexity-and-rust-idioms-14-2-输入输出与整数解析">14.2 输入输出与整数解析</h2>
-<p>Rust 标准库没有 <code>scanf</code>，竞赛里通行的做法是一次性把 stdin 读成字符串，再用 <code>split_whitespace</code> 切成词元。这样做有两个好处：系统调用次数少，且不必关心换行符是 <code>\n</code> 还是 <code>\r\n</code>。下面的 <code>Scanner</code> 用泛型 + <code>FromStr</code> 统一解析所有整数类型，是后面各单元的通用零件。</p>
+<p>复杂度还要算到<strong>常数与缓存</strong>这一层。两个同为 <code>O(n)</code> 的实现，一个是顺序扫描 <code>Vec</code>，另一个频繁随机跳转访问 <code>HashMap</code>，实测可能差十倍——这源于 CPU 缓存行与分支预测，而非渐进量级。渐进分析回答&quot;规模变大时趋势如何&quot;，实测回答&quot;在这台机器上到底多快&quot;，两者互补而非替代。一个实用的原则是：先把渐进量级选对，再用实测确认常数没有夸张到越界；反过来只测小规模数据、不做量级分析，很容易被&quot;某个常数较小的平方算法在小数据上更快&quot;误导。</p>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-3-输入输出-一次性读入与-split_whitespace-解">17.3 输入输出：一次性读入与 split_whitespace 解析</h2>
+<p>Rust 标准库没有 <code>scanf</code>。竞赛里通行的做法是一次性把 stdin 读进一个 <code>String</code>，再用 <code>split_whitespace</code> 切成词元序列。这么做有两个好处：系统调用次数少，且不必关心换行符是 <code>\n</code> 还是 <code>\r\n</code>。下面的 <code>Scanner</code> 用泛型加 <code>FromStr</code> 统一解析所有整数类型，是后续各单元的通用零件。</p>
 <div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::io::{self, Read};</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::str::FromStr;</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
@@ -133,17 +138,15 @@
 <div class="cl"><span class="ln" data-ln="30"></span><span class="code">        v.push(sc.next::&lt;i64&gt;());</span></div>
 <div class="cl"><span class="ln" data-ln="31"></span><span class="code">    }</span></div>
 <div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let sum: i64 = v.iter().sum();</span></div>
-<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;{} {}&quot;, n, sum);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;n={} sum={}&quot;, n, sum);</span></div>
 <div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
-<p>注意 <code>parse::&lt;T&gt;().ok().expect(...)</code> 的写法：<code>T::Err</code> 未必实现 <code>Debug</code>，直接 <code>unwrap()</code> 可能编译不过，而 <code>.ok()</code> 先转成 <code>Option&lt;T&gt;</code>，<code>expect</code> 就不再需要错误类型可打印。另外 <code>tokens</code> 存的是 <code>String</code>，每个词元一次分配；如果追求极致，可以改成保存 <code>&amp;str</code> 切片（需要让 <code>Scanner</code> 持有字符串本体），但日常刷题这点开销可以忽略。</p>
-<p>输出侧同样有讲究。<code>println!</code> 每次调用都可能触发一次系统调用，输出上万行时应当先把结果攒进 <code>String</code> 或 <code>Vec&lt;String&gt;</code>，最后一次性 <code>print!</code>。Rust 的格式化宏支持与 C 类似的对齐语法，例如 <code>{:&gt;8}</code> 表示右对齐占八格，<code>{:.2}</code> 表示保留两位小数。整数解析要注意前导零与正负号：<code>parse::&lt;i64&gt;()</code> 能正确处理 <code>-12</code>，但把负数解析成 <code>usize</code> 会直接失败，所以读入可能带负号的数据时一定用 <code>i64</code>，只在确认非负且需要当下标时再转换。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; printf '5\n1 2 3 4 5\n' | ./main</span></div>
-<div class="cl is-text"><span class="code">5 15</span></div></div></div>
-<h2 id="rust-ch03-complexity-and-rust-idioms-14-3-rust-算法工程约定">14.3 Rust 算法工程约定</h2>
-<p>Rust 写算法与 C++ 最大的差别集中在三个地方。</p>
-<p><strong>其一，预分配与容量。</strong> 已知元素个数时先 <code>Vec::with_capacity(n)</code>，避免反复扩容时的数据搬运。下文的前缀和数组预分配 <code>n + 1</code> 个位置，多出来的 <code>pref[0]</code> 作为哨兵，能把&quot;区间和&quot;统一成一次减法。</p>
-<p><strong>其二，<code>usize</code> 是下标唯一合法类型。</strong> 它的代价是不能为负：写下 <code>i - 1</code> 而 <code>i == 0</code> 时，debug 构建会直接 panic，release 构建则回绕成天文数字。正确做法是先判断 <code>i &gt; 0</code>，或者把下标转成 <code>isize</code> 做减法后再转回来。<strong>其三，避免递归爆栈。</strong> Rust 默认主线程栈只有几 MB，深达十万层的 DFS 会 stack overflow。把递归改写成显式栈（用 Vec 当栈）既安全又可控。</p>
-<p>借用检查器是另一个分水岭。C++ 里常见的&quot;遍历容器的同时修改容器&quot;在 Rust 中被严格禁止：不能在持有元素不可变引用的同时改动整个容器。算法代码里更典型的冲突是&quot;遍历 Vec 的同时往同一个 Vec 里 push&quot;，编译器会直接拒绝。破解办法有三种：把索引范围先算出来，用 <code>for i in 0..n</code> 驱动循环；先把要写入的值收集到临时 <code>Vec</code>，循环结束后统一 <code>extend</code>；或者用 <code>std::mem::take</code> 把容器换出，处理完再放回去。习惯这些模式之后，Rust 的严格反而成了安全网：它把&quot;遍历时修改导致迭代器失效&quot;这类经典 bug 拦在编译期，而不是留到线上。</p>
+<p>这里有两处值得细看。其一，<code>next</code> 里<strong>先解析再自增</strong> <code>pos</code>：如果写成 <code>let val = self.tokens[self.pos].parse...; self.pos += 1;</code>，看上去也没问题，但把自增和借用拆开能避免&quot;同一表达式里既有不可变借用又有可变借用&quot;的隐患——编译器通常能处理，养成明确顺序的习惯更省心。其二，<code>parse::&lt;T&gt;().ok().expect(...)</code> 不是多此一举：<code>T::Err</code> 未必实现 <code>Debug</code>，直接 <code>unwrap()</code> 可能编译不过，而 <code>.ok()</code> 先把 <code>Result&lt;T, E&gt;</code> 转成 <code>Option&lt;T&gt;</code>，<code>expect</code> 就不再要求错误类型可打印。</p>
+<p>输出侧同样有讲究。<code>println!</code> 每次调用都可能触发一次系统调用，输出上万行时应先把结果攒进 <code>String</code> 或 <code>Vec&lt;String&gt;</code>，最后一次性 <code>print!</code>。批处理输出可以写成：先用 <code>String::with_capacity</code> 预留空间，循环里用 <code>push_str</code> 追加片段，最后单次 <code>print!</code> 把整块内容交给 stdout。相比之下，循环里每次 <code>println!</code> 都可能陷入一次系统调用，上十万行时差距非常明显。格式化宏本身也有成本，<code>format!</code> 会分配一个新的 <code>String</code>，所以极热路径上可以直接用 <code>write!</code> 配合 <code>out</code> 的可变引用，把中间分配也省掉。格式化宏支持类似 C 的对齐语法，<code>{:&gt;8}</code> 右对齐占八格，<code>{:.2}</code> 保留两位小数。整数解析要注意符号：<code>parse::&lt;i64&gt;()</code> 能正确处理 <code>-12</code>，但把负数解析成 <code>usize</code> 会直接失败，所以读入可能带负号的数据时一定用 <code>i64</code>，只在确认非负且要当下标时再显式转换。下面的终端记录是真实编译运行的结果。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u17_b1.rs -o u17_b1 &amp;&amp; printf '5\n1 2 3 4 5\n' | ./u17_b1</span></div>
+<div class="cl is-text"><span class="code">n=5 sum=15</span></div></div></div>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-4-三条实现约定-预分配-哨兵与左闭右开">17.4 三条实现约定：预分配、哨兵与左闭右开</h2>
+<p>Rust 写算法与 C++ 最大的差别集中在三个地方。<strong>预分配</strong>：已知元素个数时先 <code>Vec::with_capacity(n)</code>，避免反复扩容时的数据搬运。<strong>哨兵</strong>：在数组前端或后端多开一格，省掉边界特判。<strong>左闭右开</strong>：区间统一写成 <code>[l, r)</code>，长度直接是 <code>r - l</code>，相邻区间不会在端点重叠。</p>
+<p>下面的程序把这三条落在同一段代码里：前缀和多开一格，让 <code>pref[0] = 0</code> 当哨兵，于是&quot;前 i 个元素之和&quot;统一为 <code>pref[i]</code>；区间查询用 <code>[l, r)</code>，答案就是 <code>pref[r] - pref[l]</code>；最后用迭代累加替代递归，避开调用栈上限。注意 <code>i as i64</code> 是有意写出的显式转换——Rust 不会在 <code>usize</code> 与 <code>i64</code> 之间隐式转换，把转换写在明面上，能立刻暴露&quot;这里可能出现负数&quot;的设计意图。</p>
 <div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">24 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let n = 100_000usize;</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
@@ -168,69 +171,232 @@
 <div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;1..={} = {}&quot;, n, acc);</span></div>
 <div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;len = {}, cap = {}&quot;, pref.len(), pref.capacity());</span></div>
 <div class="cl"><span class="ln" data-ln="24"></span><span class="code">}</span></div></div></div>
-<p>这段代码还演示了另一个细节：<code>i as i64</code> 是有意的显式转换。Rust 不会在 <code>usize</code> 与 <code>i64</code> 之间隐式转换，把转换写在明面上，能立刻暴露&quot;这里可能出现负数&quot;的设计意图。</p>
-<p>还有一个反复出现的细节：<strong>用下标而不是持有可变引用</strong>。假设要同时访问 <code>a[i]</code> 和 <code>a[i - 1]</code> 并修改其中一个，写成 <code>let x = &amp;mut a[i]; let y = &amp;a[i - 1];</code> 会被拒绝，因为编译器无法静态证明两个下标不同。改用 <code>let (left, right) = a.split_at_mut(i);</code> 就能拿到两段互不重叠的可变切片，或者干脆先读出需要的旧值到局部变量，再写回原处。另一个实践是用 <code>.get(i)</code> 返回 <code>Option</code> 来替代直接下标访问，在边界不确定的地方把 panic 变成显式的 <code>if let</code>，调试时定位问题会快很多。这几个小习惯累积起来，能省下大量与借用检查器搏斗的时间。</p>
-<h2 id="rust-ch03-complexity-and-rust-idioms-14-4-对拍-让暴力算法当裁判">14.4 对拍：让暴力算法当裁判</h2>
-<p>优化算法写完后最难的是确认它真的对。对拍的思路是：准备一个绝对正确的朴素版本和一个待验证的快速版本，用随机数生成成千上万组小数据，逐个比对输出，一旦不一致就打印现场。小数据下 O(n²) 跑得飞快，正好当裁判。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">45 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
+<p><code>len</code> 与 <code>capacity</code> 的关系也值得说明：<code>with_capacity</code> 保证<strong>至少</strong>能装下指定数量的元素，实际容量由分配器决定；上面这次运行恰好相等，但程序不应依赖这一点。真正依赖的是 <code>pref[i]</code> 的下标范围——它只到 <code>n</code>，而容量不小于 <code>n + 1</code>，所以写入永远安全。把&quot;逻辑长度&quot;和&quot;物理容量&quot;分开理解，是后续手写栈、队列、堆的基础。</p>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>为什么递归在 Rust 算法里格外危险？主线程默认栈只有几 MB，深达十万层的 DFS 会直接 stack overflow，而且这种崩溃无法用 <code>catch_unwind</code> 可靠恢复。改成显式栈（用 <code>Vec</code> 当栈）后，内存来自堆，只受可用内存限制；递归只有在深度可证明为 <code>O(log n)</code> 时才安全，比如归并排序——它的递归深度是 <code>log₂n</code>，几十层而已。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u17_b2.rs -o u17_b2 &amp;&amp; ./u17_b2</span></div>
+<div class="cl is-text"><span class="code">sum[3..9) = 66</span></div>
+<div class="cl is-text"><span class="code">1..=100000 = 5000050000</span></div>
+<div class="cl is-text"><span class="code">len = 100001, cap = 100001</span></div></div></div>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-5-usize-下溢与整数回绕-rust-算法最隐蔽的敌人">17.5 usize 下溢与整数回绕：Rust 算法最隐蔽的敌人</h2>
+<p><code>usize</code> 是下标唯一合法的类型，代价是不能为负。它的回绕有两个层次：<strong>下标减法</strong>如 <code>0usize - 1</code>，debug 构建 panic、release 构建回绕成最大值；<strong>算术溢出</strong>如两个大 <code>u64</code> 相乘，行为类似。随机数的线性同余生成器（LCG）必须显式使用 <code>wrapping_mul</code> 与 <code>wrapping_add</code>，否则 debug 构建下第一次乘法就会溢出 panic。下面的程序集中演示了四种防御姿势。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">27 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">    *state = state</span></div>
 <div class="cl"><span class="ln" data-ln="3"></span><span class="code">        .wrapping_mul(6364136223846793005)</span></div>
 <div class="cl"><span class="ln" data-ln="4"></span><span class="code">        .wrapping_add(1442695040888963407);</span></div>
 <div class="cl"><span class="ln" data-ln="5"></span><span class="code">    *state &gt;&gt; 33</span></div>
 <div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
 <div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn max_subarray_slow(a: &amp;[i64]) -&gt; i64 {</span></div>
-<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut best = i64::MIN;</span></div>
-<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    for i in 0..a.len() {</span></div>
-<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let mut s = 0i64;</span></div>
-<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        for j in i..a.len() {</span></div>
-<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            s += a[j];</span></div>
-<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            best = best.max(s);</span></div>
-<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut s = 1u64;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;lcg x3 = {} {} {}&quot;, lcg(&amp;mut s), lcg(&amp;mut s), lcg(&amp;mut s));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let i = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    // 安全写法一：先判断再减</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let safe = if i &gt; 0 { i - 1 } else { usize::MAX };</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;guarded i-1 = {}&quot;, safe);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    // 安全写法二：isize 中转，保留负数语义</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let j: isize = i as isize - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    println!(&quot;isize i-1 = {}&quot;, j);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    // 安全写法三：标准库提供的饱和减与受检减</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;saturating = {}, checked = {:?}&quot;, i.saturating_sub(1), i.checked_sub(1));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    // 大下标相加可能溢出，用中点公式规避</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let (l, r) = (usize::MAX - 2, usize::MAX);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;mid = {}&quot;, l + (r - l) / 2);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div></div></div>
+<p>四种写法各有适用场合。<code>if i &gt; 0</code> 最直接，适合&quot;前面就是边界&quot;的语义；<code>isize</code> 中转保留了 <code>-1</code> 的数学含义，适合需要负数的推导；<code>saturating_sub</code> 把下溢钳到 <code>0</code>，适合表示&quot;最多减到空&quot;；<code>checked_sub</code> 返回 <code>Option</code>，适合把越界显式暴露给调用方。二分中点写成 <code>l + (r - l) / 2</code> 而不是 <code>(l + r) / 2</code>：当 <code>l</code>、<code>r</code> 都是接近 <code>usize::MAX</code> 的大下标时，后者会在相加那一刻溢出，而前者先减后加，差值一定不溢出。输出里 <code>mid = 18446744073709551614</code> 正是这个公式在极端输入下的正确结果。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p><code>usize</code> 像一个只能显示非负数的里程表，往回拨一格不会显示 -1，而是跳到最大数。程序不会当场告诉你错了，只会拿着这个荒唐的大数继续跑。所以每次要写减法前，都先在脑子里问一句：&quot;减数会不会比被减数大？&quot;如果会，就必须先挡一道。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u17_b3.rs -o u17_b3 &amp;&amp; ./u17_b3</span></div>
+<div class="cl is-text"><span class="code">lcg x3 = 908834774 1093944153 1392341196</span></div>
+<div class="cl is-text"><span class="code">guarded i-1 = 18446744073709551615</span></div>
+<div class="cl is-text"><span class="code">isize i-1 = -1</span></div>
+<div class="cl is-text"><span class="code">saturating = 0, checked = None</span></div>
+<div class="cl is-text"><span class="code">mid = 18446744073709551614</span></div></div></div>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-6-借用冲突的四把钥匙-从-split_at_mut-到-mem">17.6 借用冲突的四把钥匙：从 split_at_mut 到 mem::take</h2>
+<p>C++ 里司空见惯的&quot;遍历容器的同时修改容器&quot;，在 Rust 中被严格禁止；算法代码里最典型的冲突是&quot;遍历 <code>Vec</code> 的同时往同一个 <code>Vec</code> 里 <code>push</code>&quot;。编译器拒绝这类代码，是因为迭代器持有容器的借用，而 <code>push</code> 需要可变借用。化解的办法不是关闭检查，而是换一种表达，让&quot;互不重叠&quot;或&quot;先后关系&quot;在类型层面变得可见。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">30 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut a = vec![1i32, 2, 3, 4, 5];</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    // 模式一：split_at_mut 拿到两段互不重叠的可变切片</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        let (left, right) = a.split_at_mut(2);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        left[0] += right[0];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;split_at_mut: {:?}&quot;, a);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    // 模式二：mem::take 把容器换出，处理完再放回去</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut buf = vec![10, 20, 30];</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let taken = std::mem::take(&amp;mut buf);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    for x in taken {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        buf.push(x * 2);</span></div>
 <div class="cl"><span class="ln" data-ln="16"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    best</span></div>
-<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn max_subarray_fast(a: &amp;[i64]) -&gt; i64 {</span></div>
-<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut best = i64::MIN;</span></div>
-<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let mut cur = 0i64;</span></div>
-<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    for &amp;x in a {</span></div>
-<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        cur = x.max(cur + x);</span></div>
-<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        best = best.max(cur);</span></div>
-<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    best</span></div>
-<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
-<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
-<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn main() {</span></div>
-<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let mut seed = 42u64;</span></div>
-<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    for t in 0..500 {</span></div>
-<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        let n = (lcg(&amp;mut seed) % 20 + 1) as usize;</span></div>
-<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        let a: Vec&lt;i64&gt; = (0..n)</span></div>
-<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            .map(|_| (lcg(&amp;mut seed) % 21) as i64 - 10)</span></div>
-<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            .collect();</span></div>
-<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        let slow = max_subarray_slow(&amp;a);</span></div>
-<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        let fast = max_subarray_fast(&amp;a);</span></div>
-<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        if slow != fast {</span></div>
-<div class="cl"><span class="ln" data-ln="40"></span><span class="code">            println!(&quot;MISMATCH case {}: {:?} slow={} fast={}&quot;, t, a, slow, fast);</span></div>
-<div class="cl"><span class="ln" data-ln="41"></span><span class="code">            return;</span></div>
-<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        }</span></div>
-<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    }</span></div>
-<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    println!(&quot;all 500 cases passed&quot;);</span></div>
-<div class="cl"><span class="ln" data-ln="45"></span><span class="code">}</span></div></div></div>
-<p>这里的随机数发生器是线性同余（LCG），必须用 <code>wrapping_mul</code> / <code>wrapping_add</code>，否则 debug 构建下乘法溢出会 panic。对拍的价值在于它把&quot;我觉着对了&quot;变成&quot;五百组数据都对了&quot;；尤其是二分边界、单调栈的弹出条件这类极易错一两个位置的代码，对拍能在几秒内抓出漏洞。</p>
-<p>对拍还有两个进阶习惯。一是<strong>固定随机种子并打印它</strong>：一旦发现错误用例，把种子记下来就能稳定复现，而不是靠运气再撞一次。二是<strong>缩小用例</strong>：找到出错的小数组后，尝试逐个删掉元素，只要删除后两个版本仍然不一致就继续删，最后得到一个极小的反例，往往一眼就能看出是哪行边界写错。做题时把暴力解法保留在代码里并用注释开关，比写完就删更划算——它既是正确性保险，也是理解题意的镜子。大量刷题之后你会发现，真正的难点很少是模板记不住，而是边界条件与循环不变量；把对拍当常规武器，这类细节错误会越来越早地暴露。</p>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;take: {:?}&quot;, buf);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    // 模式三：先读旧值到局部变量，再写回</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let i = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let old = a[i];</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    a[i] = old * 10;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;read-then-write: {:?}&quot;, a);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    // 模式四：用 get 把越界 panic 变成显式的 Option 判断</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    match a.get(100) {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        Some(v) =&gt; println!(&quot;a[100] = {}&quot;, v),</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        None =&gt; println!(&quot;a[100] out of range&quot;),</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div></div></div>
+<p><code>split_at_mut(k)</code> 返回 <code>[0, k)</code> 与 <code>[k, n)</code> 两段互不重叠的可变切片，编译器能证明它们不交叉，因此可以同时持有两个 <code>&amp;mut</code>。写单调栈、归并排序这类&quot;同时读左半写右半&quot;的代码时，它是首选。<code>mem::take</code> 用 <code>Default</code> 值换走原容器，让你可以自由消费那份数据，再把结果写回——BFS 里&quot;取出当前层的节点、生成下一层&quot;就是典型场景。模式三看似朴素，却最常用：同时访问 <code>a[i]</code> 和 <code>a[i-1]</code> 并修改其一时，先读出旧值到局部变量，再写回原处，借用自然消失。模式四用 <code>.get(i)</code> 返回 <code>Option</code>，在边界不确定的地方把 panic 变成显式的 <code>if let</code>，调试时定位问题会快很多。</p>
+<p>这四把钥匙背后是同一个思想：<strong>把&quot;我确信这两块内存不冲突&quot;翻译成编译器能证明的形式</strong>。习惯之后，Rust 的严格反而是安全网——它把&quot;遍历时修改导致迭代器失效&quot;这类经典 bug 拦在编译期，而不是留到线上。</p>
+<p>还有一个高频变体是&quot;先收集再合并&quot;：遍历时不能直接改目标容器，就把待写入的值收进一个临时 <code>Vec</code>，循环结束后用 <code>extend</code> 一次性写入。它比 <code>mem::take</code> 更直白，代价是多一次数据搬运。选择哪一招可以遵循一个简单的判断：如果新旧内容完全无关，用 <code>take</code> 最干净；如果只是要追加若干元素，用临时 <code>Vec</code> 更省事；如果两段数据天然分居下界两侧，用 <code>split_at_mut</code> 表达力最强。编译器拒绝的代码往往正因为语义含糊，换成这几种写法后，意图反而清楚了。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u17_b4.rs -o u17_b4 &amp;&amp; ./u17_b4</span></div>
+<div class="cl is-text"><span class="code">split_at_mut: [4, 2, 3, 4, 5]</span></div>
+<div class="cl is-text"><span class="code">take: [20, 40, 60]</span></div>
+<div class="cl is-text"><span class="code">read-then-write: [4, 20, 3, 4, 5]</span></div>
+<div class="cl is-text"><span class="code">a[100] out of range</span></div></div></div>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-7-随机对拍-让暴力解法当裁判">17.7 随机对拍：让暴力解法当裁判</h2>
+<p>写出优化算法后最难的，是确认它真的对。对拍的思路是：准备一个绝对正确的朴素版本和一个待验证的快速版本，用随机数生成成千上万组小数据，逐个比对输出，一旦不一致就打印现场。本节用一个完整案例讲清这套框架——最大子数组和。</p>
+<p><strong>问题定义</strong>：给定整数数组 <code>a</code>，求所有连续子数组之和的最大值（允许空子数组时答案为 <code>max(0, ...)</code>，本题要求非空）。</p>
+<p><strong>不变量与正确性</strong>：Kadane 算法维护 <code>cur</code> 为&quot;以当前位置结尾的最大子数组和&quot;。处理新元素 <code>x</code> 时，要么把 <code>x</code> 接在之前的段后面得到 <code>cur + x</code>，要么从 <code>x</code> 重新开始，取两者较大者即 <code>cur = max(x, cur + x)</code>；全局答案 <code>best</code> 取历史 <code>cur</code> 的最大值。这个转移覆盖了所有以当前位置结尾的子数组，因此不变量成立，<code>best</code> 就是答案。</p>
+<p><strong>复杂度</strong>：暴力枚举所有起点终点是 <code>O(n²)</code>，Kadane 是单趟扫描 <code>O(n)</code>，两者都为 <code>O(1)</code> 额外空间。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">固定种子 seed → LCG 生成小规模随机输入 → 同时喂给 slow 与 fast → 比对输出 → 不一致则打印现场并缩小用例 → 一致则累计通过数</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">65 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::time::Instant;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    *state = state</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .wrapping_mul(6364136223846793005)</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .wrapping_add(1442695040888963407);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    *state &gt;&gt; 33</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn max_subarray_slow(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let mut best = i64::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    for i in 0..a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        let mut s = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        for j in i..a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            s += a[j];</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            best = best.max(s);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">fn max_subarray_fast(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let mut best = i64::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        cur = x.max(cur + x);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        best = best.max(cur);</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="31"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let seed0 = 42u64;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let mut seed = seed0;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let mut failed = false;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    for t in 0..2000 {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        let n = (lcg(&amp;mut seed) % 30 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        let a: Vec&lt;i64&gt; = (0..n)</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            .map(|_| (lcg(&amp;mut seed) % 201) as i64 - 100)</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">            .collect();</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        let slow = max_subarray_slow(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        let fast = max_subarray_fast(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        if slow != fast {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            println!(&quot;MISMATCH t={} n={} a={:?} slow={} fast={}&quot;, t, n, a, slow, fast);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">            failed = true;</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">            break;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    if !failed {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        println!(&quot;diff seed={}: 2000 cases passed&quot;, seed0);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="52"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    let n = 4000usize;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    let mut s = 7u64;</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    let a: Vec&lt;i64&gt; = (0..n)</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        .map(|_| (lcg(&amp;mut s) % 2001) as i64 - 1000)</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        .collect();</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    let t0 = Instant::now();</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    let f = max_subarray_fast(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    let tf = t0.elapsed();</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    let t1 = Instant::now();</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    let sl = max_subarray_slow(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    let ts = t1.elapsed();</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    println!(&quot;n={} fast={} in {:?}; slow={} in {:?}&quot;, n, f, tf, sl, ts);</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">}</span></div></div></div>
+<p>对拍有三个进阶习惯。一是<strong>固定并打印种子</strong>：发现错误用例时记下种子就能稳定复现，而不是靠运气再撞一次。二是<strong>控制数据规模</strong>：小数据下 <code>O(n²)</code> 的暴力解法跑得飞快，正好当裁判；上面用 <code>n ≤ 30</code>，两千组数据瞬间跑完。三是<strong>构造有区分度的分布</strong>：数据全为正或全为负时，很多错误分支根本走不到，所以这里用 <code>% 201 - 100</code> 生成正负混合的值。找到反例后还可以<strong>缩小用例</strong>：逐个删除元素，只要删除后两种实现仍不一致就继续删，最后得到一个极小反例，往往一眼就能看出是哪行边界写错。</p>
+<p>对拍也不是万能的。它只能验证&quot;两个实现在生成的分布上一致&quot;，如果暴力解法本身有 bug，或者随机分布永远覆盖不到某类边界（比如空数组、全相等、极端值），对拍就会给出虚假的安心。因此生成数据时要有意识地混入退化样本：<code>n = 1</code>、全 0、全负、已排序、逆序，以及值域上下界。把这些固定用例与随机用例混合，才是完整的验证策略。此外，对拍验证的是&quot;实现符合暴力版本&quot;，而非&quot;实现符合题意&quot;——如果题意理解错了，两个实现可能一起错，这时唯一可靠的办法是回到问题定义，用不变量重新推导一遍。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u17_b5.rs -o u17_b5 &amp;&amp; ./u17_b5</span></div>
+<div class="cl is-text"><span class="code">diff seed=42: 2000 cases passed</span></div>
+<div class="cl is-text"><span class="code">n=4000 fast=40179 in 19.4µs; slow=40179 in 44.5733ms</span></div></div></div>
+<h2 id="rust-ch03-complexity-and-rust-idioms-17-8-计时与实测-常数-缓存与-看起来更快">17.8 计时与实测：常数、缓存与&quot;看起来更快&quot;</h2>
+<p>上一节的输出里，<code>n = 4000</code> 时 Kadane 用了约 20 微秒，暴力解法用了约 45 毫秒，差了约两千倍——这正是 <code>O(n)</code> 与 <code>O(n²)</code> 在规模放大后的真实差距。计时数字每次运行都会略有波动（取决于机器负载与调度），终端块里贴的是某一次真实运行的结果，重点看量级倍数而非精确小数。<code>Instant::now()</code> 与 <code>elapsed()</code> 是标准库提供的单调时钟，适合测量这类短区间耗时；它不受系统时间调整影响，但会受机器负载、CPU 频率与编译器优化影响，因此数字只能在同一台机器、同一构建模式下横向比较。</p>
+<p>计时要注意三点。第一，<strong>用 release 构建测性能</strong>，debug 构建没有优化，数字没有参考价值；但本文所有代码块都用 <code>rustc --edition 2021</code> 默认（debug）编译以证明&quot;可直接编译通过&quot;，计时数字同样来自该构建，所以只用于展示量级差异而非绝对值。第二，<strong>避免测量被优化掉</strong>：如果结果完全没被使用，优化器可能删掉整段计算；把结果 <code>println!</code> 出来，或存入一个外部可见的变量，能防止这种&quot;虚假加速&quot;。第三，<strong>多次运行取稳定值</strong>：单次测量可能撞上系统调度抖动，跑三五次取中位数更可靠。</p>
+<table>
+<thead>
+<tr>
+<th>测量要点</th>
+<th>错误做法</th>
+<th>正确做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>构建模式</td>
+<td>用 debug 数字下结论</td>
+<td>性能结论基于 release</td>
+</tr>
+<tr>
+<td>结果使用</td>
+<td>算完就丢，可能被优化掉</td>
+<td>打印结果或逃逸到外部</td>
+</tr>
+<tr>
+<td>噪声处理</td>
+<td>只跑一次</td>
+<td>多次运行取中位数</td>
+</tr>
+<tr>
+<td>跨机比较</td>
+<td>直接对比不同机器的耗时</td>
+<td>比较同机同配置下的相对倍数</td>
+</tr>
+</tbody></table>
+
+<p>实测数字还要放在正确的语境里解读。上面 <code>n = 4000</code> 的对比中，暴力解法约 45 毫秒、Kadane 约 20 微秒，倍数接近两千；如果把 <code>n</code> 缩小到 100，倍数会跌到几十，因为平方算法的常数项和循环开销在低规模时占主导。这说明&quot;渐进优势&quot;只有在规模足够大时才显现，小规模数据上选错算法未必立刻暴露——这也是对拍必须覆盖较大随机输入的原因之一。另一个常见误区是拿不同语言的数字互相比较：Rust 的 debug 构建比 C++ 的 <code>-O2</code> 慢很多，但 release 构建加上单态化后的性能通常接近 C++，离开构建模式谈快慢没有意义。</p>
+<p>复杂度分析与实测是互补的：前者告诉你&quot;规模翻十倍会怎样&quot;，后者告诉你&quot;在这台机器上到底多快&quot;。把随机对拍当作正确性保险，把计时当作性能体检，再配上&quot;先算量级、再选结构&quot;的决策流程，就构成了后续所有算法单元的工程底座。下面两道练习把这套底座真正用起来。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把第 17.7 节的对拍框架改造成&quot;最大子数组和（允许空子数组）&quot;版本：暴力解法初始化 <code>best = 0</code>，快速解法把 <code>cur</code> 初始化为 0 且每步取 <code>cur = (cur + x).max(0)</code>。用固定种子 <code>2024</code> 跑 5000 组 <code>n ≤ 40</code> 的随机数据，确认全部通过。</li>
+<li>给第 17.7 节的对拍加上&quot;缩小用例&quot;函数：找到一个反例数组后，循环尝试删除每个元素，只要删除后 slow 与 fast 仍不相等就保留删除结果，最终打印最小反例。</li>
+<li>在 <code>Instant</code> 计时部分再增加 <code>n = 8000</code> 与 <code>n = 16000</code> 两档，分别记录 <code>O(n)</code> 与 <code>O(n²)</code> 版本的耗时，计算规模翻倍时的时间倍数，验证是否与复杂度预测一致（提示：线性约 2 倍，平方约 4 倍）。</li>
+<li>把 <code>Scanner</code> 改成持有 <code>&amp;str</code> 切片的零拷贝版本（结构体增加生命周期参数，词元存 <code>&amp;&#39;a str</code> 而非 <code>String</code>），编译并跑通同样的输入，对比两种实现的思路差异。</li>
+</ul>
+
+</div></div>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">
 <ul>
-<li>一个 O(n log n) 的排序算法加上 O(n²) 的字符串拼接，整体复杂度是多少？</li>
+<li>一个 <code>O(n log n)</code> 的排序算法加上 <code>O(n²)</code> 的字符串拼接，整体复杂度是多少？为什么&quot;算到输入输出&quot;很重要？</li>
 <li>为什么 <code>parse::&lt;T&gt;().unwrap()</code> 有时编译不过，而 <code>.ok().expect(...)</code> 可以？</li>
-<li>在下标 <code>i = 0</code> 时执行 <code>i - 1</code>（<code>i</code> 为 <code>usize</code>）会发生什么？怎样避免？</li>
+<li>二分中点为什么要写 <code>l + (r - l) / 2</code> 而不是 <code>(l + r) / 2</code>？结合 <code>usize</code> 溢出解释。</li>
+<li>对拍为什么要固定随机种子，并把数据规模限制在很小的值？</li>
 </ul>
 
 </div>
 </section>
 </article>
-<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__shipping-and-ci.md.html">← 发布与 CI 工程</a><a href="rust__chapters__ch03__stacks-queues-and-monotone.md.html">栈、队列与单调结构 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__async-runtime-and-performance.md.html">← 异步运行时与性能</a><a href="rust__chapters__ch03__stacks-queues-monotone.md.html">栈、队列与单调结构 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
 </main>
 </body>
 </html>

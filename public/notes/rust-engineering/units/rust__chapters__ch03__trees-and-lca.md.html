@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>树与 LCA：从迭代遍历到倍增与欧拉序</title>
+<meta name="description" content="第 22 单元 · 建议 90 分钟 · 把树当成有根图，用一次遍历换取三种 LCA 查询能力">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">树与 LCA：从迭代遍历到倍增与欧拉序</h1><p class="doc-sub">第 22 单元 · 建议 90 分钟 · 把树当成有根图，用一次遍历换取三种 LCA 查询能力</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 22-trees-and-lca.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-1-树问题的图论化-邻接表-选根与迭代-dfs">22.1 树问题的图论化：邻接表、选根与迭代 DFS</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-2-一次遍历的四份产物-父指针-深度-后序与子树大小">22.2 一次遍历的四份产物：父指针、深度、后序与子树大小</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-3-倍增表的不变量-为什么跳-2-能拆成两次跳-2">22.3 倍增表的不变量：为什么跳 2ᵏ 能拆成两次跳 2ᵏ⁻¹</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-4-lca-查询的两阶段-先对齐深度-再同步上跳">22.4 LCA 查询的两阶段：先对齐深度，再同步上跳</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-5-带权树的距离-把边权一起倍增">22.5 带权树的距离：把边权一起倍增</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-6-欧拉序-稀疏表-o-1-查询的代价是-2n-1-长的数组">22.6 欧拉序 + 稀疏表：O(1) 查询的代价是 2n−1 长的数组</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-7-随机对拍-xorshift-生成树与暴力爬树互证">22.7 随机对拍：xorshift 生成树与暴力爬树互证</a></li><li class="toc-l2"><a href="#rust-ch03-trees-and-lca-22-8-工程取舍-预计算-log-内存布局与方法选择">22.8 工程取舍：预计算 log、内存布局与方法选择</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能把无向树存成邻接表，用显式栈一次遍历求出 parent、depth、后序与子树大小</li>
+<li>说清倍增表 <code>up[k][v]</code> 的不变量，并证明 LCA 查询最后一步为什么取 <code>up[0][a]</code></li>
+<li>给带权树扩展 <code>up_w</code> 与 <code>dist_root</code>，在同一框架内求两点距离与 k 级祖先</li>
+<li>会用欧拉序加稀疏表把 LCA 查询压到 O(1)，并用随机对拍验证实现</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-trees-and-lca-22-1-树问题的图论化-邻接表-选根与迭代-dfs">22.1 树问题的图论化：邻接表、选根与迭代 DFS</h2>
+<p>树只是边数恰好为 n−1 的连通无向图，所以处理树的第一步与处理图完全一样：建邻接表。<code>Vec&lt;Vec&lt;usize&gt;&gt;</code> 的第 u 个内层向量存 u 的所有邻居，无向边要往两个方向各 push 一次。树的编号若来自题目的 1 基输入，读入时统一减一转成 0 基，否则 0 号位置浪费、n 号位置越界。与邻接矩阵相比，邻接表是 O(n+m) 空间，在树上就是 O(n)，这是后面所有线性预处理的前提。</p>
+<p>为什么一定要&quot;选根&quot;？树本身没有父子，但祖先、深度、子树这些概念都依赖一个固定的根。一旦选定 root，把每条边按&quot;离根更近的一端是父&quot;定向，树就变成一棵有根树。实现上不需要真的改邻接表，只要一个 <code>parent</code> 数组：从 root 出发遍历，遇到未访问的点 v 就记 <code>parent[v] = u</code>。root 自己的父设成它自己（哨兵），这样往上跳永远不会越界，这是后面倍增表能直接用下标访问的关键技巧。</p>
+<p>遍历必须写成迭代版。Rust 主线程栈默认只有几 MB，一条十万节点的链用递归 DFS 会直接 stack overflow，而且这是发布模式也躲不掉的运行时崩溃。迭代版用一个 <code>Vec&lt;usize&gt;</code> 当栈：弹出 u 就算访问，把 u 的所有&quot;非父邻居&quot;入栈并在入栈时写好父与深度。注意标记时机——在入栈时确定 <code>parent[v]</code>，而不是出栈时再判断，否则同一节点的多个邻居可能把它重复入栈。</p>
+<p>建表阶段还有两个容易被忽略的工程细节。其一，<code>vec![Vec::new(); n]</code> 会为 n 个内层 Vec 各做一次分配，边数很大时这些小块在堆上分散，遍历邻居时缓存命中率不如扁平数组；若边数达到百万级，可改用前向星——一个 <code>to</code> 数组加一个 <code>next</code>/<code>head</code> 数组把所有邻接边连续存放。对 n 不过十万的树题，邻接表的简洁性更值钱，知道优化存在即可。其二，若输入给的是 1 基编号，读入时统一 <code>u -= 1; v -= 1</code>，不要在算法内部到处减一：内部下标约定保持 0 基，能让所有 <code>parent</code>/<code>depth</code> 的哨兵与循环边界保持统一，减少一类最常见的越界错误。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>树就是一张没有环的地图。先随便挑一个&quot;首都&quot;（根），每个城市就天然有了&quot;上级&quot;和&quot;下级&quot;。迭代 DFS 像派人挨个下乡登记户口：每到一个城市就写下它归谁管、离首都多远。用显式栈而不是递归，是因为递归相当于让派人的人一层层站在前一个人肩膀上，链太长就站不下去了。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">52 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn build_tree(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;Vec&lt;usize&gt;&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        g[v].push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    g</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">struct Rooted {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    depth: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    order: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    size: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn root_tree(g: &amp;[Vec&lt;usize&gt;], root: usize) -&gt; Rooted {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let n = g.len();</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let mut depth = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut order = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    parent[root] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let mut st = vec![root];</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    while let Some(u) = st.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        order.push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            if v == parent[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                continue;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">            parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            depth[v] = depth[u] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            st.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let mut size = vec![1usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    for &amp;u in order.iter().rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        if u != root {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            size[parent[u]] += size[u];</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    Rooted { parent, depth, order, size }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="43"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    let edges = [(0usize, 1usize), (1, 2), (1, 3), (3, 4), (3, 5)];</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let g = build_tree(6, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let r = root_tree(&amp;g, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    println!(&quot;parent = {:?}&quot;, r.parent);</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    println!(&quot;depth  = {:?}&quot;, r.depth);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    println!(&quot;order  = {:?}&quot;, r.order);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    println!(&quot;size   = {:?}&quot;, r.size);</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">parent = [0, 0, 1, 1, 3, 3]</span></div>
+<div class="cl is-text"><span class="code">depth  = [0, 1, 2, 2, 3, 3]</span></div>
+<div class="cl is-text"><span class="code">order  = [0, 1, 3, 5, 4, 2]</span></div>
+<div class="cl is-text"><span class="code">size   = [6, 5, 1, 3, 1, 1]</span></div></div></div>
+<h2 id="rust-ch03-trees-and-lca-22-2-一次遍历的四份产物-父指针-深度-后序与子树大小">22.2 一次遍历的四份产物：父指针、深度、后序与子树大小</h2>
+<p>上面的 <code>root_tree</code> 同时产出四样东西，理解它们的依赖关系比背代码更重要。<code>parent</code> 与 <code>depth</code> 在入栈时就能确定；<code>order</code> 是出栈顺序，它是一份合法的先序（根在孩子前），因为只有先弹出 u 才会把 u 的孩子压栈。子树大小 <code>size</code> 则相反，必须等孩子都算完才能累加：把 <code>order</code> 倒过来遍历，<code>size[u]</code> 已经包含 u 的所有后代，此时把它加给 <code>parent[u]</code> 即可。这种&quot;先正序收集、再逆序汇总&quot;的两段式是树上聚合的标准套路。</p>
+<p>正确性来自归纳：对 <code>order</code> 逆序的位置 i，假设所有在 i 之后出现的点（即 u 的后代）的 size 已正确，那么把每个孩子的 size 累加进 u 就得到完整子树大小。根没有父，<code>if u != root</code> 这个判断同时避免了给哨兵 <code>parent[root] = root</code> 重复计数。若题目需要在树上做&quot;子树求和&quot;，只要把 <code>size</code> 换成 <code>value[u] += Σ value[child]</code> 即可。</p>
+<p>下面的图把样例树和四份产物放在一起看。注意 <code>order</code> 不是唯一的：栈是后进先出，把邻居入栈的顺序不同会得到不同的 <code>order</code>，但只要满足&quot;父在孩子前&quot;，逆序汇总就一定正确。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">0
+├── 1
+│   ├── 2
+│   └── 3
+│       ├── 4
+│       └── 5
+parent = [0,0,1,1,3,3]   depth = [0,1,2,2,3,3]
+order  = [0,1,3,5,4,2]   size  = [6,5,1,3,1,1]</pre></figure>
+<p>复杂度上，每个点入栈一次、出栈一次，每条边在两个端点各被检查一次，建表和遍历都是 O(n)；<code>order</code> 用 <code>Vec::with_capacity(n)</code> 预分配，避免中途扩容搬移。若输入不保证连通（严格说 n 个点 n−1 条边的图若连通才是树），需要先判断 <code>order.len() == n</code>，否则应报错而不是默默给出错误的 size。</p>
+<p>把 <code>size</code> 换成一般聚合时，同样要注意运算是否满足交换律与结合律：求和、计数、最大值都可以直接套用&quot;孩子结果合并到父&quot;的框架，而涉及&quot;必须先知道父的取值再算孩子&quot;的问题（例如换根 DP）就需要两遍遍历。<code>order</code> 这份先序序列在两遍遍历里都能复用：第一遍用它的逆序做自底向上的子树聚合，第二遍再按它的正序把父方向的贡献传递下去。这也是为什么 22.3 的倍增表构造坚持用显式栈收集遍历顺序，而不是只维护一个父指针数组。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：迭代 DFS 里&quot;跳过父节点&quot;依赖 <code>parent[u]</code> 已经填好。如果图里存在环（比如误把普通图当树处理），同一个非父邻居会被从两条路径重复入栈，<code>parent</code> 被覆盖、<code>size</code> 累加两次。树的输入应当在建图时校验边数为 n−1 且遍历覆盖全部节点；对一般图必须另加 <code>visited</code> 数组，不能只靠 <code>parent</code> 判重。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-trees-and-lca-22-3-倍增表的不变量-为什么跳-2-能拆成两次跳-2">22.3 倍增表的不变量：为什么跳 2ᵏ 能拆成两次跳 2ᵏ⁻¹</h2>
+<p>最近公共祖先（LCA）的朴素做法是&quot;较深的点一步步上抬到同深，再一起一步步走&quot;，单次查询 O(n)。倍增（binary lifting）把&quot;一步步走&quot;预计算成&quot;按 2 的幂跳&quot;：定义 <code>up[k][v]</code> 为 v 的第 2ᵏ 代祖先。这个定义的不变量是：k=0 时 <code>up[0][v]</code> 就是父节点；对 k≥1，先跳 2ᵏ⁻¹ 到达 <code>m = up[k-1][v]</code>，再从 m 跳 2ᵏ⁻¹，正好是 2ᵏ 代祖先，即 <code>up[k][v] = up[k-1][up[k-1][v]]</code>。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">v ──2^(k-1)──▶ m = up[k-1][v] ──2^(k-1)──▶ up[k-1][m] = up[k][v]
+k=0 父 · k=1 祖父 · k=2 曾祖父 · ... · k=log 根的祖先（哨兵=根）</pre></figure>
+<p>层数 log 取满足 2^log &gt; n 的最小值，循环写成 <code>while (1usize &lt;&lt; log) &lt;= n { log += 1 }</code>。<code>up</code> 表初始化为 <code>vec![vec![root; n]; log]</code>，让所有&quot;跳过了根&quot;的位置都落在根上——这消掉了边界判断：即使从深度 2 的点跳 8 步，也不会越界访问不存在的祖先。第一次 DFS 填 <code>up[0]</code> 和 <code>depth</code>，之后按 k 从小到大填表，因为 <code>up[k]</code> 只依赖已经算好的 <code>up[k-1]</code>。预处理 O(n log n)，空间 O(n log n)；对 n=10⁵，log≈17，两张表各约 1.7×10⁶ 个 usize，十几 MB，完全可接受。</p>
+<p>正确性可以用对 k 的归纳严格写出：k=0 时 <code>up[0][v]</code> 是父，跳 1=2⁰ 步成立；假设对所有小于 k 的层成立，则从 v 先跳 2ᵏ⁻¹ 到 m，再从 m 跳 2ᵏ⁻¹ 到 <code>up[k-1][m]</code>，两次合计 2ᵏ 步，且第二次起点 m 的祖先信息由归纳假设保证正确。填表顺序恰好与归纳顺序一致，这就是循环必须让 k 从 1 递增到 log−1 的原因；若反过来从大到小填，<code>up[k-1]</code> 还未就绪，会读到初始化值 root，整张表就全错了。</p>
+<p>倍增的本质是二进制分解：任意不超过 n 的步数都能写成若干个 2 的幂之和，于是&quot;走 diff 步&quot;最多只需 log 次表查询。这与快速幂的思想同源，<code>up</code> 表就是&quot;幂&quot;的预计算版本。层数 log 的循环用移位而不是 <code>n.ilog2()</code>，好处是对 n=1 也得到 log=1：此时表中只有一层，根的自环哨兵保证查询不会访问不存在的层。若 n 接近 <code>usize::BITS</code> 的上限，<code>1usize &lt;&lt; log</code> 会溢出，但竞赛与工程中 n 通常远小于 2⁶³，这个循环是安全的。预处理两重循环的复杂度是 O(log n × n)，把外层 k 放外面、内层 v 放里面，是按行连续访问 <code>up[k]</code>，对缓存更友好。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">70 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Lca {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    up: Vec&lt;Vec&lt;usize&gt;&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    depth: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">impl Lca {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn new(n: usize, edges: &amp;[(usize, usize)], root: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            g[v].push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        let mut log = 1usize;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        while (1usize &lt;&lt; log) &lt;= n {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            log += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let mut up = vec![vec![root; n]; log];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        let mut depth = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        parent[root] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut st = vec![root];</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        while let Some(u) = st.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">                if v == parent[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">                    continue;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">                parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                depth[v] = depth[u] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                up[0][v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                st.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        for k in 1..log {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            for v in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                up[k][v] = up[k - 1][up[k - 1][v]];</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        Lca { up, depth }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="40"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    fn lca(&amp;self, mut a: usize, mut b: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        if self.depth[a] &lt; self.depth[b] {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            std::mem::swap(&amp;mut a, &amp;mut b);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let diff = self.depth[a] - self.depth[b];</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        for k in 0..self.up.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">            if ((diff &gt;&gt; k) &amp; 1) == 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">                a = self.up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        if a == b {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">            return a;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        for k in (0..self.up.len()).rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">            if self.up[k][a] != self.up[k][b] {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">                a = self.up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">                b = self.up[k][b];</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        self.up[0][a]</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="63"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    let edges = [(0usize, 1usize), (1, 2), (1, 3), (3, 4), (3, 5)];</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    let lca = Lca::new(6, &amp;edges, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    for &amp;(a, b) in &amp;[(2usize, 4usize), (0, 5), (4, 5), (2, 2)] {</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        println!(&quot;lca({}, {}) = {}&quot;, a, b, lca.lca(a, b));</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">}</span></div></div></div>
+<h2 id="rust-ch03-trees-and-lca-22-4-lca-查询的两阶段-先对齐深度-再同步上跳">22.4 LCA 查询的两阶段：先对齐深度，再同步上跳</h2>
+<p>查询分两阶段，每阶段都有清晰的不变量。第一阶段把深度大的点抬到与另一个同深：先交换保证 <code>depth[a] &gt;= depth[b]</code>，于是 <code>diff = depth[a] - depth[b]</code> 在 <code>usize</code> 上不会下溢；再把 diff 按二进制拆开，第 k 位为 1 就让 a 跳 2ᵏ。因为每次跳都精确消耗 diff 的一个二进制位，循环结束时 <code>depth[a] == depth[b]</code> 必然成立。若此时 <code>a == b</code>，说明其中一个点就是另一个的祖先，答案直接是 a。</p>
+<p>第二阶段从最大的 k 往下枚举：若 <code>up[k][a] != up[k][b]</code>，说明还处于 LCA 之下（甚至已经跳过它但两边祖先不同），可以让两点同时跳 2ᵏ；若相等，说明这一跳会越过或正好落到 LCA，必须保守地不跳。循环结束后 a、b 同深且是兄弟（或同点），它们的父就是 LCA。为什么最后返回 <code>up[0][a]</code> 而不是 a？因为第二阶段保持了&quot;a、b 始终不是同一点&quot;的不变量（相等时已提前返回），而它们的父第一次汇合，正是 LCA；若直接返回 a，会把 LCA 的孩子误当答案。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：<code>depth[a] - depth[b]</code> 必须先用 <code>swap</code> 保证 a 更深，否则 <code>usize</code> 下溢会 panic；枚举 k 时必须从大到小，若从小到大则 <code>up[k]</code> 的&quot;大步&quot;信息会被过早用过的小步破坏，结果不再是最小跳跃组合。样例里 <code>lca(2,2)=2</code> 覆盖了&quot;提前返回&quot;分支，别漏测。</p>
+
+</div>
+</section>
+<p>把样例中的 <code>lca(4,5)</code> 手推一遍能巩固不变量：深度都是 3，diff=0，第一阶段不动；k 从大到小尝试，k=1 时两者的祖父都是 0，相等跳过；k=0 时 <code>up[0][4]=3</code>、<code>up[0][5]=3</code> 也相等，继续跳过；循环结束返回 <code>up[0][4]=3</code>，正确。再看 <code>lca(2,4)</code>：先把 4 抬到深度 2 得到 3，此时 2 与 3 深度相同但不是同点；k=1 时两者的祖父都是 0，相等跳过；k=0 时 <code>up[0][2]=1</code>、<code>up[0][3]=1</code> 相等跳过；返回 <code>up[0][2]=1</code>。注意&quot;相等就跳过&quot;看起来保守，却保证了不会误降到 LCA 以下，这正是算法正确性的核心。这两次手推还说明，第一阶段只移动较深的那个点，不会改变两点真正的公共祖先；若实现里把两点同时抬升，就会破坏这个前提。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">lca(2, 4) = 1</span></div>
+<div class="cl is-text"><span class="code">lca(0, 5) = 0</span></div>
+<div class="cl is-text"><span class="code">lca(4, 5) = 3</span></div>
+<div class="cl is-text"><span class="code">lca(2, 2) = 2</span></div></div></div>
+<p>单次查询 O(log n)。如果查询量不大（几十次以内），朴素爬树 O(n) 也够用；只有当查询上万次时，O(n log n) 预处理才划算。倍增的另一个好处是&quot;跳 k 步&quot;本身很有用：把 diff 的二进制拆解单独封装成 <code>kth(a, k)</code>，就能求 a 的第 k 代祖先、树上中位数等等，这套积木后面会反复用到。</p>
+<h2 id="rust-ch03-trees-and-lca-22-5-带权树的距离-把边权一起倍增">22.5 带权树的距离：把边权一起倍增</h2>
+<p>若树边带权，树上两点距离公式是 <code>dist(a,b) = d(a) + d(b) − 2·d(lca)</code>，其中 <code>d(v)</code> 是根到 v 的带权距离。这个公式把问题归约回 LCA：只要能求 LCA，再维护每个点到根的距离即可。但还有一个常见需求是&quot;从 v 向上走 k 步的边权和&quot;，例如在路径上加数据时，这时需要把 <code>up_w[k][v]</code> 也倍增：<code>up_w[k][v] = up_w[k-1][v] + up_w[k-1][up[k-1][v]]</code>，含义是先跳 2ᵏ⁻¹ 的代价加上后半段的代价。</p>
+<p><code>up_w</code> 的初始化在建树 DFS 时完成：<code>up_w[0][v] = w(u,v)</code>，同时 <code>dist_root[v] = dist_root[u] + w</code>。三种信息同一次遍历得到，没有额外复杂度。<code>distance</code> 用根距离公式；<code>climb</code> 用与 LCA 相同的二进制拆解，只是每跳一步把对应 <code>up_w[k][v]</code> 累加进 cost。注意 <code>usize</code> 下标与 <code>i64</code> 权值混用时，增量先加到 <code>i64</code> 变量上再更新 v，顺序不能颠倒——否则会拿新位置的 <code>up_w</code> 去索引，得到错误代价。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>带权树上问&quot;两点相距多远&quot;，不用真的把路径走一遍。从根到 a、从根到 b 各有一条路，它们前面一段是重合的，重合段正好走到 LCA。把两段全长相加、再减去两倍重合段，剩下的就是 a 到 b 的独有部分，也就是答案。倍增表多存一份&quot;每跳 2ᵏ 步累计多少路费&quot;，就能顺带回答&quot;往上走若干步花了多少&quot;。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">98 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct WeightedLca {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    up: Vec&lt;Vec&lt;usize&gt;&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    up_w: Vec&lt;Vec&lt;i64&gt;&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    depth: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    dist_root: Vec&lt;i64&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">impl WeightedLca {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn new(n: usize, edges: &amp;[(usize, usize, i64)], root: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let mut g = vec![Vec::&lt;(usize, i64)&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        for &amp;(u, v, w) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            g[u].push((v, w));</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            g[v].push((u, w));</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        let mut log = 1usize;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        while (1usize &lt;&lt; log) &lt;= n {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            log += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let mut up = vec![vec![root; n]; log];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let mut up_w = vec![vec![0i64; n]; log];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut depth = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        let mut dist_root = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        parent[root] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let mut st = vec![root];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        while let Some(u) = st.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            for &amp;(v, w) in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                if v == parent[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                    continue;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                depth[v] = depth[u] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                dist_root[v] = dist_root[u] + w;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                up[0][v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                up_w[0][v] = w;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                st.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        for k in 1..log {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">            for v in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                up[k][v] = up[k - 1][up[k - 1][v]];</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                up_w[k][v] = up_w[k - 1][v] + up_w[k - 1][up[k - 1][v]];</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        WeightedLca { up, up_w, depth, dist_root }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    fn lca(&amp;self, mut a: usize, mut b: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        if self.depth[a] &lt; self.depth[b] {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            std::mem::swap(&amp;mut a, &amp;mut b);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        let diff = self.depth[a] - self.depth[b];</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        for k in 0..self.up.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            if ((diff &gt;&gt; k) &amp; 1) == 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">                a = self.up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        if a == b {</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">            return a;</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        for k in (0..self.up.len()).rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">            if self.up[k][a] != self.up[k][b] {</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">                a = self.up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">                b = self.up[k][b];</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        self.up[0][a]</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="69"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    fn distance(&amp;self, a: usize, b: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        let c = self.lca(a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        self.dist_root[a] + self.dist_root[b] - 2 * self.dist_root[c]</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="74"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    // 沿父链向上走 steps 步，返回落点与累计边权（展示 up_w 的用法）</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    fn climb(&amp;self, mut v: usize, steps: usize) -&gt; (usize, i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">        let mut cost = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">        for k in 0..self.up.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">            if (steps &gt;&gt; k) &amp; 1 == 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">                cost += self.up_w[k][v];</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">                v = self.up[k][v];</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">        (v, cost)</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="87"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">    let edges = [</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">        (0usize, 1usize, 3i64), (1, 2, 4), (1, 3, 2),</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">        (3, 4, 5), (3, 5, 1),</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">    let t = WeightedLca::new(6, &amp;edges, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">    for &amp;(a, b) in &amp;[(2usize, 4usize), (0, 5), (2, 5), (4, 4)] {</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">        println!(&quot;dist({}, {}) = {}&quot;, a, b, t.distance(a, b));</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">    println!(&quot;climb(4, 2) = {:?}&quot;, t.climb(4, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">dist(2, 4) = 11</span></div>
+<div class="cl is-text"><span class="code">dist(0, 5) = 6</span></div>
+<div class="cl is-text"><span class="code">dist(2, 5) = 7</span></div>
+<div class="cl is-text"><span class="code">dist(4, 4) = 0</span></div>
+<div class="cl is-text"><span class="code">climb(4, 2) = (1, 7)</span></div></div></div>
+<p>手验一条：<code>dist(2,4)</code> 中 LCA 是 1，<code>d(2)=3+4=7</code>，<code>d(4)=3+2+5=10</code>，<code>d(1)=3</code>，所以 <code>7+10−2×3=11</code>，与输出一致。负值边权在这个框架里同样成立（只要不溢出 i64），这是它比&quot;依赖深度差&quot;的朴素做法更通用之处。</p>
+<p>为什么不用每次查询现爬父链累加边权？那是 O(n) 的，而 <code>up_w</code> 把累加也倍增了，单次 O(log n)。需要留意两点：一是 <code>dist_root</code> 与 <code>up_w</code> 都要用 <code>i64</code>，若权值总和可能超过 2³¹ 甚至 2⁶³，必须先估算上界再选类型；二是题目若要求&quot;路径上的最大边权&quot;而非总和，把递推里的加法换成 <code>max</code> 即可，<code>up_w[k][v] = max(up_w[k-1][v], up_w[k-1][up[k-1][v]])</code>，框架完全不变。这个&quot;把运算符换掉、结构照搬&quot;的特性，是倍增表比欧拉序 RMQ 更通用之处：RMQ 只能回答最小值查询，倍增却能承载任意可结合运算。</p>
+<h2 id="rust-ch03-trees-and-lca-22-6-欧拉序-稀疏表-o-1-查询的代价是-2n-1-长的数组">22.6 欧拉序 + 稀疏表：O(1) 查询的代价是 2n−1 长的数组</h2>
+<p>另一条 LCA 路线建立在欧拉序上：从根出发 DFS，第一次到达 v 时记 <code>first[v]</code>，此后每次从某个孩子返回到 v 时再记一次 v；整条序列长度恰为 2n−1。直觉是：在 <code>first[a]</code> 与 <code>first[b]</code> 之间的欧拉子序列里，深度最小的点恰好是 LCA(a,b)——因为 DFS 走到 a 子树再走到 b 子树，必然在两处之间&quot;浮&quot;到它们汇合的最高处。于是 LCA 查询变成区间最小值（RMQ）。</p>
+<p>RMQ 用稀疏表：预处理 <code>st[k][i]</code> 为欧拉序区间 <code>[i, i+2ᵏ)</code> 内深度最小的下标，合并两段用 <code>min(深度)</code> 比较。<code>lg[i] = lg[i/2] + 1</code> 一次性预处理，查询 <code>[l,r]</code> 取 <code>k = lg[r−l+1]</code>，答案是两段重叠区间的最小值之一。预处理 O(n log n)，单次查询 O(1)。注意欧拉序数组下标是 <code>usize</code>，<code>r - (1&lt;&lt;k) + 1</code> 在 Rust 里先算减法会下溢，必须写成 <code>r + 1 - (1&lt;&lt;k)</code>，这是真实会 panic 的坑。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑有两处，笔者实跑都踩到过。其一：迭代模拟 DFS 的欧拉序时，父节点必须在<strong>每从一个孩子返回</strong>时追加一次；如果只在整帧弹出时追加，序列里会缺失中间的父节点，LCA 结果偏深。其二：稀疏表查询的下标 <code>r - len + 1</code> 要用加法优先的写法。两个 bug 都不会被编译期发现，靠 22.7 的随机对拍才稳。</p>
+
+</div>
+</section>
+<p>稀疏表的构造同样可用归纳验证：<code>st[0][i]</code> 就是单点；<code>st[j][i]</code> 覆盖长度 2ʲ 的区间，拆成左右两个长度 2ʲ⁻¹ 的区间，取两者深度较小者即整体最小，因为两个区间恰好拼成原区间且互不重叠。查询时取长度为 2ᵏ 的两段覆盖 <code>[l,r]</code>（允许重叠），重叠不影响最小值结果。<code>lg</code> 数组的递推 <code>lg[i] = lg[i/2] + 1</code> 只依赖更小的 i，一趟从 2 扫到 m 即可；避免对每个查询调用浮点 <code>log2</code> 再取整，既快又无精度隐患。若查询多到还要压缩常数，可进一步用 Cartesian 树加 ±1 RMQ 把空间降到 O(n)，但实现复杂度陡增，除非确实卡内存否则不建议。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">85 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct EulerLca {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    node: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    euler_depth: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    first: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    lg: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    st: Vec&lt;Vec&lt;usize&gt;&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">impl EulerLca {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    fn new(n: usize, edges: &amp;[(usize, usize)], root: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            g[v].push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        let mut depth = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        parent[root] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let mut node = Vec::with_capacity(2 * n - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let mut first = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        first[root] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        node.push(root);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        // 帧 (当前点, 下一个孩子下标)，显式模拟递归的进入/返回</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        let mut frames: Vec&lt;(usize, usize)&gt; = vec![(root, 0)];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        while let Some((u, idx)) = frames.last_mut() {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">            let (u, idx) = (*u, *idx);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            if idx &lt; g[u].len() {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">                frames.last_mut().unwrap().1 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">                let v = g[u][idx];</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">                if v == parent[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">                    continue;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                depth[v] = depth[u] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                first[v] = node.len();</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                node.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                frames.push((v, 0));</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">                frames.pop();</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                if let Some(&amp;(p, _)) = frames.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                    node.push(p); // 每从一个孩子返回，就记录一次父节点 p</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let m = node.len();</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        let euler_depth: Vec&lt;usize&gt; = node.iter().map(|&amp;v| depth[v]).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        let mut lg = vec![0usize; m + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        for i in 2..=m {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">            lg[i] = lg[i / 2] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        let k = lg[m] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        let mut st = vec![vec![0usize; m]; k];</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        st[0] = (0..m).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        for j in 1..k {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">            let half = 1usize &lt;&lt; (j - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            let len = half * 2;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            for i in 0..=m - len {</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">                let x = st[j - 1][i];</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">                let y = st[j - 1][i + half];</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">                st[j][i] = if euler_depth[x] &lt;= euler_depth[y] { x } else { y };</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        EulerLca { node, euler_depth, first, lg, st }</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="65"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    fn lca(&amp;self, a: usize, b: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        let l = self.first[a].min(self.first[b]);</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        let r = self.first[a].max(self.first[b]);</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">        let k = self.lg[r - l + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        let x = self.st[k][l];</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        let y = self.st[k][r + 1 - (1usize &lt;&lt; k)];</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        let idx = if self.euler_depth[x] &lt;= self.euler_depth[y] { x } else { y };</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">        self.node[idx]</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="76"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    let edges = [(0usize, 1usize), (1, 2), (1, 3), (3, 4), (3, 5)];</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    let e = EulerLca::new(6, &amp;edges, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">    println!(&quot;euler = {:?}&quot;, e.node);</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    println!(&quot;first = {:?}&quot;, e.first);</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">    for &amp;(a, b) in &amp;[(2usize, 4usize), (0, 5), (4, 5)] {</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        println!(&quot;lca({}, {}) = {}&quot;, a, b, e.lca(a, b));</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">euler = [0, 1, 2, 1, 3, 4, 3, 5, 3, 1, 0]</span></div>
+<div class="cl is-text"><span class="code">first = [0, 1, 2, 4, 5, 7]</span></div>
+<div class="cl is-text"><span class="code">lca(2, 4) = 1</span></div>
+<div class="cl is-text"><span class="code">lca(0, 5) = 0</span></div>
+<div class="cl is-text"><span class="code">lca(4, 5) = 3</span></div></div></div>
+<p>欧拉序的稀疏表比倍增多占约一倍内存（m≈2n，且要存下标与深度），但查询是常数时间。若树是静态且查询极多（几十万次），这个交换很划算；若树会动态加点，倍增表尚可增量维护，RMQ 则基本要重做，这时应选倍增。</p>
+<h2 id="rust-ch03-trees-and-lca-22-7-随机对拍-xorshift-生成树与暴力爬树互证">22.7 随机对拍：xorshift 生成树与暴力爬树互证</h2>
+<p>LCA 的正确性很难靠几个样例穷尽，尤其是&quot;一个是另一个祖先&quot;&quot;两点同点&quot;&quot;深链跳越根&quot;这些分支。随机对拍的思路：用一个 std-only 的 xorshift 生成器造随机树——令节点 i 的父节点在 <code>[0, i)</code> 中随机选，i 从 1 到 n−1，这样必然得到一棵以 0 为根的连通树；再随机出查询对，把倍增实现与&quot;一步步爬父链&quot;的暴力实现对照。暴力实现的正确性几乎显然，所以两者不一致时几乎一定是倍增实现有 bug。</p>
+<p>xorshift 的核心是三个异或移位，种子必须非零；<code>below(n)</code> 用取模映射到 <code>[0,n)</code>，对测试足够均匀。对拍规模设为 3000 棵树、每棵 20 个查询、n 在 2..=30：树小意味着暴力便宜，数量多意味着分支覆盖广。每棵树只用一次预处理、多次查询，正好符合真实使用场景。任何不一致都会打印细节，最后用计数器汇总。</p>
+<p>生成器的正确性值得单独说明：令第 i 个点的父节点从 <code>[0,i)</code> 中选，i 从 1 递增，则每个新点都连向一个已存在的点，不可能成环，且最终所有点都与 0 连通，边数恰为 n−1，因此必然是一棵树。随机性只体现在树的形状上，不破坏这个结构保证。种子固定为常数让每次运行结果可复现——对拍一旦失败，你能用同一个种子重现现场再打印细节，而不是靠运气碰 bug。若要把带权距离也纳入对拍，只需在生成边时附带小随机权值，再用&quot;暴力沿父链累加&quot;的对照实现即可，框架不变。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">120 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        let mut x = self.0;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        x ^= x &lt;&lt; 13;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        x ^= x &gt;&gt; 7;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        self.0 = x;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        (self.next() % n as u64) as usize</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn build_lca(n: usize, edges: &amp;[(usize, usize)]) -&gt; (Vec&lt;Vec&lt;usize&gt;&gt;, Vec&lt;usize&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut g = vec![Vec::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for &amp;(u, v) in edges {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        g[u].push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        g[v].push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let mut log = 1usize;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    while (1usize &lt;&lt; log) &lt;= n {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        log += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let mut up = vec![vec![0usize; n]; log];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    let mut depth = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    parent[0] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let mut st = vec![0usize];</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    while let Some(u) = st.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            if v == parent[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                continue;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">            depth[v] = depth[u] + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            up[0][v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            st.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    for k in 1..log {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        for v in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            up[k][v] = up[k - 1][up[k - 1][v]];</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    (up, depth)</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="49"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">fn lca(up: &amp;[Vec&lt;usize&gt;], depth: &amp;[usize], mut a: usize, mut b: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    if depth[a] &lt; depth[b] {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        std::mem::swap(&amp;mut a, &amp;mut b);</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    let diff = depth[a] - depth[b];</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    for k in 0..up.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        if ((diff &gt;&gt; k) &amp; 1) == 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            a = up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    if a == b {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        return a;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    for k in (0..up.len()).rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        if up[k][a] != up[k][b] {</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">            a = up[k][a];</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">            b = up[k][b];</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    up[0][a]</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="71"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">fn brute(parent: &amp;[usize], depth: &amp;[usize], mut a: usize, mut b: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    while depth[a] &gt; depth[b] {</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">        a = parent[a];</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    while depth[b] &gt; depth[a] {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">        b = parent[b];</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    while a != b {</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        a = parent[a];</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">        b = parent[b];</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">    a</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="85"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">    let mut rng = Rng(0x9E3779B97F4A7C15);</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">    let mut trees = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">    let mut queries = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">    let mut bad = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">    for _ in 0..3000 {</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">        let n = 2 + rng.below(29); // 2..=30</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">        let mut parent = vec![0usize; n]; // parent[0] 占位</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">        let mut edges = Vec::with_capacity(n - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">        for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">            let p = rng.below(i);</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">            parent[i] = p;</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">            edges.push((i, p));</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">        let (up, depth) = build_lca(n, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">        for _ in 0..20 {</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">            let a = rng.below(n);</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">            let b = rng.below(n);</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">            let fast = lca(&amp;up, &amp;depth, a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">            let slow = brute(&amp;parent, &amp;depth, a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">            queries += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">            if fast != slow {</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">                if bad &lt;= 3 {</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">                    println!(&quot;MISMATCH n={} ({},{}) fast={} slow={}&quot;, n, a, b, fast, slow);</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">        trees += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">    println!(&quot;trees={} queries={} mismatches={}&quot;, trees, queries, bad);</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">        println!(&quot;RESULT: PASS&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">trees=3000 queries=60000 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">RESULT: PASS</span></div></div></div>
+<p>6 万组随机查询零分歧，覆盖了链、星形与随机分叉树。读对拍结果时不要只看最后的 PASS：若出现 MISMATCH，打印的 n 与两点编号能让你用同一随机种子重放现场，先把最小复现规模缩小，再逐步打印 <code>up</code> 表与深度去定位是建表错还是查询错。对拍的价值在于：它不需要你事先知道正确答案，只需要一个&quot;慢但显然对&quot;的对照。把同样的方法用在 22.6 的欧拉序实现上（把 <code>lca</code> 换成该实现的查询），就能在改代码时持续守住正确性。</p>
+<h2 id="rust-ch03-trees-and-lca-22-8-工程取舍-预计算-log-内存布局与方法选择">22.8 工程取舍：预计算 log、内存布局与方法选择</h2>
+<p>三种方案没有绝对优劣，只有场景匹配。倍增胜在代码短、可在线扩展、附带&quot;跳 k 步&quot;能力；欧拉序加 RMQ 胜在查询 O(1)；朴素爬树胜在零预处理，适合一次性查询。下表把关键维度列在一起，实际选型先看查询量与树的静态性。</p>
+<p>还有一个常被问到的取舍是&quot;是否把查询并行化&quot;。倍增表构造完成后是只读的，<code>Lca</code> 结构体不含可变引用，可以安全地用 <code>std::thread::scope</code> 把查询切片分给多个线程，各自调用 <code>lca</code> 再汇总；Rust 的类型系统在这里替你守住了数据竞争防线。相比之下，欧拉序方案的稀疏表同样是只读的，也能并行。真正的瓶颈往往是建表而非查询，所以除非查询量极大，先把单线程版本写对更实际。</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>预处理</th>
+<th>单次查询</th>
+<th>额外空间</th>
+<th>动态加点</th>
+<th>适合场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>朴素爬父链</td>
+<td>O(n)</td>
+<td>O(n)</td>
+<td>O(n)</td>
+<td>容易</td>
+<td>查询极少</td>
+</tr>
+<tr>
+<td>倍增</td>
+<td>O(n log n)</td>
+<td>O(log n)</td>
+<td>O(n log n)</td>
+<td>较容易</td>
+<td>通用默认</td>
+</tr>
+<tr>
+<td>欧拉序 + RMQ</td>
+<td>O(n log n)</td>
+<td>O(1)</td>
+<td>O(n log n)</td>
+<td>困难</td>
+<td>静态树海量查询</td>
+</tr>
+</tbody></table>
+
+<p>实现层面还有三点值得固化成习惯。第一，<code>log</code> 层数一次性算好并作为参数传入，避免每次查询重新算 <code>ilog2</code> 或在循环边界反复调用；Rust 的 <code>usize::ilog2</code> 可用，但把层数存下来更直观。第二，<code>up</code> 用 <code>Vec&lt;Vec&lt;usize&gt;&gt;</code> 时外层是 k、内层是 v，查询时对固定 k 访问不同 v 会跨内层跳转；若追求极致缓存，可换成扁平 <code>Vec&lt;usize&gt;</code> 按 <code>k*n+v</code> 索引，代价是可读性下降。第三，根不一定总是 0：把 root 作为构造函数参数，所有哨兵用 root 而非硬编码 0，代码换场景时无需改动。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>在 <code>WeightedLca</code> 上加 <code>fn kth(&amp;self, v: usize, k: usize) -&gt; usize</code> 求 v 的第 k 代祖先；用 22.7 的对拍框架，与&quot;循环 k 次取 parent&quot;的暴力版在 1000 棵随机树上对照，要求 mismatches=0。</li>
+<li>把 <code>EulerLca</code> 的查询接进对拍主循环（保留同一个随机树生成器），对 3000 棵树各查 20 对，贴出真实输出并确认零分歧。</li>
+<li>构造一棵 10 万节点的链，分别用递归 DFS（可设更大栈或只测 1 万节点观察趋势）与本文迭代 <code>root_tree</code> 跑一次，记录是否崩溃；只记录真实结果，不要编造数字。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>倍增表 <code>up[k][v] = up[k-1][up[k-1][v]]</code> 的不变量是什么？为什么初始化为 root 能消掉越界判断？</li>
+<li>LCA 查询为什么要先 <code>swap</code> 保证 a 更深？最后一步为什么取 <code>up[0][a]</code>？</li>
+<li>欧拉序的迭代实现里，父节点应在什么时机追加到序列？RMQ 查询下标怎样写才不会 <code>usize</code> 下溢？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__prefix-diff-two-pointers.md.html">← 前缀和与差分、双指针</a><a href="rust__chapters__ch03__graph-traversal-shortest-paths.md.html">图遍历与最短路：从队列不变式到负环判定 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

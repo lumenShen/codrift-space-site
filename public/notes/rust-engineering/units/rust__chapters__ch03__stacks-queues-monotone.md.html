@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>栈、队列与单调结构</title>
+<meta name="description" content="第 18 单元 · 建议 90 分钟 · 用「维护一个有序候选集」的眼光看懂单调栈与单调队列">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">栈、队列与单调结构</h1><p class="doc-sub">第 18 单元 · 建议 90 分钟 · 用「维护一个有序候选集」的眼光看懂单调栈与单调队列</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 18-stacks-queues-monotone.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-1-栈与队列-从-vec-到手写环形数组">18.1 栈与队列：从 Vec 到手写环形数组</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-2-单调栈的不变量-存下标-摊还线性">18.2 单调栈的不变量：存下标、摊还线性</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-3-柱状图最大矩形-哨兵-弹出结算与左右边界">18.3 柱状图最大矩形：哨兵、弹出结算与左右边界</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-4-单调队列-滑动窗口最大值的候选淘汰">18.4 单调队列：滑动窗口最大值的候选淘汰</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-5-过期判断与-usize-防御-两处细节定生死">18.5 过期判断与 usize 防御：两处细节定生死</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-6-随机对拍-三个单调算法一起验">18.6 随机对拍：三个单调算法一起验</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-7-变体-取舍与常见误用">18.7 变体、取舍与常见误用</a></li><li class="toc-l2"><a href="#rust-ch03-stacks-queues-monotone-18-8-调试清单与不变量注释">18.8 调试清单与不变量注释</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能用 <code>Vec</code> 当栈、<code>VecDeque</code> 当队列，并手写环形数组队列说明 <code>head</code> 与 <code>len</code> 的关系</li>
+<li>说清单调栈的不变量：为什么存下标而非值，为什么内层 <code>while</code> 仍是摊还 O(n)</li>
+<li>会用单调栈解决&quot;每日温度&quot;与&quot;柱状图最大矩形&quot;，理解哨兵与 <code>&lt;=</code> 弹出条件的作用</li>
+<li>会用单调队列解决滑动窗口最大值，正确处理过期下标、<code>usize</code> 边界与借用冲突</li>
+<li>能用 std-only 的 LCG 随机数据，把三种单调结构与暴力解法对拍验证</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-stacks-queues-monotone-18-1-栈与队列-从-vec-到手写环形数组">18.1 栈与队列：从 Vec 到手写环形数组</h2>
+<p><strong>问题定义</strong>：栈要求后进先出（LIFO），队列要求先进先出（FIFO）。两者都是&quot;只在端点操作&quot;的容器，核心诉求是插入与删除都接近常数时间。栈用 <code>Vec</code> 的尾部当栈顶再自然不过：入栈 <code>push</code>、出栈 <code>pop</code> 都是均摊 O(1)。队列则必须支持头部出队，普通 <code>Vec</code> 的 <code>remove(0)</code> 要搬动后面所有元素，是 O(n)，所以标准库提供双端队列 <code>VecDeque</code>，它的 <code>push_back</code>/<code>pop_front</code> 都是 O(1)。</p>
+<p>如果题目固定容量，也可以手写一个<strong>环形数组队列</strong>：用 <code>head</code> 指向队首元素的物理位置，用 <code>len</code> 记录当前元素个数，下一个写入位置是 <code>(head + len) % cap</code>。这里有一条铁律：<strong>永远不要写 <code>head - 1</code></strong>，那在 <code>head = 0</code> 时会触发 <code>usize</code> 下溢。改用 <code>head + len</code> 表示写入位置，配合取模，既避免负数，也让&quot;队满&quot;判断变成 <code>len == cap</code>。出队时只把 <code>head</code> 前移一位再取模，<code>len</code> 减一；所有关于队满队空的判断都必须基于 <code>len</code>，而不是 <code>head</code> 的值。</p>
+<p>为什么 <code>VecDeque</code> 能同时做到两端 O(1)？它内部也是环形缓冲区，只是把&quot;逻辑下标&quot;与&quot;物理下标&quot;的映射藏在了标准库里，并会在容量不足时自动扩容搬移。<code>Vec::remove(0)</code> 之所以慢，是因为它必须把后面所有元素向前搬一格，这是数组连续存储的固有代价，而非实现偷懒。理解这一点后就能做出正确取舍：需要频繁头部删除时用 <code>VecDeque</code>，只在尾部操作时用 <code>Vec</code>，后者缓存局部性更好、常数更小。环形缓冲区的另一个好处是内存可以复用——出队后那块空间会留给后来的入队元素，不会像&quot;每次 <code>remove(0)</code> 再 <code>push</code>&quot;那样反复分配。这也是第 17 单元&quot;预分配&quot;约定在队列上的具体体现。</p>
+<table>
+<thead>
+<tr>
+<th>结构</th>
+<th>推荐实现</th>
+<th>入栈/入队</th>
+<th>出栈/出队</th>
+<th>关键陷阱</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>栈</td>
+<td><code>Vec&lt;T&gt;</code></td>
+<td><code>push</code> 均摊 O(1)</td>
+<td><code>pop</code> O(1)</td>
+<td>栈顶在尾部，别反向遍历</td>
+</tr>
+<tr>
+<td>队列</td>
+<td><code>VecDeque&lt;T&gt;</code></td>
+<td><code>push_back</code> O(1)</td>
+<td><code>pop_front</code> O(1)</td>
+<td>别用 <code>Vec::remove(0)</code></td>
+</tr>
+<tr>
+<td>定长队列</td>
+<td>手写环形数组</td>
+<td>取模定位 O(1)</td>
+<td>移动 head O(1)</td>
+<td>head 回绕、len 与 cap 相等</td>
+</tr>
+</tbody></table>
+
+<p>下面的程序先用 <code>Vec</code> 演示栈，再运行手写的 <code>ArrayQueue</code>。当队列容量为 4、连续入队 6 个数时，第 5 次入队返回 <code>false</code> 并打印 <code>full at 5</code>；随后把队列排空，得到 <code>1 2 3 4</code>。<code>while let Some(v) = q.pop_front()</code> 是 Rust 里 drain 一个容器的惯用写法，比 <code>while !q.is_empty()</code> 更简洁，也把&quot;取不到就停&quot;的语义写在了类型里。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">51 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct ArrayQueue {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    buf: Vec&lt;i32&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    head: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    len: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">impl ArrayQueue {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn new(cap: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        ArrayQueue { buf: vec![0; cap], head: 0, len: 0 }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    fn push_back(&amp;mut self, v: i32) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        if self.len == self.buf.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            return false;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        let pos = (self.head + self.len) % self.buf.len();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        self.buf[pos] = v;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        self.len += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        true</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    fn pop_front(&amp;mut self) -&gt; Option&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        if self.len == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            return None;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        let v = self.buf[self.head];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        self.head = (self.head + 1) % self.buf.len();</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        self.len -= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        Some(v)</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="32"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    // Vec 当栈：栈顶在尾部</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let mut st: Vec&lt;i32&gt; = Vec::with_capacity(4);</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    st.push(1);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    st.push(2);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    println!(&quot;stack push/pop: {:?} {:?}&quot;, st.pop(), st.pop());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="39"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    let mut q = ArrayQueue::new(4);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    for x in 1..=6 {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        if !q.push_back(x) {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            println!(&quot;full at {}&quot;, x);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            break;</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    while let Some(v) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        print!(&quot;{} &quot;, v);</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    println!();</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">}</span></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>栈像一摞盘子，只能从顶上拿；队列像排队买票，先来的先走。单调栈和单调队列则是在这两个容器上加了一条规矩：里面的值必须按大小排好队，一旦有人破坏了规矩就把队尾不合格的请出去。这样队首永远是当前最优解，查询就是 O(1)。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u18_b1.rs -o u18_b1 &amp;&amp; ./u18_b1</span></div>
+<div class="cl is-text"><span class="code">stack push/pop: Some(2) Some(1)</span></div>
+<div class="cl is-text"><span class="code">full at 5</span></div>
+<div class="cl is-text"><span class="code">1 2 3 4</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-2-单调栈的不变量-存下标-摊还线性">18.2 单调栈的不变量：存下标、摊还线性</h2>
+<p><strong>问题定义</strong>：给定数组，求每个位置右边第一个比它大的元素的位置（&quot;每日温度&quot;求的是天数差）。</p>
+<p><strong>不变量</strong>：维护一个<strong>下标栈</strong>，栈中下标对应的值保持严格递减。新元素 <code>t[i]</code> 到来时，不断弹掉栈顶那些值小于 <code>t[i]</code> 的下标，直到栈顶的值不小于它（或栈空），再把 <code>i</code> 入栈。弹出时，<code>i</code> 就是被弹下标 <code>j</code> 要等的&quot;更暖和的一天&quot;，答案是 <code>i - j</code>。</p>
+<p>为什么必须存下标而不是值？因为答案要的是<strong>距离</strong>，只有下标才能算 <code>i - j</code>；只存温度值就丢失了位置信息。为什么 <code>i - j</code> 不会下溢？因为栈里的下标都是<strong>已经遍历过的位置</strong>，必有 <code>i &gt; j</code>，减法方向天然安全。这是 Rust 写单调结构时少有的&quot;不需要额外判断&quot;的减法，原因值得记住：数据结构的不变量本身保证了边界。</p>
+<p>摊还 O(n) 的论证是单调结构的灵魂。内层 <code>while</code> 看似嵌套在 <code>for</code> 里，容易误判成 O(n²)；但每个下标<strong>最多入栈一次、出栈一次</strong>，整个遍历过程中弹栈操作的总次数不超过 <code>n</code>。把内层循环的总工作量摊到 <code>n</code> 个元素上，每份是常数，因此总时间是 O(n)。用第 17 单元的术语说，这是聚合分析：先算总量再除以次数。判断一个看起来嵌套的结构是不是单调结构，就问&quot;同一个元素会不会被反复弹入弹出&quot;——若答案是否定的，基本可以放心判线性。</p>
+<p>严格性与相等值是另一个需要提前约定的细节。上面用 <code>temp &gt; t[j]</code> 弹出，意味着&quot;必须严格更暖&quot;才算找到答案；如果题目问的是&quot;第一个不低于当前温度的日子&quot;，弹出条件要改成 <code>temp &gt;= t[j]</code>。差一个等号，相等元素的行为完全不同：前者会把相等温度留在栈里继续等，后者会立即弹出并结算为距离 0。没有对错之分，只有是否符合题意。写完代码后，用一组含大量重复值的数组（例如全 20）跑一遍，看输出是否符合题目对相等情况的规定，是验证这个细节最快的办法。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn daily_temperatures(t: &amp;[i32]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let n = t.len();</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut ans = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut st: Vec&lt;usize&gt; = Vec::with_capacity(n); // 栈中温度严格递减</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    for (i, &amp;temp) in t.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        while let Some(&amp;j) = st.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            if temp &gt; t[j] {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">                let j = st.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">                ans[j] = i - j; // i &gt; j，减法安全</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        st.push(i);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    ans</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let t = [73, 74, 75, 71, 69, 72, 76, 73];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;{:?}&quot;, daily_temperatures(&amp;t));</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div></div></div>
+<p><code>while let Some(&amp;j) = st.last()</code> 里的 <code>&amp;j</code> 不能省略。<code>st.last()</code> 返回 <code>Option&lt;&amp;usize&gt;</code>，模式 <code>Some(j)</code> 会把 <code>j</code> 绑定为 <code>&amp;usize</code> 引用，而紧接着的 <code>st.pop()</code> 需要可变借用 <code>st</code>——一个不可变引用与一个可变引用同时存在，编译器拒绝。写成 <code>Some(&amp;j)</code> 则是<strong>把下标复制成标量</strong>，引用在模式匹配结束时就消失了，后面可以放心 <code>pop</code>。这是 Rust 写单调结构最常遇到的借用冲突，解法统一为&quot;先 copy 出标量再修改容器&quot;。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u18_b2.rs -o u18_b2 &amp;&amp; ./u18_b2</span></div>
+<div class="cl is-text"><span class="code">[1, 1, 4, 2, 1, 1, 0, 0]</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-3-柱状图最大矩形-哨兵-弹出结算与左右边界">18.3 柱状图最大矩形：哨兵、弹出结算与左右边界</h2>
+<p><strong>问题定义</strong>：给定非负整数数组表示柱状图各柱高度，求矩形面积的最大值。</p>
+<p><strong>不变量与正确性</strong>：维护高度<strong>严格递增</strong>的下标栈。当遇到高度 <code>cur</code> 小于栈顶高度时，栈顶柱 <code>idx</code> 的&quot;右边界&quot;就是当前位置 <code>i</code>（再往右第一根柱子比它矮），&quot;左边界&quot;是弹出后新栈顶下标加一（新栈顶是左边最后一根比它矮的柱子）。于是以 <code>h[idx]</code> 为高的最大矩形宽度是 <code>i - left</code>，面积立即结算。每根柱子只在被弹出时结算一次，不会遗漏也不会重复。</p>
+<p>为了让遍历结束时栈中所有柱子都被结算，在数组末尾追加一个高度为 0 的<strong>哨兵</strong>：它比所有真实高度都小，能一次性清空整个栈。哨兵必须是 0 而不是 -1，因为题目保证高度非负；若输入可能含负数，要改用 -1 或显式循环清空栈。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>弹出条件写成 <code>h[top] &lt;= cur</code> 而不是 <code>&lt;</code>：遇到相同高度时弹出旧的、保留新的。若写成 <code>&lt;</code>，相同高度会全部留在栈里，既不错误但左边界计算会变得啰嗦，且容易在多次相等时重复结算。另一个坑是把哨兵写成 <code>-1</code> 却用 <code>Vec&lt;i32&gt;</code> 装非负高度，看似可行，但一旦题目数据含 0 就会与哨兵冲突；更稳妥的做法是显式追加一个&quot;逻辑哨兵&quot;下标，用一个额外的循环把栈排空，而不是往数据里塞特殊值。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">26 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn largest_rectangle(heights: &amp;[i32]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut h = Vec::with_capacity(heights.len() + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    h.extend_from_slice(heights);</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    h.push(0); // 哨兵：强制清空栈</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut st: Vec&lt;usize&gt; = Vec::with_capacity(h.len());</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut best = 0i32;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    for (i, &amp;cur) in h.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        while let Some(&amp;top) = st.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">            if h[top] &lt;= cur {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">                break; // 保持栈中高度严格递增</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            let idx = st.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            let height = h[idx];</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            let left = st.last().map_or(0, |&amp;j| j + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            let width = i - left; // i 一定大于 left</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            best = best.max(height * (width as i32));</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        st.push(i);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let a = [2, 1, 5, 6, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;{}&quot;, largest_rectangle(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div></div></div>
+<p><code>left = st.last().map_or(0, |&amp;j| j + 1)</code> 用 <code>map_or</code> 把&quot;栈空&quot;和&quot;有栈顶&quot;两种情况压成一个表达式：栈空时左边界是 0，否则是新栈顶下标加一。<code>|&amp;j|</code> 同样是在复制下标，避免持有引用干扰后续操作。</p>
+<p>还有一个容易被忽视的数值边界：<code>height * (width as i32)</code> 在高度达到 10⁹、宽度达到 10⁵ 时会溢出 <code>i32</code>。本单元示例代码用的是小数据，所以 <code>i32</code> 够用；实际题目若声明高度可达 10⁹，要先把 <code>height</code> 转成 <code>i64</code> 再相乘，即 <code>height as i64 * width as i64</code>，并把 <code>best</code> 也声明为 <code>i64</code>。Rust 在 debug 构建下会当场报告整数溢出，这反而是好事——它逼你在上线前就把类型选对，而不是像某些语言那样静默回绕。记住：<strong>下标用 <code>usize</code>，计数与求和用 <code>i64</code></strong>，这是算法里最稳妥的默认选择。</p>
+<p>拿 <code>[2, 1, 5, 6, 2, 3]</code> 走一遍：当 <code>i</code> 走到下标 4（高度 2）时，栈顶是高度 6 的下标 3，<code>6 &gt; 2</code> 被弹出，此时新栈顶是高度 5 的下标 2，左边界为 3，宽度 <code>4 - 3 = 1</code>，面积 6；继续弹出高度 5，左边界变成下标 1 之后，宽度 <code>4 - 2 = 2</code>，面积 10，这就是答案。注意&quot;左边界 = 弹出后新栈顶下标 + 1&quot;这一步：新栈顶是最后一个比当前柱矮的柱子，矩形自然只能从它右边开始。在脑中手动模拟两三个元素的能力，比死记模板更能帮你定位边界错误。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u18_b3.rs -o u18_b3 &amp;&amp; ./u18_b3</span></div>
+<div class="cl is-text"><span class="code">10</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-4-单调队列-滑动窗口最大值的候选淘汰">18.4 单调队列：滑动窗口最大值的候选淘汰</h2>
+<p><strong>问题定义</strong>：给定数组与窗口大小 k，求每个长度为 k 的滑动窗口中的最大值。</p>
+<p><strong>不变量与正确性</strong>：队列里只保存<strong>可能成为未来最大值的下标</strong>，且它们对应的值从队首到队尾严格递减。于是队首永远是当前窗口答案。这个&quot;候选名单&quot;的删减依据是<strong>支配关系</strong>：若下标 <code>p &lt; q</code> 且 <code>a[p] &lt;= a[q]</code>，那么只要 <code>q</code> 还在窗口内，<code>p</code> 就永远不可能成为最大值——<code>q</code> 更靠后（活得更久）且不小于它。所以 <code>p</code> 被 <code>q</code> 完全支配，可以从名单里删掉。</p>
+<p>每次新元素 <code>x = a[i]</code> 到来要做三件事，顺序不能乱：<strong>第一</strong>，把已经滑出窗口的过期下标从队首弹掉；<strong>第二</strong>，从队尾弹掉所有值 <code>&lt;= x</code> 的下标（它们被 <code>x</code> 支配）；<strong>第三</strong>，把 <code>i</code> 入队。当 <code>i + 1 &gt;= k</code> 时，队首就是当前窗口最大值。先过期再淘汰，能保证被淘汰判断的候选都还在窗口内；反过来先淘汰再过期虽然结果相同，但会让&quot;支配关系&quot;的语义变得不清晰。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">35 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn sliding_max(a: &amp;[i32], k: usize) -&gt; Vec&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    if k == 0 || k &gt; a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        return Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut dq: VecDeque&lt;usize&gt; = VecDeque::with_capacity(a.len());</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut out = Vec::with_capacity(a.len().saturating_sub(k) + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    for (i, &amp;x) in a.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        while let Some(&amp;front) = dq.front() {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            if front + k &lt;= i {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">                dq.pop_front();</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        while let Some(&amp;back) = dq.back() {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            if a[back] &lt;= x {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">                dq.pop_back();</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        dq.push_back(i);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        if i + 1 &gt;= k {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">            out.push(a[*dq.front().unwrap()]);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="31"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let a = [1, 3, -1, -3, 5, 3, 6, 7];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    println!(&quot;{:?}&quot;, sliding_max(&amp;a, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">}</span></div></div></div>
+<p>队尾弹出用 <code>&lt;=</code> 也能正确处理相等元素：两个相等的值先后入队，旧的先过期，新的留在队列里，弹出旧的不损失信息，反而让队列更短。只有当题目要求&quot;同时保留相等元素的计数&quot;时，才需要改成 <code>&lt;</code> 并在别处单独处理。把单调队列想象成&quot;去掉了所有被支配候选者的名单&quot;，<code>a[back] &lt;= x</code> 正是支配关系的直译。</p>
+<p>从摊还角度看，滑动窗口的每一步里，每个下标入队一次、出队最多一次（可能从队首过期出去，也可能从队尾被淘汰出去），所以总操作次数是 O(n)，而非表里的 O(nk) 暴力扫描。空间上队列最多装 k 个候选人，是 O(k)。相比之下，用堆维护窗口需要同时保存值和下标，并在过期时做懒删除，单次操作 O(log n)，代码也更长；单调队列的优势正是把&quot;过期&quot;与&quot;最值&quot;这两件事合并进同一个数据结构，用简单的下标比较取代了复杂的删除逻辑。代价是它只适用于&quot;最大值/最小值&quot;这类可由支配关系刻画的问题，换成&quot;中位数&quot;就不再成立。</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>单次查询</th>
+<th>总复杂度</th>
+<th>适用条件</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>每个窗口扫一遍</td>
+<td>O(k)</td>
+<td>O(nk)</td>
+<td>仅作暴力对照</td>
+</tr>
+<tr>
+<td>单调队列</td>
+<td>摊还 O(1)</td>
+<td>O(n)</td>
+<td>任意数组，窗口固定</td>
+</tr>
+<tr>
+<td>堆 + 懒删除</td>
+<td>O(log n)</td>
+<td>O(n log n)</td>
+<td>窗口可变、需支持删除</td>
+</tr>
+</tbody></table>
+
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u18_b4.rs -o u18_b4 &amp;&amp; ./u18_b4</span></div>
+<div class="cl is-text"><span class="code">[3, 3, 5, 5, 6, 7]</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-5-过期判断与-usize-防御-两处细节定生死">18.5 过期判断与 usize 防御：两处细节定生死</h2>
+<p>单调队列的代码不长，却集中了 Rust 下标运算最典型的两个防御动作，值得单独拆开讲。</p>
+<p>第一处是过期判断 <code>front + k &lt;= i</code>，而不是 <code>front == i - k + 1</code>。那种写法在数学上等价，但循环初期 <code>i</code> 可能小于 <code>k - 1</code>，此时 <code>i - k + 1</code> 会发生 <code>usize</code> 下溢——debug 构建当场 panic，release 构建回绕成天文数字，导致队列永远不被清空。改成加法形式后，等式两边都不会出现负数，<code>front + k</code> 只有在 <code>i</code> 真正越过窗口右端时才成立。这再次印证第 17 单元的准则：让减法永远发生在&quot;被减数更大&quot;的前提下。</p>
+<p>第二处是输出预分配 <code>a.len().saturating_sub(k) + 1</code>。当 <code>k &gt; a.len()</code> 时，普通减法 <code>a.len() - k</code> 会下溢；虽然前面已经用 <code>if k == 0 || k &gt; a.len() { return Vec::new(); }</code> 挡住了这种情况，但把 <code>saturating_sub</code> 写上是一层额外的保险，也表达了&quot;容量最坏为 0&quot;的意图。类似地，柱状图里的 <code>left = st.last().map_or(0, |&amp;j| j + 1)</code>，<code>j + 1</code> 在 <code>j</code> 接近 <code>usize::MAX</code> 时理论上会溢出，但 <code>j</code> 是真实数组下标，远小于上限，所以这里安全——区分&quot;理论上溢出&quot;与&quot;实践中不可能&quot;同样是工程判断力。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">读新元素 a[i] → 弹出队首过期下标（front + k &lt;= i）→ 从队尾淘汰被 a[i] 支配的下标 → 入队 i → 若窗口已满，取队首值输出</pre></figure>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">单调队列内部（窗口 k=3，数组片段 [1,3,-1,-3,5]）
+
+下标:  1      2       4
+值:    3  &gt;  -1  &gt;   5
+       ^              ^
+      队首           队尾
+过期条件: front + 3 &lt;= i
+支配规则: a[back] &lt;= x 则淘汰 back</pre></figure>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">// 关键表达式的真实含义（配合上面 [1,3,-1,-3,5] 的推演）：</span></div>
+<div class="cl is-text"><span class="code">// i=3 时队首 front=1，front+k=4 &gt; 3，不过期</span></div>
+<div class="cl is-text"><span class="code">// i=4 时队首 front=1，front+k=4 &lt;= 4，弹出；新队首 front=2</span></div>
+<div class="cl is-text"><span class="code">// 随后 x=5 淘汰值 -1，队列只剩下标 4，队首答案 5</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-6-随机对拍-三个单调算法一起验">18.6 随机对拍：三个单调算法一起验</h2>
+<p>单调结构的 bug 往往&quot;看起来差不多&quot;，不会崩溃，只是边界错一两个位置。把暴力解法当裁判，能在几秒内抓出来。本节的测试同时验证三种实现：每日温度、柱状图最大矩形、滑动窗口最大值。</p>
+<p><strong>暴力解法</strong>分别是：对每个位置向右扫描直到找到更大值；枚举每根柱子的起点终点并维护区间最小高度；对每个窗口扫描 k 个元素取最大值。它们分别是 O(n²)、O(n²)、O(nk)，在 <code>n ≤ 12</code> 的小数据上瞬间完成。随机数由 LCG 生成，乘法与加法都用 <code>wrapping_*</code> 避免 debug 构建溢出 panic。固定种子并打印，一旦发现不一致就能稳定复现。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">146 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    *state = state</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .wrapping_mul(6364136223846793005)</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .wrapping_add(1442695040888963407);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    *state &gt;&gt; 33</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn daily_fast(t: &amp;[i32]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let n = t.len();</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut ans = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let mut st: Vec&lt;usize&gt; = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    for (i, &amp;temp) in t.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        while let Some(&amp;j) = st.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            if temp &gt; t[j] {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">                let j = st.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">                ans[j] = i - j;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        st.push(i);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    ans</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="27"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">fn daily_slow(t: &amp;[i32]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let n = t.len();</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let mut ans = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        for j in i + 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            if t[j] &gt; t[i] {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                ans[i] = j - i;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    ans</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">fn rect_fast(heights: &amp;[i32]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    let mut h = Vec::with_capacity(heights.len() + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    h.extend_from_slice(heights);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    h.push(0);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut st: Vec&lt;usize&gt; = Vec::with_capacity(h.len());</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut best = 0i32;</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    for (i, &amp;cur) in h.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        while let Some(&amp;top) = st.last() {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            if h[top] &lt;= cur {</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">            let idx = st.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            let height = h[idx];</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">            let left = st.last().map_or(0, |&amp;j| j + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            best = best.max(height * ((i - left) as i32));</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        st.push(i);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="62"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">fn rect_slow(h: &amp;[i32]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    let n = h.len();</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    let mut best = 0i32;</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        let mut min_h = i32::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        for j in i..n {</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">            min_h = min_h.min(h[j]);</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">            best = best.max(min_h * ((j - i + 1) as i32));</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="75"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">fn slide_fast(a: &amp;[i32], k: usize) -&gt; Vec&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    if k == 0 || k &gt; a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">        return Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">    let mut dq: VecDeque&lt;usize&gt; = VecDeque::with_capacity(a.len());</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    let mut out = Vec::with_capacity(a.len().saturating_sub(k) + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">    for (i, &amp;x) in a.iter().enumerate() {</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        while let Some(&amp;front) = dq.front() {</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">            if front + k &lt;= i {</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">                dq.pop_front();</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">        while let Some(&amp;back) = dq.back() {</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">            if a[back] &lt;= x {</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">                dq.pop_back();</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">        dq.push_back(i);</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">        if i + 1 &gt;= k {</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">            out.push(a[*dq.front().unwrap()]);</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="104"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">fn slide_slow(a: &amp;[i32], k: usize) -&gt; Vec&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">    if k == 0 || k &gt; a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">        return Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">    let mut out = Vec::with_capacity(a.len() - k + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">    for s in 0..=a.len() - k {</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">        let mut m = i32::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">        for &amp;x in &amp;a[s..s + k] {</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">            m = m.max(x);</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">        out.push(m);</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="119"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">    let seed0 = 20240501u64;</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">    let mut seed = seed0;</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">    let mut bad = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">    for t in 0..3000 {</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">        let n = (lcg(&amp;mut seed) % 12 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">        let temps: Vec&lt;i32&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 71) as i32 + 30).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">        let heights: Vec&lt;i32&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 10) as i32 + 1).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">        let vals: Vec&lt;i32&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 21) as i32 - 10).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">        let k = (lcg(&amp;mut seed) % n as u64 + 1) as usize;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="130"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">        let (df, ds) = (daily_fast(&amp;temps), daily_slow(&amp;temps));</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">        let (rf, rs) = (rect_fast(&amp;heights), rect_slow(&amp;heights));</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">        let (sf, ss) = (slide_fast(&amp;vals, k), slide_slow(&amp;vals, k));</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">        if df != ds || rf != rs || sf != ss {</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">            bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">            println!(</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">                &quot;MISMATCH t={} temps={:?} df={:?} ds={:?} heights={:?} rf={} rs={} vals={:?} k={} sf={:?} ss={:?}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">                t, temps, df, ds, heights, rf, rs, vals, k, sf, ss</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">            );</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">            break;</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">        println!(&quot;diff seed={}: 3000 cases x 3 algorithms passed&quot;, seed0);</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">}</span></div></div></div>
+<p>注意测试数据做了区分：温度是 30 到 100 的正数，高度固定为正（保证哨兵 0 不会被真实数据撞上），窗口数组则正负混合（<code>-10..10</code>），这样全正、全负、递增、递减等各类边界都有机会被覆盖。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>对拍就像请一个&quot;笨但绝对可靠&quot;的裁判。快速算法可能因为某个边界写错而悄悄出错，暴力算法虽然慢，但逻辑直白不会骗人。在小数据上让两者做同样的事，结果不一样就说明快速算法有 bug。三千组随机数据都一致，你对正确性的信心就从&quot;我觉得对&quot;变成&quot;实测都对&quot;了。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u18_b5.rs -o u18_b5 &amp;&amp; ./u18_b5</span></div>
+<div class="cl is-text"><span class="code">diff seed=20240501: 3000 cases x 3 algorithms passed</span></div></div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-7-变体-取舍与常见误用">18.7 变体、取舍与常见误用</h2>
+<p><strong>单调方向的反转</strong>是最常见的变体。每日温度求&quot;下一个更大&quot;，栈保持递减；若要求&quot;下一个更小&quot;，栈就保持递增，弹出条件改成 <code>temp &lt; t[j]</code>。柱状图求最大矩形用递增栈；若求&quot;每个位置左边第一个更高&quot;，同样改成递减栈。判断方向有个简单口诀：<strong>弹出条件要能淘汰&quot;不可能成为答案&quot;的元素</strong>——求更大时，比当前小的元素被淘汰；求更小时，比当前大的被淘汰。</p>
+<p><strong>相等元素的处理</strong>决定了弹出条件是 <code>&lt;</code> 还是 <code>&lt;=</code>。求&quot;下一个严格更大&quot;时，相等元素不能互相弹出，用 <code>temp &gt; t[j]</code>（严格大于才弹）；求&quot;下一个不小于&quot;时，用 <code>&gt;=</code>。柱状图最大矩形用 <code>&lt;=</code> 弹出相等高度，是为了把重复的宽度合并到最右边的柱子上，避免重复结算。滑动窗口用 <code>&lt;=</code> 淘汰相等值，是因为旧的下标必定先过期，留新的更划算。把&quot;为什么要这样比较&quot;写成注释放在 <code>if</code> 上方，比事后单步调试快得多。</p>
+<p><strong>单调结构不是万能的</strong>。它要求被维护的量具有单调性，且每个元素只需进出各一次。如果查询是&quot;窗口内第 k 大&quot;而非最大，单调队列就无能为力，需要切换到堆或平衡树；如果&quot;最优候选&quot;会因为某个未来事件重新变优（左指针需要回退），滑动窗口的前提就被破坏，必须换方法。还有一个典型误用：把单调栈用于无序数据的&quot;全局最值&quot;查询——栈只能回答&quot;到当前位置为止&quot;的局部问题，全局最值用一次扫描就够了，栈反而多余。</p>
+<p><strong>与优先队列的取舍</strong>可以归结为一句话：单调结构用&quot;信息淘汰&quot;换取线性时间，堆用&quot;全量保留&quot;换取通用性。单调栈里被弹出的元素永远不会再回来，因为它的答案已经确定；堆里的元素即使过期也要等到弹出时才能判断，所以堆必须保留全部候选。当问题能证明&quot;一旦被淘汰就永不再需要&quot;时，单调结构严格优于堆；当这个证明不成立时，强行套单调结构只会得到错误答案。竞赛中&quot;每日温度&quot;&quot;滑动窗口最大/最小值&quot;属于前者，&quot;动态维护第 k 大&quot;属于后者，分界线相当清晰。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把第 18.2 节改成&quot;下一个更冷的一天&quot;：栈保持递增，弹出条件改为 <code>temp &lt; t[j]</code>，用固定种子 <code>99</code> 生成 2000 组 <code>n ≤ 15</code> 的随机温度，与暴力解法对拍。</li>
+<li>在第 18.3 节中去掉哨兵 <code>h.push(0)</code>，改用一个显式循环在遍历结束后把栈排空（注意循环里仍需结算面积），验证结果一致；想一想为什么哨兵写法更不容易遗漏。</li>
+<li>给第 18.4 节的滑动窗口加上&quot;最小值&quot;版本：把队列维护为递增，队首即最小值；与暴力解法对拍 3000 组随机数据。</li>
+<li>把第 18.1 节的 <code>ArrayQueue</code> 改成泛型 <code>ArrayQueue&lt;T: Default + Copy&gt;</code>，让 <code>new</code> 用 <code>vec![T::default(); cap]</code> 分配，编译并跑通整数版本的全部测试。</li>
+</ul>
+
+</div></div>
+<h2 id="rust-ch03-stacks-queues-monotone-18-8-调试清单与不变量注释">18.8 调试清单与不变量注释</h2>
+<p>这一类题目出错往往不是算法想错，而是边界处理不细。逐项核对能省很多时间：栈或队列里存的到底是值还是下标；单调方向是递增还是递减，与题目求&quot;更大&quot;还是&quot;更小&quot;是否一致；弹出条件该用 <code>&lt;=</code> 还是 <code>&lt;</code>；过期判断的下标关系是否用了加法形式；哨兵值是否会与真实数据冲突；所有减法是否满足被减数大于减数；<code>usize</code> 转换是否显式写出。把不变量写成注释放在循环上方，例如&quot;栈中下标对应高度严格递增，弹出即结算以该高度为高的最大矩形&quot;，每次循环体内只做保持不变量的事，代码就很难错。</p>
+<p>写错单调方向时，程序往往不会崩溃，而是给出&quot;看起来差不多&quot;的错误答案，这类 bug 最危险。一个有效的自检办法是在纸上画三列：当前位置 <code>i</code>、栈（或队列）内容、本轮产生的答案，然后手工推进五到六个元素。手工模拟能验证不变量是否真的成立，比如每日温度里栈中温度是否始终递减、最大矩形里新栈顶是否一定比弹出柱矮。等手工推演与程序输出一致，再交给随机对拍做大范围验证，两套手段配合起来基本能根除这一类边界错误。</p>
+<p>以每日温度的 <code>[73, 74, 75, 71]</code> 为例手工推演：i=0 时栈空，73 入栈；i=1 时 74 弹出 73，记录距离 1，再入栈；i=2 时 75 弹出 74，记录距离 1，再入栈；i=3 时 71 不大于 75，直接入栈，栈内变成 <code>[2, 3]</code>，对应温度 <code>[75, 71]</code>，依然递减。四步走完，输出开头是 <code>[1, 1, ...]</code>，与程序真实结果一致。这种&quot;每轮都能用一句话解释不变量为何保持&quot;的推演，是把模板变成自己东西的最短路径。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>单调栈里为什么通常存下标而不是值？以&quot;每日温度&quot;说明。</li>
+<li>在 <code>while let Some(&amp;j) = st.last()</code> 中，如果去掉 <code>&amp;</code> 会有什么编译错误？为什么？</li>
+<li>滑动窗口最大值里，过期判断为何写成 <code>front + k &lt;= i</code> 而不是 <code>front == i - k + 1</code>？</li>
+<li>柱状图最大矩形为什么要用哨兵 0？弹出条件为什么写成 <code>h[top] &lt;= cur</code>？</li>
+<li>单调队列的&quot;支配关系&quot;是什么？它如何证明队尾淘汰不会丢失答案？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__complexity-and-rust-idioms.md.html">← 复杂度与 Rust 算法工程约定</a><a href="rust__chapters__ch03__union-find-and-heap.md.html">并查集与堆 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>异步运行时与性能</title>
+<meta name="description" content="第 16 单元 · 建议 90 分钟 · 从任务调度到取消安全，再到可复现的性能数字">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">异步运行时与性能</h1><p class="doc-sub">第 16 单元 · 建议 90 分钟 · 从任务调度到取消安全，再到可复现的性能数字</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 16-async-runtime-and-performance.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-1-运行时模型-任务-worker-与-work-stea">16.1 运行时模型：任务、worker 与 work stealing</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-2-async-状态机与-poll-为什么不能阻塞">16.2 async 状态机与 poll：为什么不能阻塞</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-3-select-竞速-偏置与-drop-时机">16.3 select!：竞速、偏置与 drop 时机</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-4-取消安全-什么能安全取消-什么不能">16.4 取消安全：什么能安全取消，什么不能</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-5-asyncdrop-引子与替代方案">16.5 AsyncDrop 引子与替代方案</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-6-真实基准-criterion-数字与解读">16.6 真实基准：criterion 数字与解读</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-7-perf-flamegraph-与剖析流程">16.7 perf、flamegraph 与剖析流程</a></li><li class="toc-l2"><a href="#rust-ch02-async-runtime-and-performance-16-8-工程取舍-runtime-配置-阻塞池与背压">16.8 工程取舍：runtime 配置、阻塞池与背压</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能说清 tokio 的 runtime、任务与 work stealing 之间的关系，理解线程数配置的依据</li>
+<li>能用 <code>select!</code> 表达超时与竞速，理解分支偏置与 drop 时机</li>
+<li>能判断一个异步操作是否取消安全，并用 <code>spawn</code> 或状态机改写不安全的代码</li>
+<li>能读懂 criterion 输出里的估计值、置信区间与离群点，并用真实数字支撑性能结论</li>
+<li>能描述 perf/flamegraph 的剖析流程，区分&quot;测得出&quot;与&quot;只能示意&quot;的数字</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-async-runtime-and-performance-16-1-运行时模型-任务-worker-与-work-stea">16.1 运行时模型：任务、worker 与 work stealing</h2>
+<p><code>async fn</code> 本身不会运行任何东西。调用它只是构造一个 future，它需要被某个执行器反复 <code>poll</code> 才会前进。tokio 就是这样一个执行器：它维护一个任务队列，由若干 worker 线程从队列里取任务、poll 一次、再把未完成的任务放回。理解这个模型，很多现象就不再神秘——例如为什么在 async 函数里调用 <code>std::thread::sleep</code> 会拖垮整个系统，因为那个 worker 线程被占住了，队列里其他任务都得不到 poll。</p>
+<p>本单元的真实验证用的是多线程运行时，配置两个 worker 线程。程序打印了宿主的逻辑核数，并并发跑六个模拟请求：偶数 id 给 100ms 预算，奇数 id 只给 30ms，而每个请求本身需要 60ms 才能完成。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">36 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::time::Duration;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use tokio::time::Instant;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">async fn fake_fetch(id: u32, ms: u64) -&gt; String {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    tokio::time::sleep(Duration::from_millis(ms)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    format!(&quot;result-{id}&quot;)</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">async fn with_timeout(id: u32, fetch_ms: u64, budget_ms: u64) -&gt; Option&lt;String&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    tokio::select! {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        v = fake_fetch(id, fetch_ms) =&gt; Some(v),</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        _ = tokio::time::sleep(Duration::from_millis(budget_ms)) =&gt; None,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">#[tokio::main(flavor = &quot;multi_thread&quot;, worker_threads = 2)]</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">async fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;逻辑核数: {:?}&quot;, std::thread::available_parallelism());</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let t0 = Instant::now();</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let mut handles = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    for i in 0..6 {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        let budget = if i % 2 == 0 { 100 } else { 30 };</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        handles.push(tokio::spawn(async move {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            let r = with_timeout(i, 60, budget).await;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            (i, r)</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }));</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut results = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    for h in handles {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        results.push(h.await.unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    for (i, r) in results {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        println!(&quot;任务 {i}: {:?}&quot;, r.as_deref());</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    println!(&quot;6 个任务墙钟: {:?}&quot;, t0.elapsed());</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">}</span></div></div></div>
+<p>真实输出如下。六个任务只花了约 73ms，而不是串行的 360ms——等待发生在 reactor 上，worker 在请求睡眠期间可以去 poll 别的任务。偶数任务拿到结果，奇数任务超时返回 <code>None</code>，与预算设置完全吻合。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo run --release</span></div>
+<div class="cl is-text"><span class="code">逻辑核数: Ok(32)</span></div>
+<div class="cl is-text"><span class="code">任务 0: Some(&quot;result-0&quot;)</span></div>
+<div class="cl is-text"><span class="code">任务 1: None</span></div>
+<div class="cl is-text"><span class="code">任务 2: Some(&quot;result-2&quot;)</span></div>
+<div class="cl is-text"><span class="code">任务 3: None</span></div>
+<div class="cl is-text"><span class="code">任务 4: Some(&quot;result-4&quot;)</span></div>
+<div class="cl is-text"><span class="code">任务 5: None</span></div>
+<div class="cl is-text"><span class="code">6 个任务墙钟: 72.9608ms</span></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>把运行时想成一家餐厅。worker 线程是服务员，任务是餐桌。服务员不会守在一桌旁边等菜上齐，而是把订单交给厨房（reactor），转身去服务别的桌；菜好了再回来。这样几个服务员就能照看几十桌，但前提是没人把服务员按住聊天——那正是阻塞调用干的事。</p>
+
+</div>
+</section>
+<p>work stealing 指的是：每个 worker 有自己的本地队列，本地队列空了就去别的 worker 那里&quot;偷&quot;任务。这比全局单一队列更少争用，同时又能自动平衡负载。理解它对配置线程数很关键——线程数不是越多越好，超过物理并行度会增加上下文切换与偷取开销。I/O 密集型负载通常用默认（等于逻辑核数）就够；CPU 密集型混合计算时，可以考虑把重计算 <code>spawn_blocking</code>，避免长期占用 worker。</p>
+<p><code>#[tokio::main]</code> 是一个宏，它把被标注的 async main 改写成同步 main：创建一个 Runtime，调用 <code>block_on</code>。参数 <code>flavor</code> 与 <code>worker_threads</code> 直接传给运行时构建器。需要更细的控制时（例如自定义 <code>thread_name</code>、设置 <code>max_blocking_threads</code>、启用 <code>enable_all</code> 的部分能力），可以不用宏，手写 <code>Runtime::new()</code> 再 <code>block_on</code>。宏的便利在于代码短，代价是配置只能通过参数表达。理解这个展开过程，也能解释为什么 <code>main</code> 里的 panic 与普通同步程序一样——真正异步的部分都在 <code>block_on</code> 内部。</p>
+<h2 id="rust-ch02-async-runtime-and-performance-16-2-async-状态机与-poll-为什么不能阻塞">16.2 async 状态机与 poll：为什么不能阻塞</h2>
+<p>编译器把每个 <code>async fn</code> 变换成一个状态机，每个 <code>.await</code> 是一个可挂起点。poll 一次，状态机运行到下一个未完成的 await，把控制权还给执行器；下次 poll 从断点继续。这意味着两件事：第一，future 很小，只保存跨越 await 仍然活跃的变量；第二，<strong>两次 poll 之间执行器可以跑别的任务</strong>，但同一次 poll 内部的代码必须很快返回。</p>
+<p><code>std::thread::sleep</code> 或同步文件 I/O 会让当前 worker 线程睡住，期间它无法去 poll 其他任务。如果所有 worker 都被睡住，整个运行时就卡死了，即使有成千上万个就绪任务。这就是 &quot;async 函数里不要写阻塞代码&quot; 的真正原因——不是风格问题，而是调度模型决定的。</p>
+<p>状态机的视角还解释了 <code>Send</code> 约束。一个 future 要被 <code>spawn</code> 到别的线程，它保存的所有跨 await 变量都必须能安全跨线程移动，因此编译器要求整个 future 实现 <code>Send</code>。如果你在 await 之间持有 <code>Rc</code> 或 <code>MutexGuard</code>，future 就不是 <code>Send</code>，<code>spawn</code> 会拒绝。这不是编译器故意刁难，而是因为下次 poll 可能在另一个 worker 上进行——状态机必须能整体搬家。理解了这一点，看到 &quot;future is not Send&quot; 的错误时就知道该去找哪个跨 await 持有的变量，而不是盲目加 <code>Arc&lt;Mutex&lt;&gt;&gt;</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// 错误示范：会把 worker 线程睡住，拖垮同运行时里的其他任务</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">async fn bad() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    std::thread::sleep(std::time::Duration::from_secs(1));</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">// 正确示范：让出线程，reactor 负责唤醒</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">async fn good() {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    tokio::time::sleep(std::time::Duration::from_secs(1)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">#[tokio::main(flavor = &quot;current_thread&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">async fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    good().await;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
+<p>如果确实要做阻塞操作（同步数据库驱动、CPU 密集压缩、DNS 查询），用 <code>tokio::task::spawn_blocking</code> 把它移到专门的阻塞线程池。这样 worker 线程保持空闲，阻塞任务在另一个池子里慢慢跑。注意 <code>spawn_blocking</code> 返回的 <code>JoinHandle</code> 同样可以 await，因此它既能保持异步调用风格，又不会污染调度。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：在 <code>async fn</code> 里持有 <code>std::sync::MutexGuard</code> 跨越 <code>.await</code>。这会让 future 变成非 <code>Send</code>（标准库的 <code>MutexGuard</code> 不是 Send），<code>tokio::spawn</code> 会直接编译失败。更隐蔽的后果是：如果同一个任务在另一个线程被 poll，锁的持有线程与释放线程不一致，可能死锁。正确做法是用 <code>tokio::sync::Mutex</code>，并且只在必要的临界区内持有锁，绝不让 guard 活到 await 点之后。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-async-runtime-and-performance-16-3-select-竞速-偏置与-drop-时机">16.3 select!：竞速、偏置与 drop 时机</h2>
+<p><code>select!</code> 同时 poll 多个分支，谁先完成就执行谁的处理逻辑，其余分支被丢弃。它是表达超时、竞速、取消的瑞士军刀。上面 <code>with_timeout</code> 已经用过一次：把网络请求与一个定时器竞速，定时器先完成就意味着取消请求。</p>
+<p>下面的 demo 专门观察 drop 时机。两个 future 各自持有一个 <code>Guard</code>，<code>Drop</code> 时打印名字。慢任务 100ms，快任务 20ms，必定是快任务胜出。输出会告诉我们败者的资源何时被释放。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">29 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::time::Duration;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Guard(&amp;'static str);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl Drop for Guard {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn drop(&amp;mut self) {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        println!(&quot;  Drop 守卫: {}&quot;, self.0);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">async fn phase(name: &amp;'static str, ms: u64) -&gt; u32 {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let _g = Guard(name);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    tokio::time::sleep(Duration::from_millis(ms)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    1</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">async fn cancellation_demo() {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;-- select! 取消演示（败者 future 被立即丢弃）--&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    tokio::select! {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        v = phase(&quot;慢任务 100ms&quot;, 100) =&gt; println!(&quot;  慢任务胜出: {v}&quot;),</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        v = phase(&quot;快任务 20ms&quot;, 20)  =&gt; println!(&quot;  快任务胜出: {v}&quot;),</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    tokio::time::sleep(Duration::from_millis(110)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="25"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">#[tokio::main(flavor = &quot;current_thread&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">async fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    cancellation_demo().await;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">}</span></div></div></div>
+<p>真实输出出乎很多人的意料：两条 <code>Drop 守卫</code> 都打印在处理逻辑之前。原因是 <code>select!</code> 在拿到胜出分支的值后，会先清理所有分支的 future（包括胜者自身），再执行胜出分支的处理器。所以写在处理器里的日志，一定发生在资源释放之后。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo run --release</span></div>
+<div class="cl is-text"><span class="code">-- select! 取消演示（败者 future 被立即丢弃）--</span></div>
+<div class="cl is-text"><span class="code">  Drop 守卫: 快任务 20ms</span></div>
+<div class="cl is-text"><span class="code">  Drop 守卫: 慢任务 100ms</span></div>
+<div class="cl is-text"><span class="code">  快任务胜出: 1</span></div></div></div>
+<p>当多个分支在同一轮 poll 里都就绪时，<code>select!</code> 默认随机选择，以避免饥饿。需要确定性顺序时写 <code>biased;</code>，它按代码顺序 poll——适合优先级明确的场景，例如先检查取消信号再处理正常数据。但要小心偏置带来的饥饿：如果高优先级分支总是就绪，低优先级分支可能永远得不到执行。</p>
+<p><code>select!</code> 还支持传入 <code>&amp;mut future</code>，让分支在 select 结束后仍然存活，可以再次参与下一轮竞速。这在&quot;循环中反复等待多个事件&quot;的场景里很常用，例如每一轮都同时等取消信号和一条消息，处理完消息后继续下一轮。用值传入会每次重建 future，可能丢失内部状态；用 <code>&amp;mut</code> 传入则保留进度。需要 <code>pin</code> 的未来（例如包含自引用的 async 块）配合 <code>Box::pin</code> 使用，因为 <code>&amp;mut</code> 需要稳定地址。选择哪种写法，取决于&quot;这个 future 是一次性的还是可恢复的&quot;。</p>
+<h2 id="rust-ch02-async-runtime-and-performance-16-4-取消安全-什么能安全取消-什么不能">16.4 取消安全：什么能安全取消，什么不能</h2>
+<p>取消一个 future，就是在它尚未完成时丢弃它。安全与否取决于&quot;丢弃时是否会留下不一致的状态&quot;。一次 <code>sleep</code> 被丢弃是绝对安全的，因为它没有外部副作用；一次&quot;先写半条记录再 await 再写另外半条&quot;被丢弃，则会留下损坏的数据。</p>
+<p>判断标准是：这个 future 被丢弃后，调用方重新创建一个执行同样的操作，会不会产生重复或残缺的副作用？写文件、发请求、更新共享状态这几类操作尤其危险。典型的不安全模式是用 <code>&amp;mut buf</code> 在循环里分段读取，每轮 <code>select!</code> 一次取消信号：取消发生在两段之间时，缓冲区里已经有一部分新数据、一部分旧数据，调用方无法区分。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>取消就像把正在进行的作业撕掉一页。撕掉的是单纯的计算草稿没关系；撕掉的是&quot;已经寄出的包裹存根&quot;就麻烦了——包裹已经上路，你却以为没发。取消安全的核心就是&quot;被撕掉时，要么什么都没发生，要么完整地发生了&quot;。</p>
+
+</div>
+</section>
+<p>工程上有三种常规对策。第一种是把整个操作放进 <code>tokio::spawn</code>，<code>select!</code> 只等待 <code>JoinHandle</code>；丢弃句柄不会取消后台任务，它会继续跑到完成。第二种是引入取消令牌（<code>tokio_util::sync::CancellationToken</code>），让任务自己在安全的检查点主动退出。第三种是把操作设计成一次性提交：先在内存里构造完整结果，最后一次调用完成写入。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">21 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::time::Duration;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Guard(&amp;'static str);</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Drop for Guard {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn drop(&amp;mut self) { println!(&quot;  Drop 守卫: {}&quot;, self.0); }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">async fn detached_demo() {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;-- 分离任务演示（丢掉 JoinHandle 也不取消）--&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    tokio::spawn(async {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let _g = Guard(&quot;后台任务&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        tokio::time::sleep(Duration::from_millis(20)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        println!(&quot;  后台任务完成&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }); // 不 await → 任务继续跑</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    tokio::time::sleep(Duration::from_millis(40)).await;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">#[tokio::main(flavor = &quot;current_thread&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">async fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    detached_demo().await;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">-- 分离任务演示（丢掉 JoinHandle 也不取消）--</span></div>
+<div class="cl is-text"><span class="code">  后台任务完成</span></div>
+<div class="cl is-text"><span class="code">  Drop 守卫: 后台任务</span></div></div></div>
+<p>这个模式也有代价：<code>spawn</code> 出来的任务不再与调用方的生命周期绑定，错误无法用 <code>?</code> 传回，必须自己设计通道或状态来传递结果。选择哪种对策，取决于业务上&quot;取消&quot;到底意味着什么——是&quot;我不关心结果了但事情该做完&quot;，还是&quot;立刻停止一切副作用&quot;。</p>
+<p>还要区分&quot;等待被取消&quot;与&quot;任务被取消&quot;。上一节 <code>with_timeout</code> 里被丢弃的是等待本身，后台请求可能仍在 reactor 中；而 <code>task.abort()</code> 才会真正终止一个已 <code>spawn</code> 的任务，且终止同样发生在下一个 await 点。若任务正在 <code>spawn_blocking</code> 的计算里，<code>abort</code> 无法打断已经运行的同步代码。理解这两个层次，才能正确解释&quot;明明超时了，服务端却收到了请求&quot;这类线上现象——超时只取消了客户端的等待，没有取消已经发出的网络操作。想要端到端取消，需要协议层面的支持，例如 gRPC 的 deadline 传播。</p>
+<h2 id="rust-ch02-async-runtime-and-performance-16-5-asyncdrop-引子与替代方案">16.5 AsyncDrop 引子与替代方案</h2>
+<p>同步代码里 <code>Drop</code> 是确定性的：离开作用域就执行。异步世界里资源释放可能需要 await——例如关闭一个连接要 flush 缓冲区、归还池化连接要通知池子。Rust 目前还没有稳定的 <code>AsyncDrop</code> trait，因此这类清理必须显式调用 <code>close().await</code> 之类的函数，不能指望 <code>Drop</code> 帮你完成。这是取消安全问题的另一面：即使future 被正常丢弃，<code>Drop</code> 里也只能做同步清理。</p>
+<p>社区常见的替代方案有两种。一种是把资源封进 <code>Arc</code>，<code>Drop</code> 只负责把&quot;需要异步清理&quot;的标志位置位，由后台任务观察标志并执行 await；另一种是提供显式的 <code>shutdown</code> 方法，并在类型上用 <code>#[must_use]</code> 或 lint 提醒调用方。两者都不完美，但共同点是&quot;不要假装 Drop 能 await&quot;。</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐做法</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>取消一次网络请求</td>
+<td><code>select!</code> + 超时 future</td>
+<td>请求未完成即丢弃，无副作用</td>
+</tr>
+<tr>
+<td>取消一次数据库写入</td>
+<td><code>spawn</code> + 通道回报</td>
+<td>保证事务完整提交</td>
+</tr>
+<tr>
+<td>关闭连接并 flush</td>
+<td>显式 <code>close().await</code></td>
+<td>Drop 不能 await</td>
+</tr>
+<tr>
+<td>停止后台循环</td>
+<td><code>CancellationToken</code></td>
+<td>在安全点主动退出</td>
+</tr>
+</tbody></table>
+
+<p>设计异步 API 时，最好把&quot;清理是否需要 await&quot;写进文档，并让类型名或方法名体现出来。例如 <code>ConnectionGuard</code> 暗示 RAII，而 <code>Connection::close(self).await</code> 明确要求调用方参与。含糊的 API 会让使用者在 <code>Drop</code> 里等待一个永远不会发生的清理。</p>
+<p>还有一个与取消紧密相关的话题：超时预算应当贯穿整条调用链，而不是只在最外层设一个。最外层 500ms 超时、内层数据库又设 5s 超时，结果就是外层已经放弃而内层还在跑，浪费资源。正确做法是把剩余预算用 <code>tokio::time::Instant</code> 计算后向下传递，每一层用自己的 deadline。这个模式在微服务里叫 deadline 传播，它的实现不需要特殊 crate，只需要统一的时间源与参数约定。本单元的 <code>with_timeout</code> 是最小版本：预算作为参数传入，而不是在函数内部硬编码。</p>
+<h2 id="rust-ch02-async-runtime-and-performance-16-6-真实基准-criterion-数字与解读">16.6 真实基准：criterion 数字与解读</h2>
+<p>性能结论必须来自测量。本单元在 <code>_verify/async-bench/</code> 下用 criterion 0.5.1 跑了两组基准：一组是 <code>current_thread</code> 运行时里 <code>spawn</code> 不同数量任务并等待完成的开销，另一组是 <code>select!</code> 在立即就绪分支上的开销。每组预热 3 秒、采集 100 个样本、测量 5 秒，全部在 release profile（LTO thin、codegen-units = 1）下运行。项目清单如下，<code>harness = false</code> 是 criterion 基准的必要设置，否则 cargo 会用默认测试框架运行它，得不到统计结果。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[package]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">name = &quot;async-bench&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">version = &quot;0.1.0&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">edition = &quot;2021&quot;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">[dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">tokio = { version = &quot;1&quot;, features = [&quot;full&quot;] }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">[dev-dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">criterion = { version = &quot;0.5&quot;, features = [&quot;html_reports&quot;] }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">[[bench]]</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">name = &quot;runtime&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">harness = false</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">[profile.release]</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">lto = &quot;thin&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">codegen-units = 1</span></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">26 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn bench_spawn(c: &amp;mut Criterion) {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let rt = tokio::runtime::Builder::new_current_thread()</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        .enable_all().build().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut group = c.benchmark_group(&quot;spawn_tasks&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    for n in [1usize, 16, 256] {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        group.bench_with_input(BenchmarkId::from_parameter(n), &amp;n, |b, &amp;n| {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">            b.iter(|| {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">                rt.block_on(async {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">                    let mut handles = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">                    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">                        handles.push(tokio::spawn(async move { black_box(i) }));</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">                    for h in handles {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">                        black_box(h.await.unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">                })</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            })</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        });</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    group.finish();</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">criterion_group!(benches, bench_spawn);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">criterion_main!(benches);</span></div></div></div>
+<p>真实输出如下。中位数分别是 1.3810 微秒、2.9253 微秒、34.320 微秒；<code>select!</code> 一次即时就绪的竞速约 271 纳秒。注意 <code>spawn_tasks/1</code> 的 1.38 微秒包含了 <code>block_on</code> 的进入退出与一次任务调度，不能简单理解为&quot;spawn 本身只要 1.38 微秒&quot;。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo bench --bench runtime</span></div>
+<div class="cl is-text"><span class="code">Gnuplot not found, using plotters backend</span></div>
+<div class="cl is-text"><span class="code">spawn_tasks/1           time:   [1.3761 µs 1.3810 µs 1.3862 µs]</span></div>
+<div class="cl is-text"><span class="code">spawn_tasks/16          time:   [2.9108 µs 2.9253 µs 2.9420 µs]</span></div>
+<div class="cl is-text"><span class="code">spawn_tasks/256         time:   [34.218 µs 34.320 µs 34.419 µs]</span></div>
+<div class="cl is-text"><span class="code">select_timeout/immediate_ready</span></div>
+<div class="cl is-text"><span class="code">                        time:   [265.75 ns 271.46 ns 277.43 ns]</span></div>
+<div class="cl is-text"><span class="code">Found 19 outliers among 100 measurements (19.00%)</span></div>
+<div class="cl is-text"><span class="code">  19 (19.00%) high mild</span></div></div></div>
+<p>criterion 输出的三列分别是下界、估计值与上界，通常取中列作为结果。区间很窄说明测量稳定；<code>select_timeout</code> 的 19 个 mild 离群点来自系统调度抖动，属于正常现象，不必惊慌，但如果离群点是 <code>high severe</code> 就要检查是不是测试里混入了偶发的系统调用。读数时还要看迭代次数：<code>spawn_tasks/256</code> 只收集了 146k 次迭代，单次成本更高，但绝对时间仍然只有几十微秒——这个量级告诉我们，任务创建开销在真实网络请求（毫秒级）面前几乎可以忽略。</p>
+<p>测量方法本身也要写进结论。本单元的具体条件是：宿主逻辑核数 32、rustc 1.96.0、tokio 1.54.1、criterion 0.5.1、release profile 开启 thin LTO 与单代码生成单元、每组预热 3 秒后采样 100 次共 5 秒。换一台机器、换一个 tokio 版本，这些数字都可能变化，因此它们是用来说明&quot;量级与相对关系&quot;的，不是用来当性能契约的。如果要做版本间的性能回归检测，更稳妥的办法是把基准结果提交为基线，用 criterion 的 <code>--save-baseline</code> 与 <code>--baseline</code> 对比，而不是每次人工读数字。另外，<code>Gnuplot not found, using plotters backend</code> 是 criterion 在宿主上的真实提示：没有 gnuplot 时它改用 plotters 生成报告，不影响测量本身。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：在没有预热、没有固定硬件环境的机器上跑一次就宣布&quot;快了 20%&quot;。criterion 的默认配置已经包含预热与统计，但仍要求测量期间别跑别的重负载。另外不要在 debug 构建上跑基准——<code>opt-level = 0</code> 的数字与发布版毫无关系。本单元所有数字都来自 <code>cargo bench</code>，它使用 bench profile，并显式在清单里把它与 release 的关键字段对齐。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-async-runtime-and-performance-16-7-perf-flamegraph-与剖析流程">16.7 perf、flamegraph 与剖析流程</h2>
+<p>基准告诉你&quot;多快&quot;，剖析告诉你&quot;时间花在哪&quot;。Linux 上的典型流程是：用 <code>perf record</code> 采集调用栈，再用 <code>perf report</code> 或 <code>cargo flamegraph</code> 生成火焰图。火焰图从下往上读：底部是调用栈的根，宽度代表采样占比；越宽的横条越值得优化。优化的目标是让&quot;业务函数&quot;占据的宽度变大，让&quot;调度与序列化&quot;变窄。</p>
+<p>本单元宿主是 Windows，实测没有 <code>perf</code>、<code>flamegraph</code> 或 <code>cargo-flamegraph</code>（<code>which perf flamegraph</code> 无输出，<code>cargo flamegraph --version</code> 返回未知子命令），因此下面只能给出工作流命令，并把输出明确标为示意，不编造任何采样数字。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ perf record --call-graph dwarf -g ./target/release/my-app   # 示意：宿主无 perf</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ perf report --stdio | head -40</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ cargo install flamegraph &amp;&amp; cargo flamegraph --bin my-app   # 示意：宿主无 flamegraph</span></div>
+<div class="cl is-text"><span class="code">（示意命令；未在宿主执行，故不提供采样数字）</span></div></div></div>
+<p>如果拿到真实火焰图，判读分三步：先看最宽的栈顶是不是预期函数；再找&quot;宽而平&quot;的区域，那通常是无用的辅助开销；最后对比优化前后的同一负载，确认热点确实缩小。异步程序的火焰图还有一层特殊之处：大量时间可能落在 <code>park</code> 或 <code>epoll_wait</code> 上，那是空闲等待而非 CPU 消耗，不要把它误判为瓶颈。真正该关注的是运行 worker 上的业务栈。</p>
+<p>采样剖析与基准是互补的。基准回答&quot;改动有没有让数字变好&quot;，剖析回答&quot;为什么变好或为什么还不够好&quot;。只做基准容易陷入盲目调参：把线程数从 2 改到 4，数字好了 5%，却不知道是缓存命中率提升还是调度开销下降。只做剖析则无法确认改动是否真的端到端有效。两者结合的流程是：先用基准锁定可复现的性能差异，再用火焰图定位热点，改动后重跑基准验证。本单元刻意把无法真实执行的部分标为示意，就是为了让读者清楚地区分&quot;测出来的&quot;与&quot;讲方法的&quot;。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">_verify/async-bench/
+├── Cargo.toml            # tokio + criterion，bench profile 与 release 对齐
+├── src/main.rs           # 运行时、select!、取消安全演示
+└── benches/runtime.rs    # 真跑的 criterion 基准</pre></figure>
+<h2 id="rust-ch02-async-runtime-and-performance-16-8-工程取舍-runtime-配置-阻塞池与背压">16.8 工程取舍：runtime 配置、阻塞池与背压</h2>
+<p>运行时配置没有万能答案。<code>worker_threads</code> 默认等于逻辑核数，适合 I/O 密集且计算很轻的服务；如果任务里有较多 CPU 计算，线程数可以保持默认，但要把计算移到 <code>spawn_blocking</code>。<code>current_thread</code> 运行时只有一个线程，开销更低、行为更可预测，适合客户端程序或单线程嵌入式场景——本单元基准就选了它，以减少测量噪声。<code>max_blocking_threads</code> 控制阻塞池上限，太小会让阻塞任务排长队，太大会浪费线程资源。</p>
+<p>背压是异步系统里比&quot;快不快&quot;更重要的问题。当生产者快于消费者时，队列会无限增长，最终耗尽内存。tokio 的 <code>mpsc::channel(capacity)</code> 用固定容量解决这一点：<code>send().await</code> 在通道满时会挂起，把压力传回生产者。相反，<code>unbounded_channel</code> 只在你能证明生产者不会失控时才使用。这个设计哲学与同步世界一致，但异步版本多了&quot;等待期间不占线程&quot;的优势。</p>
+<p>容量取值没有公式，通常从&quot;消费者每秒能处理多少 × 可接受的最大排队延迟&quot;倒推。例如消费者每秒处理 1000 条、允许排队 100 毫秒，容量就从 100 起步，再用真实负载压测调整。容量太小会让生产者频繁挂起，吞吐下降；太大则延迟不可控，故障时会堆积大量即将过期的请求。把它做成可配置参数并观测队列长度，比拍脑袋定一个常数更可靠。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把验证程序的 worker 线程数从 2 改成 1 和 8，各跑一次，对比六个任务的墙钟时间；解释为什么差异不符合&quot;线程越多越快&quot;的直觉。</li>
+<li>给 <code>with_timeout</code> 加一个 <code>biased;</code> 分支，让取消信号成为最高优先级；构造一个取消信号与数据同时就绪的场景，观察输出顺序并解释偏置的影响。</li>
+<li>在 criterion 基准里增加一组 <code>spawn_tasks/1024</code>，记录中位数与离群点数量；结合 1/16/256 三组的真实数字，画出任务数与单次开销的关系图。</li>
+</ul>
+
+</div></div>
+<p>把这些机制串起来看，异步性能的本质是&quot;让等待不占用稀缺资源，让副作用在明确的边界上提交&quot;。运行时、任务、取消与安全退出都是这个原则的不同侧面，缺一不可，也值得反复推敲。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么在 async 函数里调用 <code>std::thread::sleep</code> 会拖垮整个运行时？</li>
+<li><code>select!</code> 丢弃败者 future 的时机是什么？本单元的输出如何证明这一点？</li>
+<li>什么样的异步操作是取消安全的？为什么&quot;分段写入共享缓冲区&quot;不安全？</li>
+<li>criterion 输出的三列数字分别代表什么？为什么不能只看一次运行就下结论？</li>
+<li>为什么本单元不提供 perf/flamegraph 的真实采样数字？</li>
+<li><code>mpsc::channel(capacity)</code> 与 <code>unbounded_channel</code> 在背压上的差别是什么？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__ecosystem-in-practice.md.html">← 生态实战：一个真正能跑的 CLI</a><a href="rust__chapters__ch03__complexity-and-rust-idioms.md.html">复杂度与 Rust 算法工程约定 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

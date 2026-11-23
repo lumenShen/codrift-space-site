@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动态规划基础：状态定义、线性、背包与区间</title>
+<meta name="description" content="第 26 单元 · 建议 90 分钟 · 把状态、转移与计算顺序写成可验证的不变量">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">动态规划基础：状态定义、线性、背包与区间</h1><p class="doc-sub">第 26 单元 · 建议 90 分钟 · 把状态、转移与计算顺序写成可验证的不变量</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 26-dp-basics.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-1-状态定义三要素-范围-目标与阶段">26.1 状态定义三要素：范围、目标与阶段</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-2-线性-dp-打家劫舍的转移表与滚动数组">26.2 线性 DP：打家劫舍的转移表与滚动数组</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-3-lis-o-n-填表与-tail-数组的二分优化">26.3 LIS：O(n²) 填表与 tail 数组的二分优化</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-4-0-1-背包-容量倒序的不变量">26.4 0/1 背包：容量倒序的不变量</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-5-完全背包与多重背包-正序的语义与拆分技巧">26.5 完全背包与多重背包：正序的语义与拆分技巧</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-6-区间-dp-石子合并与按长度递增">26.6 区间 DP：石子合并与按长度递增</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-7-自顶向下与自底向上-备忘录与栈深度">26.7 自顶向下与自底向上：备忘录与栈深度</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-8-随机对拍-五类-dp-对暴力枚举">26.8 随机对拍：五类 DP 对暴力枚举</a></li><li class="toc-l2"><a href="#rust-ch03-dp-basics-26-9-工程取舍-初始化-溢出与调试清单">26.9 工程取舍：初始化、溢出与调试清单</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能说清 DP 的适用条件，用&quot;范围 + 目标 + 阶段&quot;三要素定义状态</li>
+<li>会写线性 DP 与 LIS，解释滚动数组的更新顺序与 tail 数组的二分含义</li>
+<li>理解 0/1 背包容量倒序、完全背包正序的不变量差异</li>
+<li>掌握区间 DP 按长度递增的顺序，并用暴力枚举对拍验证四类 DP</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-dp-basics-26-1-状态定义三要素-范围-目标与阶段">26.1 状态定义三要素：范围、目标与阶段</h2>
+<p>动态规划不是模板，而是&quot;消重&quot;思想：当问题同时具备<strong>最优子结构</strong>（大局最优由子问题最优组合而来）与<strong>重叠子问题</strong>（同一子状态被反复用到）时，把每个子状态的答案存进表，就能避免指数级重复计算。写 DP 的第一步永远是定义状态，一句话必须交代三件事：<strong>范围</strong>（考虑前 i 个元素、区间 [l,r]、还是以 i 结尾）、<strong>目标</strong>（最大/最小/计数/可行性）、<strong>阶段</strong>（是否需要额外维度区分决策状态）。&quot;dp[i] 是前 i 家的最大收益&quot;比&quot;dp[i] 是答案&quot;清晰得多，后者无法判断转移是否漏解。</p>
+<p>第二步是转移：枚举当前阶段的若干种决策，在它们的结果里取 max/min/求和。每种决策必须对应一条实际可行的构造路径，不能漏也不能重。第三步是初始化与计算顺序：base case 覆盖最小子问题，循环顺序保证&quot;转移时依赖的状态已经算好&quot;。把这三句话写成注释贴在代码上方，是调试 DP 最有效的手段——绝大多数错误都出在状态定义含糊、边界写错、顺序颠倒，而不是转移式本身。</p>
+<p>估算复杂度有个简单公式：<strong>状态数 × 每状态转移数</strong>。线性 DP 是 O(n·k)，背包是 O(n·cap)，区间 DP 是 O(n²·n)=O(n³)。写代码前先用它判断可行性，能省下大量无效调试。Rust 实现常用 <code>Vec&lt;T&gt;</code> 或 <code>Vec&lt;Vec&lt;T&gt;&gt;</code>，下标统一 <code>usize</code>；需要&quot;前一项&quot;时多开一格哨兵，避免 <code>i - 1</code> 在 i=0 时下溢。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>DP 就是&quot;把算过的答案记在小本本上&quot;。面对大问题先拆成同类小问题，把每种小问题的答案记下来，大问题查小本本再做一次选择就行。关键是每条记录都要写清楚&quot;管的是哪一段、求的是什么&quot;，查错行就全盘皆输。滚动数组则是把小本本上暂时用不到的旧页扔掉，只留最近几页。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-dp-basics-26-2-线性-dp-打家劫舍的转移表与滚动数组">26.2 线性 DP：打家劫舍的转移表与滚动数组</h2>
+<p>&quot;打家劫舍&quot;是线性 DP 的标准起点：一排房屋，不能偷相邻两家，求最大金额。定义 <code>dp[k]</code> 为&quot;偷完前 k 家的最大金额&quot;，对第 i 家（0 基）只有两种选择：不偷，答案 <code>dp[i+1]</code>；偷，答案 <code>dp[i] + a[i]</code>。于是 <code>dp[i+2] = max(dp[i+1], dp[i] + a[i])</code>。数组长度 <code>n+2</code>，让 i=0 时访问 <code>dp[0]</code> 合法，省掉边界特判——这正是&quot;多开哨兵&quot;技巧的用武之地。</p>
+<p>先保留完整转移表，打印出来与手工推演逐格对照；确认无误后再改成滚动数组：只需要两步之前的 <code>prev2</code> 与一步之前的 <code>prev1</code>。更新顺序是最常见的坑：必须先用旧的两者算出 <code>cur</code>，再依次 <code>prev2 ← prev1</code>、<code>prev1 ← cur</code>。若先把 <code>prev2 = prev1</code> 写下去，<code>prev2 + x</code> 用的就不是两步前的值，而是刚被覆盖的新值，结果错得悄无声息。调试技巧是让完整表版与滚动版在同一组随机输入上对拍（见 26.8），两者不等就说明覆盖顺序写反了。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">dp[i+2] 的依赖：
+  不偷 a[i] ──▶ dp[i+1]（前 i+1 家的最优）
+  偷  a[i] ──▶ dp[i] + a[i]（前 i 家的最优 + 当前）
+    两者取 max
+滚动：prev2=dp[i], prev1=dp[i+1] → cur → 再平移</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">27 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// 打家劫舍：dp[k] = 前 k 家能偷到的最大金额</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn rob(a: &amp;[i64]) -&gt; (i64, Vec&lt;i64&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut dp = vec![0i64; n + 2];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        dp[i + 2] = dp[i + 1].max(dp[i] + a[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    (dp[n + 1], dp)</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn rob_rolling(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let (mut prev2, mut prev1) = (0i64, 0i64);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        let cur = prev1.max(prev2 + x);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        prev2 = prev1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        prev1 = cur;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    prev1</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let a = [2i64, 7, 9, 3, 1];</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let (ans, dp) = rob(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;answer  = {}&quot;, ans);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;dp      = {:?}&quot;, dp);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;rolling = {}&quot;, rob_rolling(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">answer  = 12</span></div>
+<div class="cl is-text"><span class="code">dp      = [0, 0, 2, 7, 11, 11, 12]</span></div>
+<div class="cl is-text"><span class="code">rolling = 12</span></div></div></div>
+<p>手验：<code>dp[4]=11</code> 来自偷 2 与 7 与 9 中的 7+9=16？不对——<code>dp[4]</code> 表示前 4 家 <code>[2,7,9,3]</code> 的最优，不能相邻，选 2+9=11 或 7+3=10，所以是 11；最后加第 5 家的 1，<code>dp[6] = max(dp[5]=11, dp[4]+1=12) = 12</code>。表格让这种推演变得可查。</p>
+<p>边界方面，空数组时 <code>dp</code> 长度为 2、循环不执行，返回 <code>dp[1]=0</code>，符合&quot;没有房屋可偷&quot;。若金额可能为负，初始化 0 就意味着&quot;可以什么都不偷&quot;，题目若强制至少偷一家，必须把初值改成负无穷并单独处理。滚动数组把空间从 O(n) 降到 O(1)，时间不变；它牺牲的是&quot;输出中间方案&quot;的能力——若需要知道偷了哪几家，应保留完整表或额外记录决策来源，不能盲目滚动。完整表还方便观察单调性：这个例子的 dp 序列是非递减的，因为多考虑一家房屋总不会让最优值变差；若打印出的表出现下降，基本可以断定转移式写反了。</p>
+<h2 id="rust-ch03-dp-basics-26-3-lis-o-n-填表与-tail-数组的二分优化">26.3 LIS：O(n²) 填表与 tail 数组的二分优化</h2>
+<p>最长严格递增子序列（LIS）的朴素 DP：定义 <code>dp[i]</code> 为&quot;以 i 结尾的 LIS 长度&quot;，转移是枚举所有 <code>j &lt; i 且 a[j] &lt; a[i]</code> 的位置取 <code>dp[j]+1</code> 的最大值；答案为全表最大。这是 O(n²) 的线性 DP，状态定义里的&quot;以 i 结尾&quot;至关重要——若写成&quot;前 i 个元素的 LIS&quot;，转移时无法保证新元素接在末尾。</p>
+<p>优化版维护 <code>tail[k]</code>：长度为 k+1 的严格递增子序列的<strong>最小可能结尾值</strong>。这个定义的不变量是 tail 数组严格递增：对每个新元素 x，用 <code>partition_point(|t| t &lt; x)</code> 找到第一个 ≥ x 的位置 k（严格小于保证不取相等元素），用 x 替换 <code>tail[k]</code>；若 k 在末尾就追加。替换不会缩短任何已有长度，却为后续元素留下更小的结尾，使它们更容易接入。最终 <code>tail.len()</code> 就是 LIS 长度，O(n log n)。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：<code>partition_point</code> 的谓词必须是严格 <code>&lt;</code>，写成 <code>&lt;= x</code> 会允许相等元素接入，求出的是&quot;最长不下降子序列&quot;，与严格递增不是同一个问题。另一个坑是 tail 数组<strong>不代表真实的一条 LIS</strong>：例如 <code>[5,1,6,2,7,3,4]</code> 的 tail 最终可能被更新成 <code>[1,2,3,4]</code>，这条子序列确实存在，但对别的数据 tail 的元素可能来自不同子序列，绝不能把它当答案序列输出。要输出序列本身，得额外记录前驱。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// LIS：O(n^2) 填表版</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn lis_sq(a: &amp;[i64]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut dp = vec![1usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        for j in 0..i {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            if a[j] &lt; a[i] {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">                dp[i] = dp[i].max(dp[j] + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    dp.iter().copied().max().unwrap_or(0)</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">// LIS：tail[k] = 长度 k+1 的严格递增子序列的最小结尾</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn lis_fast(a: &amp;[i64]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut tail: Vec&lt;i64&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let k = tail.partition_point(|&amp;t| t &lt; x); // 严格小于 =&gt; 严格递增</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        if k == tail.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            tail.push(x);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            tail[k] = x;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    tail.len()</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="28"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let a = [5i64, 1, 6, 2, 7, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    println!(&quot;lis_sq   = {}&quot;, lis_sq(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    println!(&quot;lis_fast = {}&quot;, lis_fast(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;equal    = {}&quot;, lis_sq(&amp;a) == lis_fast(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">lis_sq   = 4</span></div>
+<div class="cl is-text"><span class="code">lis_fast = 4</span></div>
+<div class="cl is-text"><span class="code">equal    = true</span></div></div></div>
+<p>严格递增的答案是 4（例如 1,2,3,4）。两种实现的复杂度差一个数量级，但对拍时用的是暴力枚举全部子序列当裁判，与两者都独立，避免&quot;两个错得一样的算法互相验证&quot;。</p>
+<p><code>partition_point</code> 是标准库在有序切片上做的二分查找，返回第一个使谓词为假的下标；tail 数组的不变量保证它始终有序，因此每次查询是 O(log n)。空数组时 tail 为空、答案为 0；全是相等元素时每个元素都替换 tail[0]，答案为 1，正是严格递增的正确结果。若要求最长不下降子序列，谓词改成 <code>&lt;= x</code> 即可——但那是另一个问题，必须在状态定义里写清楚。O(n²) 版本的价值不在性能，而在它直接体现状态定义，容易加入额外限制（例如&quot;相邻元素差不超过 k&quot;），这类变体往往无法用 tail 数组优化。</p>
+<h2 id="rust-ch03-dp-basics-26-4-0-1-背包-容量倒序的不变量">26.4 0/1 背包：容量倒序的不变量</h2>
+<p>背包是 DP 最重要的一族。0/1 背包：每件物品最多选一次；定义 <code>dp[c]</code> 为&quot;容量不超过 c 时能取得的最大价值&quot;，初始全 0。对每件物品 (w,v)，容量必须<strong>倒序</strong>枚举：从 cap 递减到 w。原因是不变量——倒序时 <code>dp[c-w]</code> 在本次更新前还是&quot;尚未处理这件物品&quot;的值，于是 <code>dp[c-w]+v</code> 表示&quot;选了当前物品一次&quot;；若正序枚举，<code>dp[c-w]</code> 可能已经在本轮被当前物品更新过，等于允许重复选择，变成了完全背包。</p>
+<p><code>for c in (weight[i]..=cap).rev()</code> 在 <code>weight[i] &gt; cap</code> 时是空区间：<code>RangeInclusive</code> 起点大于终点时不产生元素，循环自然跳过，不需要额外判断。若题目要求&quot;恰好装满&quot;，把 <code>dp</code> 初始化为负无穷、只留 <code>dp[0]=0</code>，最后 <code>dp[cap]</code> 为负即无解；复杂度仍是 O(n·cap)。价值可能是大整数，用 <code>i64</code> 累加；容量是 <code>usize</code>，<code>c - weight[i]</code> 在循环起点 <code>weight[i]</code> 的保证下永不下溢。</p>
+<p><code>dp</code> 是一段连续的 <code>Vec&lt;i64&gt;</code>，倒序遍历按递减地址访问，缓存行为与正序没有本质差别；真正影响性能的是 cap 的大小。若物品总重量远小于 cap，可先把 cap 收缩到总重量，把状态数从 n·cap 降到 n·Σw。若需要输出选了哪些物品，可额外维护 <code>choose[i][c]</code> 布尔表（空间 O(n·cap)），从最终容量倒推：选中则 c 减 weight[i]，否则 i 减一。滚动数组无法支持这种回溯，因为历史决策已被丢弃。0/1 背包还有一个常见变体&quot;每组选一件&quot;，那要把状态扩展到 <code>dp[group][c]</code>，并在每组内先拷贝上一组的表再更新，避免同组内多件被选。调试时可以打印每一件物品处理后的 dp 行，检查它是否恰好等于&quot;上一行&quot;与&quot;上一行加当前价值&quot;的逐格最大值。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>倒序就像从后往前填表。每件的重量从最后一格往前推，用到的&quot;前一格&quot;还是旧表里的值，代表这件东西还没被拿过，所以最多拿一次。正序呢，刚填好的新格子马上被后面的格子用到，同一件就能被反复拿——那正好是完全背包。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-dp-basics-26-5-完全背包与多重背包-正序的语义与拆分技巧">26.5 完全背包与多重背包：正序的语义与拆分技巧</h2>
+<p>完全背包每件可无限选，容量改为<strong>正序</strong>枚举：从 w 递增到 cap。此时 <code>dp[c-w]</code> 是本轮已经更新的值，可能包含当前物品，于是&quot;再拿一件&quot;被自然允许。两个模板只差一个 <code>.rev()</code>，语义天差地别；用自己的话复述一遍&quot;为什么倒序是 0/1、正序是完全&quot;再写代码，能避免最常见的混淆。</p>
+<p>多重背包限制每件最多选 <code>cnt[i]</code> 次，最直接的写法是再套一层&quot;选几件&quot;的循环，复杂度 O(n·cap·cnt)。更高效的做法是<strong>二进制拆分</strong>：把 cnt 件拆成 1,2,4,… 以及余下的零头，每份看成一个&quot;捆绑物品&quot;，套 0/1 背包的倒序模板。因为任意 0..cnt 的选择都能由这些 2 的幂组合出来，且每个捆绑包最多选一次，正确性由二进制表示保证；复杂度降到 O(n·cap·log cnt)。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：完全背包的正序遍历天然允许重复，但它依赖于&quot;物品间顺序无关&quot;的最优子结构——只要物品价值可加，正序就是对的。若题目附加&quot;每件最多选两次&quot;之类的限制，正序会失控，必须改成倒序加计数维，或做二进制拆分。把&quot;遍历方向 ↔ 选取次数&quot;的对应写在注释里，是防止现场写反的最稳办法。</p>
+<p>二进制拆分的实现也有坑：余下的零头不能丢。例如 cnt=13 应拆成 1、2、4、6 四份，而不是 1、2、4、8（8 超过剩余数量，会让&quot;最多 13 件&quot;变成&quot;最多 15 件&quot;）。每份捆绑物品的重量与价值都要乘以份数，再整体套 0/1 的倒序模板；拆分本身是 O(log cnt) 个新物品，因此总复杂度 O(n·cap·log cnt)。若 cnt 很大而 cap 很小，直接按&quot;枚举件数&quot;的 O(n·cap·cnt) 版反而更简单，先用公式估一下再决定。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">31 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// 0/1 背包：每件最多选一次，容量倒序</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn knap01(weight: &amp;[usize], value: &amp;[i64], cap: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut dp = vec![0i64; cap + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    for i in 0..weight.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        for c in (weight[i]..=cap).rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">            dp[c] = dp[c].max(dp[c - weight[i]] + value[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    dp[cap]</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">// 完全背包：每件可无限选，容量正序</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">fn knap_complete(weight: &amp;[usize], value: &amp;[i64], cap: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let mut dp = vec![0i64; cap + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    for i in 0..weight.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        for c in weight[i]..=cap {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            dp[c] = dp[c].max(dp[c - weight[i]] + value[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    dp[cap]</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let w = [1usize, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let v = [15i64, 20, 30];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;01       = {}&quot;, knap01(&amp;w, &amp;v, 6));</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;complete = {}&quot;, knap_complete(&amp;w, &amp;v, 6));</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let w2 = [5usize, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let v2 = [10i64, 8];</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    println!(&quot;01(skip) = {}&quot;, knap01(&amp;w2, &amp;v2, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">01       = 45</span></div>
+<div class="cl is-text"><span class="code">complete = 90</span></div>
+<div class="cl is-text"><span class="code">01(skip) = 0</span></div></div></div>
+<p>0/1 的 45 来自两件重量 1（共 30）加一件重量 3（20），但容量 6 下最优其实是 1+1+3 共 5 容量、价值 50？注意 0/1 下重量 1 只有一件，所以答案是 w=3,v=20 加 w=1,v=15 再加 w=4 放不下，实际最优是 3+1=4 容量、价值 35，或单件 w=4,v=30 与 w=1,v=15 共 45——与输出一致。完全背包可把重量 1 拿 6 次，得 6×15=90。<code>01(skip)=0</code> 验证了容量小于所有重量时循环为空、结果为 0。</p>
+<h2 id="rust-ch03-dp-basics-26-6-区间-dp-石子合并与按长度递增">26.6 区间 DP：石子合并与按长度递增</h2>
+<p>区间 DP 的状态是 <code>dp[l][r]</code>，表示闭区间 [l,r] 上的最优值。它的计算顺序不能按 l 或 r 的字典序，而要<strong>按区间长度从小到大</strong>：先算所有长度为 2 的区间，再算长度 3 的，依此类推。因为长度 len 的区间要由两个更短的区间合并而来，长度递增天然保证依赖已就绪。</p>
+<p>&quot;石子合并&quot;是标准例题：一排石子两两合并，每次代价是两堆总数，求全部合成一堆的最小总代价。枚举断点 k，把 [l,r] 拆成 [l,k] 与 [k+1,r]，转移 <code>dp[l][r] = min(dp[l][k] + dp[k+1][r] + sum(l,r))</code>。区间和用前缀和 O(1) 取得，避免每次累加。<code>for l in 0..=n-len</code> 中 <code>n-len</code> 恒非负（len 最大为 n），<code>r = l+len-1</code> 最大 n-1，访问 <code>dp[k+1][r]</code> 安全。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">34 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">// 区间 DP：石子合并，按区间长度递增</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn merge_stones(a: &amp;[i64]) -&gt; (i64, Vec&lt;Vec&lt;i64&gt;&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    if n &lt;= 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        return (0, vec![vec![0; n]; n]);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut pref = vec![0i64; n + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        pref[i + 1] = pref[i] + a[i];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let inf = i64::MAX / 4;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut dp = vec![vec![0i64; n]; n];</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    for len in 2..=n {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        for l in 0..=n - len {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            let r = l + len - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            let sum = pref[r + 1] - pref[l];</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            let mut best = inf;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            for k in l..r {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">                best = best.min(dp[l][k] + dp[k + 1][r] + sum);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            dp[l][r] = best;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    (dp[0][n - 1], dp)</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let a = [4i64, 3, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let (ans, dp) = merge_stones(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    println!(&quot;answer = {}&quot;, ans);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    for row in &amp;dp {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        println!(&quot;{:?}&quot;, row);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">answer = 28</span></div>
+<div class="cl is-text"><span class="code">[0, 7, 16, 28]</span></div>
+<div class="cl is-text"><span class="code">[0, 0, 6, 16]</span></div>
+<div class="cl is-text"><span class="code">[0, 0, 0, 7]</span></div>
+<div class="cl is-text"><span class="code">[0, 0, 0, 0]</span></div></div></div>
+<p>上三角矩阵里 <code>dp[l][l]=0</code> 是边界：单堆无需合并。打印二维表是区间 DP 的标准调试手段——先确认对角线为 0，再逐层检查长度为 2、3 的值与手算是否一致。空间 O(n²) 通常无法滚动压缩，因为长区间会用到所有短区间的结果。</p>
+<p>石子合并还有&quot;环形&quot;变体：n 堆围成一圈，每次合并相邻两堆。做法是把数组复制一遍接在后面，在长度 2n 的序列上做普通区间 DP，最后取所有长度为 n 的区间的最小值 <code>min(dp[l][l+n-1])</code>。原理是任意环形合并都对应展开后某个长度为 n 的连续段。<code>n-len</code> 下标计算在环形版里变成 <code>2n-len</code>，仍保持非负。这类&quot;复制一遍化环为链&quot;的技巧在区间 DP 里很常见，值得和基础的线性版一起记。</p>
+<p>复杂度方面，三重循环的层次不能交换：必须 len 在最外层、l 在中层、k 在最内层，因为 k 的依赖是更短的长度。若把 l 放外层，计算 dp[l][r] 时 dp[l+1][r] 可能还没算出来。调试时还可以先关掉前缀和、改用循环累加区间和验证转移，确认是转移错还是前缀和错。若题目把&quot;合并代价&quot;改成区间长度的平方或其他函数，只需替换 sum 的计算，循环结构完全不变——这正是区间 DP 模板的价值。</p>
+<h2 id="rust-ch03-dp-basics-26-7-自顶向下与自底向上-备忘录与栈深度">26.7 自顶向下与自底向上：备忘录与栈深度</h2>
+<p>DP 有两种实现路线。自顶向下（记忆化搜索）从原问题递归拆分，用 <code>Option&lt;T&gt;</code> 或哨兵数组存已算结果；思路最贴近状态定义，天然只访问可达状态，但递归深度可能爆栈，且 Rust 里&quot;递归函数 + 可变备忘录&quot;需要处理借用，常用 <code>Cell</code>/<code>RefCell</code> 或把备忘录放进结构体。自底向上（填表）按循环顺序计算所有状态，顺序明确、性能更好、无爆栈风险，是竞赛与工程的默认选择。</p>
+<p>选择时要看状态空间：若很多状态根本不可达，记忆化能省下大量计算；若几乎所有状态都要用到，填表更直接且缓存友好。两者结果必须一致，这正好可以作为对拍的两个实现。对区间 DP 而言，递归版写起来极短（<code>solve(l,r) = min_k solve(l,k)+solve(k+1,r)+sum</code>），可用它当自底向上版的裁判；n 不大时递归深度是 O(n)，不会爆栈。</p>
+<p>Rust 里写记忆化搜索有个具体的难点：递归函数要同时读状态定义与写备忘录，直接用 <code>&amp;mut Vec&lt;Option&lt;T&gt;&gt;</code> 参数会与借用检查打架，因为函数持有切片引用的同时又要修改它。常见解法有三：把备忘录放进结构体、用 <code>Cell</code>/<code>RefCell</code> 提供内部可变性、或把状态编号成一维下标后用裸指针包一层 unsafe（不推荐）。相比之下，自底向上的填表版没有任何借用冲突，也不需要 <code>Option</code> 包装，这正是竞赛代码几乎都是迭代版的原因。折中方案是&quot;先写递归版确认转移正确，再翻译成填表版&quot;，把两个版本都留在测试里互相对拍，既保证可读性又保证性能。对线性 DP 而言，递归深度等于 n，十万项的链同样会爆栈，因此&quot;递归版只用于小规模验证&quot;是通用原则。记忆化的另一个优势是只算可达状态，在状态空间稀疏的问题上可能比填表快很多；判断依据是&quot;可达状态数&quot;与&quot;总状态数&quot;的比值，比值很小时优先考虑递归加备忘录。</p>
+<h2 id="rust-ch03-dp-basics-26-8-随机对拍-五类-dp-对暴力枚举">26.8 随机对拍：五类 DP 对暴力枚举</h2>
+<p>DP 最容易写错的是边界与顺序，而不是转移式本身，所以随机对拍要与&quot;显然正确但慢&quot;的暴力版比对。本单元用 xorshift 生成 2500 组数据，同时检查五件事：打家劫舍 DP 对子集枚举（相邻位不能同时为 1）；LIS 的 O(n²) 与 O(n log n) 版都对&quot;枚举全部子序列&quot;的暴力版；0/1 背包对子集枚举；完全背包对递归枚举每个物品拿几件；石子合并区间 DP 对递归枚举所有断点。</p>
+<p>规模都压得很小：n≤11 的子集枚举最多 2048 种，LIS 的 n≤9 最多 512 个子序列，背包 n≤9、cap≤14，石子 n≤7。小数据足以覆盖&quot;空输入、单元素、恰好装满、放不下任何物品&quot;等边界，而暴力版跑得飞快。任何不一致都会打印输入数组，配合固定种子可以立即复现。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">148 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">        let mut x = self.0;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        self.0 = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn below(&amp;mut self, n: usize) -&gt; usize { (self.next() % n as u64) as usize }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn rob(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut dp = vec![0i64; a.len() + 2];</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    for i in 0..a.len() { dp[i + 2] = dp[i + 1].max(dp[i] + a[i]); }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    dp[a.len() + 1]</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn brute_rob(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut best = i64::MIN;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for mask in 0..(1usize &lt;&lt; a.len()) {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let mut sum = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let mut ok = true;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        for i in 0..a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">            if (mask &gt;&gt; i) &amp; 1 == 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">                if i &gt; 0 &amp;&amp; (mask &gt;&gt; (i - 1)) &amp; 1 == 1 { ok = false; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">                sum += a[i];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        if ok { best = best.max(sum); }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="31"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">fn lis_sq(a: &amp;[i64]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut dp = vec![1usize; a.len()];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    for i in 0..a.len() { for j in 0..i { if a[j] &lt; a[i] { dp[i] = dp[i].max(dp[j] + 1); } } }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    dp.iter().copied().max().unwrap_or(0)</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">fn lis_fast(a: &amp;[i64]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    let mut t: Vec&lt;i64&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        let k = t.partition_point(|&amp;v| v &lt; x);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        if k == t.len() { t.push(x); } else { t[k] = x; }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    t.len()</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">fn brute_lis(a: &amp;[i64]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut best = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    for mask in 0..(1usize &lt;&lt; a.len()) {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        let seq: Vec&lt;i64&gt; = (0..a.len()).filter(|&amp;i| (mask &gt;&gt; i) &amp; 1 == 1).map(|i| a[i]).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        if seq.len() &lt;= best { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        if seq.windows(2).all(|w| w[0] &lt; w[1]) { best = seq.len(); }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="54"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">fn knap01(w: &amp;[usize], v: &amp;[i64], cap: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let mut dp = vec![0i64; cap + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    for i in 0..w.len() { for c in (w[i]..=cap).rev() { dp[c] = dp[c].max(dp[c - w[i]] + v[i]); } }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    dp[cap]</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">fn brute_01(w: &amp;[usize], v: &amp;[i64], cap: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    let mut best = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    for mask in 0..(1usize &lt;&lt; w.len()) {</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        let (mut cw, mut cv) = (0usize, 0i64);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        for i in 0..w.len() { if (mask &gt;&gt; i) &amp; 1 == 1 { cw += w[i]; cv += v[i]; } }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        if cw &lt;= cap { best = best.max(cv); }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="69"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">fn knap_complete(w: &amp;[usize], v: &amp;[i64], cap: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    let mut dp = vec![0i64; cap + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    for i in 0..w.len() { for c in w[i]..=cap { dp[c] = dp[c].max(dp[c - w[i]] + v[i]); } }</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    dp[cap]</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">fn brute_complete(w: &amp;[usize], v: &amp;[i64], cap: usize, i: usize, left: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    if i == w.len() { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    let mut best = brute_complete(w, v, cap, i + 1, left);</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    let mut k = 1;</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    while k * w[i] &lt;= left {</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        let rest = brute_complete(w, v, cap, i + 1, left - k * w[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">        best = best.max(rest + k as i64 * v[i]);</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">        k += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="86"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">fn merge_stones(a: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">    if n &lt;= 1 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">    let mut pre = vec![0i64; n + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">    for i in 0..n { pre[i + 1] = pre[i] + a[i]; }</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">    let mut dp = vec![vec![0i64; n]; n];</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">    for len in 2..=n {</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">        for l in 0..=n - len {</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">            let r = l + len - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">            let sum = pre[r + 1] - pre[l];</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">            dp[l][r] = (l..r).map(|k| dp[l][k] + dp[k + 1][r] + sum).min().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">    dp[0][n - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">fn brute_merge(pre: &amp;[i64], l: usize, r: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">    if l &gt;= r { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">    let sum = pre[r + 1] - pre[l];</span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">    (l..r).map(|k| brute_merge(pre, l, k) + brute_merge(pre, k + 1, r) + sum).min().unwrap()</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="107"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">    let mut rng = Rng(0x0DEF_ACED_1234_5678);</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">    let (mut cases, mut bad) = (0, 0);</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">    for _ in 0..2500 {</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">        // 打家劫舍：DP 对子集枚举</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">        let n = 1 + rng.below(11); // 1..=11</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">        let a: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(20) as i64 + 1).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">        if rob(&amp;a) != brute_rob(&amp;a) {</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">            bad += 1; if bad &lt;= 3 { println!(&quot;BAD rob {:?}&quot;, a); }</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">        // LIS：三种实现互证</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">        let m = 1 + rng.below(9); // 1..=9</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">        let b: Vec&lt;i64&gt; = (0..m).map(|_| rng.below(12) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">        let (s, f, bf) = (lis_sq(&amp;b), lis_fast(&amp;b), brute_lis(&amp;b));</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">        if s != bf || f != bf {</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">            bad += 1; if bad &lt;= 3 { println!(&quot;BAD lis {:?} sq={} fast={} brute={}&quot;, b, s, f, bf); }</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">        // 0/1 背包与完全背包</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">        let k = 1 + rng.below(9);</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">        let w: Vec&lt;usize&gt; = (0..k).map(|_| 1 + rng.below(5)).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">        let v: Vec&lt;i64&gt; = (0..k).map(|_| rng.below(12) as i64 + 1).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">        let cap = 1 + rng.below(14);</span></div>
+<div class="cl"><span class="ln" data-ln="130"></span><span class="code">        if knap01(&amp;w, &amp;v, cap) != brute_01(&amp;w, &amp;v, cap) {</span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">            bad += 1; if bad &lt;= 3 { println!(&quot;BAD knap01 w={:?} v={:?} cap={}&quot;, w, v, cap); }</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">        if knap_complete(&amp;w, &amp;v, cap) != brute_complete(&amp;w, &amp;v, cap, 0, cap) {</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">            bad += 1; if bad &lt;= 3 { println!(&quot;BAD complete w={:?} v={:?} cap={}&quot;, w, v, cap); }</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">        // 石子合并：区间 DP 对递归枚举</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">        let q = 1 + rng.below(7); // 1..=7</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">        let c: Vec&lt;i64&gt; = (0..q).map(|_| rng.below(10) as i64 + 1).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">        let mut pre = vec![0i64; q + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">        for i in 0..q { pre[i + 1] = pre[i] + c[i]; }</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">        if merge_stones(&amp;c) != brute_merge(&amp;pre, 0, q - 1) {</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">            bad += 1; if bad &lt;= 3 { println!(&quot;BAD merge {:?}&quot;, c); }</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">        cases += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">    println!(&quot;cases={} mismatches={}&quot;, cases, bad);</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">    if bad == 0 { println!(&quot;RESULT: PASS&quot;); }</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">cases=2500 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">RESULT: PASS</span></div></div></div>
+<p>五类共 2500 组、每类至少一次严格比对，零分歧。把 LIS 的暴力裁判单独列出来很有价值：它枚举全部子序列，与两种 DP 实现都独立，能抓出&quot;<code>partition_point</code> 写成 <code>&lt;=</code>&quot;这类只改变问题定义的错误。</p>
+<p>对拍规模的选择遵循&quot;暴力跑得动、边界覆盖够&quot;两条原则。n≤11 保证子集枚举不超过 2048 种，2500 轮总计算量在秒级；规模再大就该换更聪明的裁判，而不是让对拍本身变成瓶颈。数据分布也有讲究：价值全为正、重量全为 1、序列全相等这类退化输入很少自然出现，若想专门覆盖它们，可以在生成器里按一定概率强制产出。若某轮报 MISMATCH，打印的输入数组与固定种子能让你重放现场；先把 n 缩小到最小反例，再打印完整 dp 表逐格对照，通常一眼就能看出是边界初值、循环方向还是下标偏移出错。对拍还应覆盖&quot;暴力裁判自己有 bug&quot;的情况：用两个独立暴力版交叉验证，或在已知答案的手工样例上先跑一遍裁判。</p>
+<h2 id="rust-ch03-dp-basics-26-9-工程取舍-初始化-溢出与调试清单">26.9 工程取舍：初始化、溢出与调试清单</h2>
+<p>四类基础 DP 的适用边界列在下表。选型时先估算&quot;状态数 × 转移数&quot;：线性 DP 通常最便宜，区间 DP 的 O(n³) 决定了 n 只能到几百；背包对 cap 敏感，cap 很大时需要换思路（例如按价值定义状态）。</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>状态</th>
+<th>转移数</th>
+<th>复杂度</th>
+<th>关键顺序</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>线性 DP</td>
+<td>dp[k]：前 k 项</td>
+<td>O(1)~O(k)</td>
+<td>O(n) 或 O(n²)</td>
+<td>下标递增</td>
+</tr>
+<tr>
+<td>LIS</td>
+<td>dp[i]：以 i 结尾</td>
+<td>O(i)</td>
+<td>O(n²) / O(n log n)</td>
+<td>tail 须严格递增</td>
+</tr>
+<tr>
+<td>0/1 背包</td>
+<td>dp[c]：容量 c</td>
+<td>O(1)</td>
+<td>O(n·cap)</td>
+<td>容量倒序</td>
+</tr>
+<tr>
+<td>完全背包</td>
+<td>dp[c]：容量 c</td>
+<td>O(1)</td>
+<td>O(n·cap)</td>
+<td>容量正序</td>
+</tr>
+<tr>
+<td>区间 DP</td>
+<td>dp[l][r]：区间</td>
+<td>O(len)</td>
+<td>O(n³)</td>
+<td>区间长度递增</td>
+</tr>
+</tbody></table>
+
+<p>初始化是另一大坑源。&quot;恰好装满&quot;要与&quot;不超过容量&quot;用不同的初值：前者把 dp 全设为负无穷、只留 dp[0]=0，后者全设 0。求最小值时负无穷与正无穷别混用，否则 <code>min</code> 会把边界吞掉。整数量用 <code>i64</code>，先估算最大可能值再决定类型；<code>i64::MAX/4</code> 作为哨兵要给加法留余量。DP 调试有固定流程：写出状态定义 → 手推最小例子的转移表 → 打印完整表与手工结果逐格对照 → 确认后改滚动优化 → 最后用暴力对拍守大数据。绝大多数错误都能在前两步被拦住。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把 26.2 的打家劫舍改成&quot;环形排列&quot;（首尾相邻不能同时偷），提示：分&quot;偷第 0 家&quot;与&quot;不偷第 0 家&quot;两次线性 DP；用 26.8 的子集暴力裁判验证，贴出真实输出。</li>
+<li>给 LIS 加上前驱数组，输出一条真实的 LIS 序列（而非 tail）；用 26.8 的随机序列验证&quot;序列严格递增且长度等于 lis_fast&quot;，并确认它确实是原序列的子序列。</li>
+<li>实现多重背包（每件最多 cnt 件）的二进制拆分版，与&quot;枚举每件选几件&quot;的递归暴力版在随机小数据上对拍，记录 mismatches 与真实耗时（不要编造数字）。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>定义 DP 状态必须交代哪三个要素？为什么&quot;以 i 结尾&quot;与&quot;前 i 个&quot;不能混用？</li>
+<li>0/1 背包容量为什么倒序？改成正序会变成哪种背包？滚动数组更新顺序写反会怎样？</li>
+<li>区间 DP 为什么按长度递增计算？石子合并的转移式为什么还要加区间和？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__flow-and-matching.md.html">← 网络流与匹配：增广路、最小割与二分图建模</a><a href="rust__chapters__ch03__dp-advanced.md.html">动态规划进阶 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

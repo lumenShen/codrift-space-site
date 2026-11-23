@@ -1,0 +1,74 @@
+/* Rust 笔记专用补充样式：图元与练习块。
+   颜色全部取阅读器注入的设计令牌（--ink / --rule / --paper-soft），
+   因此亮色与暗色主题下都能自动适配，不需要单独写一套深色规则。 */
+
+.rust-figure {
+  margin: 0.7em 0 0.8em;
+  border: 1px solid var(--rule, #cfd6de);
+  border-radius: 6px;
+  overflow: hidden;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.rust-figure figcaption {
+  padding: 0.28em 0.8em;
+  border-bottom: 1px solid var(--rule, #cfd6de);
+  background: var(--paper-soft, #f6f8fa);
+  color: var(--ink, #16181d);
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+.rust-figure figcaption .rust-fig-kind {
+  display: inline-block;
+  margin-right: 0.5em;
+  padding: 0 0.35em;
+  border: 1px solid var(--rule-strong, #aeb6c2);
+  border-radius: 2px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82em;
+  font-weight: 400;
+  color: var(--ink-soft, #333a46);
+}
+
+.rust-diagram {
+  margin: 0;
+  padding: 0.65em 0.9em;
+  overflow-x: auto;
+  color: var(--ink, #16181d);
+  font-family: var(--font-mono, Consolas, monospace);
+  font-size: 0.88em;
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.rust-exercise {
+  margin: 0.7em 0 0.8em;
+  padding: 0.5em 0.9em 0.6em;
+  border: 1px solid var(--rule, #cfd6de);
+  border-left: 4px solid var(--accent, #4f8cff);
+  border-radius: 0 6px 6px 0;
+  background: var(--paper-tint, transparent);
+  break-inside: avoid;
+}
+
+.rust-exercise > .rust-exercise-h {
+  font-weight: 700;
+  color: var(--accent-strong, var(--accent, #4f8cff));
+  font-size: 0.88em;
+}
+
+.rust-exercise > .rust-exercise-b {
+  color: var(--ink, #16181d);
+  font-size: 0.94em;
+}
+
+.rust-exercise > .rust-exercise-b > :first-child { margin-top: 0.3em; }
+.rust-exercise > .rust-exercise-b > :last-child { margin-bottom: 0; }
+
+@media print {
+  .rust-figure,
+  .rust-exercise { break-inside: avoid; }
+}

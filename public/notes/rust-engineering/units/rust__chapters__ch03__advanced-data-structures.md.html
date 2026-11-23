@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>高级数据结构：线段树、二维 BIT 与主席树</title>
+<meta name="description" content="第 31 单元 · 建议 90 分钟 · 把&quot;区间&quot;变成可维护的对象，用不变量换掉重复计算">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">高级数据结构：线段树、二维 BIT 与主席树</h1><p class="doc-sub">第 31 单元 · 建议 90 分钟 · 把&quot;区间&quot;变成可维护的对象，用不变量换掉重复计算</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 31-advanced-data-structures.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-1-从前缀和到区间结构-问题定义与边界">31.1 从前缀和到区间结构：问题定义与边界</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-2-线段树的形状与不变量">31.2 线段树的形状与不变量</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-3-懒标记-apply-push-pull-三件套">31.3 懒标记：apply、push、pull 三件套</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-4-二维-bit-lowbit-的秘密与容斥">31.4 二维 BIT：lowbit 的秘密与容斥</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-5-主席树-把每个前缀都存成一张-快照">31.5 主席树：把每个前缀都存成一张"快照"</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-6-三种结构的复杂度与工程取舍">31.6 三种结构的复杂度与工程取舍</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-7-随机对拍-给每个结构找一个-第二实现">31.7 随机对拍：给每个结构找一个"第二实现"</a></li><li class="toc-l2"><a href="#rust-ch03-advanced-data-structures-31-8-自检与练习">31.8 自检与练习</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能说清线段树节点维护什么、懒标记为什么必须&quot;整段命中才挂起&quot;</li>
+<li>能独立写出区间加 + 区间和的线段树，并解释 push / pull 的调用顺序</li>
+<li>能写出二维树状数组的单点加与矩形和，理解 <code>lowbit</code> 下标为何从 1 开始</li>
+<li>能构造主席树回答静态区间第 k 小，并说清&quot;共享未修改子树&quot;带来的空间代价</li>
+<li>能用 std-only 随机数据把三种结构与朴素算法对拍，Locate 出差异来源</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-advanced-data-structures-31-1-从前缀和到区间结构-问题定义与边界">31.1 从前缀和到区间结构：问题定义与边界</h2>
+<p>前缀和把&quot;静态区间和&quot;压到 O(1)，但一旦允许修改，前缀数组就要整体重算，代价退化为 O(n)。本单元要处理三类典型冲突：<strong>既改又查</strong>（区间加、区间求和）、<strong>二维点改矩形查</strong>（网格上的增量与区域和）、<strong>不可改但查得复杂</strong>（静态区间第 k 小）。它们分别对应线段树、二维 BIT、主席树。</p>
+<p>问题定义必须精确到下标语义。线段树处理长 n 的数组 a，支持 <code>add(l,r,v)</code> 把 [l,r] 每个元素加 v，以及 <code>sum(l,r)</code> 返回区间和；二者都要 O(log n)。二维 BIT 处理 n×m 的矩阵，支持单点加与 [x1,x2]×[y1,y2] 的矩形和，复杂度 O(log n log m)。主席树处理静态数组，支持 <code>kth(l,r,k)</code> 返回 [l,r] 内第 k 小，预处理 O(n log n)，单次查询 O(log n)。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>前缀和像一本算好总账的账本，改一笔就要重印整本。线段树把账本拆成层级，某一段涨价了只在那一页贴个&quot;待补款&quot;便条，查账时才把便条摊给下面。二维 BIT 是给表格的行列都编了二进制页码，顺着页码跳就能把一片格子汇总。主席树则像给每一次&quot;拍照&quot;只重拍被改动的那一条走廊，其余走廊直接复用上一张照片。</p>
+
+</div>
+</section>
+<p>在动手写结构之前，先看清一个常被忽略的前提：线段树与 BIT 能工作，是因为&quot;求和&quot;构成一个<strong>交换幺半群</strong>——有结合律、有单位元 0、且与顺序无关。结合律允许我们把大区间切成若干节点区间再合并；单位元允许空区间返回 0 而不破坏结果；交换律让左右子树的合并次序不影响答案。换成&quot;最大值&quot;&quot;按位或&quot;&quot;异或&quot;同样成立，换成&quot;字符串拼接&quot;或&quot;浮点数求和&quot;就要小心：前者虽结合但分配内存代价高，后者因舍入误差不再严格结合，对拍时可能出现&quot;同一批数不同合并顺序得到不同末位&quot;的假 mismatch。理解这一点，比背模板更能决定你何时该用、何时不该用这些结构。</p>
+<p>三者共享一个工程约定：用<strong>闭区间</strong>还是<strong>半开区间</strong>必须从头到尾一致。本单元线段树用闭区间 [l,r]，二维 BIT 用 1-based 闭区间，主席树用 1-based 下标。混用是调试噩梦的源头，所以在函数签名处就要固定下来。闭区间的额外好处是空区间判断简单（<code>l &gt; r</code> 直接返回单位元），半开区间 [l,r) 则在二分与切片转换时更自然；两种都能用，唯一不能接受的是&quot;建树用闭区间、查询用半开区间&quot;这种半途换语义。</p>
+<p>再从问题模型上看，&quot;在线&quot;与&quot;离线&quot;也决定了结构选择。线段树和 BIT 都支持读到一条操作就立刻处理、立刻回答，属于在线结构；主席树要求先把整批数组读入、离散化、再建版本树，属于离线预处理结构。若题目边读边问且答案依赖后续修改，主席树根本无从下手；反过来，若数组全程不变而要回答上万次区间排名查询，用线段树维护计数再逐值二分会很慢，主席树的 O(log m) 才是正解。把&quot;是否修改&quot;&quot;查什么&quot;&quot;何时知道全部输入&quot;三个问题按顺序问完，结构通常就唯一确定了。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">数组 a[0..n)  →  建树 O(n)  →  操作序列（add / query / kth）  →  逐次返回答案  →  与朴素实现比对</pre></figure>
+<h2 id="rust-ch03-advanced-data-structures-31-2-线段树的形状与不变量">31.2 线段树的形状与不变量</h2>
+<p>线段树把 [0,n-1] 递归二分：节点 p 覆盖区间 [l,r]，左孩子 2p 覆盖 [l,mid]，右孩子 2p+1 覆盖 [mid+1,r]。用数组存树时，深度约 log₂n，节点总数不超过 4n，所以预分配 <code>vec![0; 4*n+4]</code> 是安全的上界，也避免动态扩容带来的借用麻烦。</p>
+<p>节点不变量有两条。<code>sum[p]</code> 恒等于节点覆盖区间<strong>当前</strong>的元素和；<code>lazy[p]</code> 记录&quot;已经计入 sum[p]、但尚未下发给两个孩子&quot;的加值。注意 lazy 的语义是&quot;子树每个元素都要加 v&quot;，不是&quot;sum 要加 v&quot;——这个区分决定了 push 时乘的是<strong>区间长度</strong>。</p>
+<p>建树时叶子直接取 a[l]，内部节点 <code>sum[p] = sum[2p] + sum[2p+1]</code>。由于 Rust 不允许同时持有 <code>&amp;mut self.sum[p]</code> 和递归调用 <code>&amp;mut self</code>，实现里用 <code>self.sum[p] = self.sum[p*2] + self.sum[p*2+1]</code> 这种&quot;先读后写&quot;的单语句形式，让两次不可变借用结束后再可变借用，绕开借用冲突。这正是两阶段借用（two-phase borrow）在实践中的样子：赋值号右侧的两次索引先完成不可变读取，左侧的可变借用直到真正写入才生效。若把同一个意思拆成 <code>let s = &amp;mut self.sum[p]; *s = self.sum[p*2] + self.sum[p*2+1];</code>，编译就会失败——因为 <code>s</code> 的生命周期横跨了右侧读取。</p>
+<p>为什么用数组而不是 <code>Box&lt;Node&gt;</code> 指针树？因为完全二叉形态让父子关系变成纯算术 <code>2p / 2p+1</code>，无需存指针，缓存局部性也更好。4n 这个上界可以这样估算：深度 d 的节点数不超过 2^d，最坏情况下最后一层不满但编号仍连续，最大下标小于 2^(h+1)，而 2^h ≤ n &lt; 2^(h+1)，故最大下标 &lt; 4n。多开 4 个是防御性余量，避免边界处越界。另一处细节是 <code>mid = l + (r-l)/2</code> 而非 <code>(l+r)/2</code>：后者在 l、r 都接近 usize::MAX 时相加溢出，虽然本单元 n 不会那么大，但写成安全形式没有代价，应该形成习惯。</p>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="box-kind">补一句</span><span class="box-t">值得记住的细节</span></header>
+<div class="box-b">
+<p>迭代式线段树（把叶子排成 2 的幂长度的数组，自底向上合并）代码更短、无递归，但懒标记下推需要额外的&quot;标记高度&quot;技巧，可读性反而下降。本单元选递归版，是因为它让不变量与区间一一对应，便于讲清正确性；工程里若追求极限常数再换迭代版也不迟。</p>
+
+</div>
+</section>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">build(1, 0, 7) 覆盖 [0,7]
+├── 节点1 [0,3]  sum = a0+a1+a2+a3
+│   ├── 节点2 [0,1]  sum = a0+a1
+│   └── 节点3 [2,3]  sum = a2+a3
+└── 节点4 [4,7]  sum = a4+a5+a6+a7
+    ├── 节点5 [4,5]
+    └── 节点6 [6,7]</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">84 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 线段树：区间加、区间求和，懒标记向下传递。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct SegTree {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    n: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    sum: Vec&lt;i64&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    lazy: Vec&lt;i64&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">impl SegTree {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn new(a: &amp;[i64]) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        assert!(n &gt; 0, &quot;线段树至少需要一个元素&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        let mut st = Self { n, sum: vec![0; 4 * n + 4], lazy: vec![0; 4 * n + 4] };</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        st.build(1, 0, n - 1, a);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        st</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    fn build(&amp;mut self, p: usize, l: usize, r: usize, a: &amp;[i64]) {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        if l == r {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            self.sum[p] = a[l];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            return;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let m = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        self.build(p * 2, l, m, a);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        self.build(p * 2 + 1, m + 1, r, a);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        self.sum[p] = self.sum[p * 2] + self.sum[p * 2 + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    fn apply(&amp;mut self, p: usize, len: usize, v: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        self.sum[p] += v * len as i64;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        self.lazy[p] += v;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    fn push(&amp;mut self, p: usize, l: usize, r: usize) {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        if self.lazy[p] != 0 &amp;&amp; l &lt; r {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            let m = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            let v = self.lazy[p];</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            self.apply(p * 2, m - l + 1, v);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">            self.apply(p * 2 + 1, r - m, v);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            self.lazy[p] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    fn add(&amp;mut self, ql: usize, qr: usize, v: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        if ql &gt; qr { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        self.add_rec(1, 0, self.n - 1, ql, qr, v);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    fn add_rec(&amp;mut self, p: usize, l: usize, r: usize, ql: usize, qr: usize, v: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        if ql &lt;= l &amp;&amp; r &lt;= qr {</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">            self.apply(p, r - l + 1, v);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">            return;</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        self.push(p, l, r);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        let m = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        if ql &lt;= m { self.add_rec(p * 2, l, m, ql, qr, v); }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        if qr &gt; m { self.add_rec(p * 2 + 1, m + 1, r, ql, qr, v); }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        self.sum[p] = self.sum[p * 2] + self.sum[p * 2 + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    fn query(&amp;mut self, ql: usize, qr: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        if ql &gt; qr { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        self.query_rec(1, 0, self.n - 1, ql, qr)</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    fn query_rec(&amp;mut self, p: usize, l: usize, r: usize, ql: usize, qr: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        if ql &lt;= l &amp;&amp; r &lt;= qr { return self.sum[p]; }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        self.push(p, l, r);</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        let m = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let mut res = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        if ql &lt;= m { res += self.query_rec(p * 2, l, m, ql, qr); }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        if qr &gt; m { res += self.query_rec(p * 2 + 1, m + 1, r, ql, qr); }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        res</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="70"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    let a = vec![1i64, 2, 3, 4, 5, 6, 7, 8];</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    let mut st = SegTree::new(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    println!(&quot;init sum[0..8] = {}&quot;, st.query(0, 7));</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    st.add(2, 5, 10);</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    println!(&quot;after add[2,5]+10: sum[0..8] = {}&quot;, st.query(0, 7));</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    println!(&quot;sum[2..5] = {}&quot;, st.query(2, 5));</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    println!(&quot;sum[0..1] = {}&quot;, st.query(0, 1));</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    st.add(0, 7, -3);</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">    println!(&quot;after add[0,7]-3: sum[3..6] = {}&quot;, st.query(3, 6));</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    let mut one = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">    for i in 0..8 { one.push(st.query(i, i)); }</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">    println!(&quot;point values = {:?}&quot;, one);</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v31_segtree.rs -o v31_segtree &amp;&amp; ./v31_segtree</span></div>
+<div class="cl is-text"><span class="code">init sum[0..8] = 36</span></div>
+<div class="cl is-text"><span class="code">after add[2,5]+10: sum[0..8] = 76</span></div>
+<div class="cl is-text"><span class="code">sum[2..5] = 58</span></div>
+<div class="cl is-text"><span class="code">sum[0..1] = 3</span></div>
+<div class="cl is-text"><span class="code">after add[0,7]-3: sum[3..6] = 40</span></div>
+<div class="cl is-text"><span class="code">point values = [-2, -1, 10, 11, 12, 13, 4, 5]</span></div></div></div>
+<p>最后那行点数查询验证了懒标记的正确性：全区间 -3 之后，[2,5] 的四个点从 13/14/15/16 变成 10/11/12/13，说明标记确实下推到了叶子，而没有只停在根节点。</p>
+<h2 id="rust-ch03-advanced-data-structures-31-3-懒标记-apply-push-pull-三件套">31.3 懒标记：apply、push、pull 三件套</h2>
+<p>懒标记的全部机制可以拆成三个动作。<code>apply(p,len,v)</code> 把加值挂到节点 p：更新 <code>sum[p] += v*len</code>，累加 <code>lazy[p] += v</code>。<code>push(p,l,r)</code> 在下探之前把标记发给两个孩子：对左孩子传长度 <code>mid-l+1</code>，对右孩子传 <code>r-mid</code>，然后清空 <code>lazy[p]</code>。<code>pull</code> 在递归返回后重算 <code>sum[p] = sum[2p] + sum[2p+1]</code>。</p>
+<p>正确性论证依赖一个归纳不变量：<strong>对任意节点 p，sum[p] 等于覆盖区间真实和，且 lazy[p] 是尚未应用到子孙的加值总量</strong>。形式化地说，设节点 p 覆盖区间 I_p，叶子真实值为 a[x]，则 <code>sum[p] = Σ_{x∈I_p} a[x] + lazy[p] · |I_p|</code> 对所有祖先路径上的节点成立，而 a[x] 只在本节点被完全覆盖或下推到底时才更新。apply 保持不变量：它让 sum 增加 v·len、lazy 增加 v，等式两边同步变化；push 让 lazy 清零并把 v 分别写入左右孩子，父节点 sum 不变，但子节点的 <code>sum + lazy·len</code> 各增加 v·len_child，等式仍成立；pull 在孩子变化后用子节点和重算父节点 sum，由于子节点 sum 已包含各自的 lazy 贡献，父节点无需再叠加自己的 lazy（它已被清空）。三条动作都不破坏不变量，归纳即得正确性。</p>
+<p>调用顺序同样重要：必须先 push 再递归，再 pull。若先递归后 push，孩子会将基于旧值的部分结果与父节点尚未下推的标记混合，pull 出来的 sum 必然偏小；若递归后忘了 pull，父节点 sum 停留在修改前，下一次整段命中查询就会返回陈旧值。这两个错误在对拍里都表现为&quot;部分覆盖操作之后才出现 mismatch&quot;，而全区间操作恰好能绕过它们——这也是为什么对拍要同时包含全区间与零散区间。整段命中时直接 apply、不进入孩子，所以单次更新只经过 O(log n) 个节点：每层至多处理两个边界节点加若干整段节点，总数是深度的常数倍。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：查询路径也必须 push。如果 <code>query</code> 遇到部分覆盖时直接读孩子的 <code>sum</code>，而父节点的 lazy 还没下推，读到的就是旧值。上面代码里 <code>query_rec</code> 在递归前无条件调用 <code>push</code>，正是为此。另一个坑是 n=0：<code>new</code> 里 <code>n-1</code> 会在 usize 下溢并 panic，所以显式 <code>assert!(n&gt;0)</code>。第三个坑是 <code>v * len as i64</code>：若 v 与 n 都很大，i64 可能溢出，竞赛场景常改 i128，工程场景应在入口约束数据范围。</p>
+<p>再补一个更隐蔽的坑：懒标记的可交换性并非总是成立。若把操作换成&quot;区间赋值 + 区间和&quot;，标记必须覆盖旧值而不是累加；若换成&quot;先乘后加&quot;，push 时必须按复合顺序应用，写反会得到完全不同的结果。本单元的加标记之所以简单，正是因为&quot;加 v&quot;与&quot;加 w&quot;可交换且可合并为&quot;加 v+w&quot;。设计新操作时先问：两个标记能否合成一个？合成是否保序？答不上来就别急着套懒标记模板。前文演示序列里，先对 [2,5] 加 10、再对 [0,7] 减 3，最后逐点结果是 [-2,-1,10,11,12,13,4,5]：第 2 到 5 项确实同时含两次更新，而第 0、1、6、7 项只含后者。这种&quot;人工可核对&quot;的小样例，应当作为对拍之外的第一道防线。</p>
+
+</div>
+</section>
+<p>复杂度：建树 O(n)，单次 add / query 访问 O(log n) 个节点，空间 O(n)（4n 上界）。相比&quot;每次 add 用差分再前缀重建&quot;的 O(n)，当操作数 q 远大于 n 时收益是数量级的。</p>
+<h2 id="rust-ch03-advanced-data-structures-31-4-二维-bit-lowbit-的秘密与容斥">31.4 二维 BIT：lowbit 的秘密与容斥</h2>
+<p>二维树状数组把一维 <code>lowbit</code> 技巧搬到矩阵上。定义 <code>lowbit(x) = x &amp; x.wrapping_neg()</code>，它取出 x 的最低置位。节点 <code>tree[i][j]</code> 维护的矩形是 <code>(i-lowbit(i)+1 ..= i) × (j-lowbit(j)+1 ..= j)</code>。于是单点加 (x,y) 要沿着 <code>i += lowbit(i)</code>、<code>j += lowbit(j)</code> 向上更新所有包含它的矩形；前缀和 <code>prefix(x,y)</code> 则沿 <code>i -= lowbit(i)</code>、<code>j -= lowbit(j)</code> 向下汇总。</p>
+<p>矩形和用容斥分解为四个前缀：<code>rect(x1,y1,x2,y2) = P(x2,y2) - P(x1-1,y2) - P(x2,y1-1) + P(x1-1,y1-1)</code>。这里下标必须从 1 开始：若 x=0，<code>lowbit(0)=0</code>，<code>i += 0</code> 会让你原地打转直到超时；1-based 让所有前缀查询自然以 <code>i -= lowbit(i)</code> 收敛到 0。代码里 <code>tree</code> 开成 <code>(n+1)×(m+1)</code>，第 0 行第 0 列恒为 0，正好作为容斥的哨兵。</p>
+<p><code>tree[i][j]</code> 覆盖的区间为什么恰好是 <code>(i-lowbit(i)+1 ..= i)</code>？把 i 写成二进制，减去最低置位相当于清掉那个 1，得到 i&#39;；区间 (i&#39;..=i] 的长度就是 lowbit(i)。所有落在这个区间内的点 x 满足 <code>x-lowbit(x) &lt; i&#39;</code>，因此它们向上跳 lowbit 时都会经过 i。反过来，一个点 x 向上更新时覆盖的节点集合，恰好是所有满足&quot;节点下标 j ≥ x 且 j-lowbit(j) &lt; x&quot;的 j，这正好是一组互不相交、层层放大的矩形。前缀和 <code>prefix(x,y)</code> 沿着 i 减 lowbit 走，把这些矩形拼成 [1..x]×[1..y] 而不重不漏——这就是不变量。二维情形只是把同样的推理对行、列各做一遍，两个方向的区间独立，故复杂度相乘而非相加。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">lowbit 覆盖示例（i = 6，二进制 110）
+i=6  lowbit=2  → 覆盖行 (5..=6]
+   ↑ 单点 (6,y) 更新
+i=4  lowbit=4  → 覆盖行 (1..=4]
+   ↑ 继续向上跳：6+2=8&gt;n 时停止
+prefix(6,y) 向下走：6 → 4 → 0，拼出 (1..=6]</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">58 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn lowbit(x: usize) -&gt; usize { x &amp; x.wrapping_neg() }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">/// 二维树状数组：下标从 1 开始，单点加 + 前缀和 + 矩形和。</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">struct Bit2D {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    n: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    m: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    tree: Vec&lt;Vec&lt;i64&gt;&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">impl Bit2D {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn new(n: usize, m: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        Self { n, m, tree: vec![vec![0i64; m + 1]; n + 1] }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    fn add(&amp;mut self, x: usize, y: usize, delta: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let mut i = x;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        while i &lt;= self.n {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            let mut j = y;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">            while j &lt;= self.m {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">                self.tree[i][j] += delta;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">                j += lowbit(j);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            i += lowbit(i);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    fn prefix(&amp;self, x: usize, y: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        let mut res = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let mut i = x;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        while i &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            let mut j = y;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            while j &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                res += self.tree[i][j];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                j -= lowbit(j);</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            i -= lowbit(i);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        res</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    /// [x1,x2] x [y1,y2] 的闭区间和，输入均从 1 开始。</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    fn rect_sum(&amp;self, x1: usize, y1: usize, x2: usize, y2: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        if x1 &gt; x2 || y1 &gt; y2 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        self.prefix(x2, y2) - self.prefix(x1 - 1, y2)</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            - self.prefix(x2, y1 - 1) + self.prefix(x1 - 1, y1 - 1)</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    let mut bit = Bit2D::new(6, 6);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    bit.add(2, 3, 5);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    bit.add(4, 4, 7);</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    bit.add(2, 3, -2);</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    println!(&quot;rect[1..6,1..6] = {}&quot;, bit.rect_sum(1, 1, 6, 6));</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    println!(&quot;rect[1..3,1..4] = {}&quot;, bit.rect_sum(1, 1, 3, 4));</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    println!(&quot;rect[2..2,3..3] = {}&quot;, bit.rect_sum(2, 3, 2, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    println!(&quot;rect[4..6,4..6] = {}&quot;, bit.rect_sum(4, 4, 6, 6));</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    println!(&quot;rect[5..6,1..2] = {}&quot;, bit.rect_sum(5, 1, 6, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v31_bit2d.rs -o v31_bit2d &amp;&amp; ./v31_bit2d</span></div>
+<div class="cl is-text"><span class="code">rect[1..6,1..6] = 10</span></div>
+<div class="cl is-text"><span class="code">rect[1..3,1..4] = 3</span></div>
+<div class="cl is-text"><span class="code">rect[2..2,3..3] = 3</span></div>
+<div class="cl is-text"><span class="code">rect[4..6,4..6] = 7</span></div>
+<div class="cl is-text"><span class="code">rect[5..6,1..2] = 0</span></div></div></div>
+<p>单点 (2,3) 先加 5 再加 -2，净值 3，所以 <code>rect[2..2,3..3]=3</code>；左上 3×4 区域恰好包含这个点，结果同为 3；右下角只包含 (4,4)=7。这些数字与直觉一致，说明容斥的四个前缀方向没有写反。复杂度：add 与 prefix 各 O(log n · log m)，空间 O(nm)；若 n、m 都到 1e5，<code>Vec&lt;Vec&lt;i64&gt;&gt;</code> 的开销不可接受，应换一维压扁数组或稀疏哈希。</p>
+<p>工程上还有两个细节值得点明。第一，<code>Vec&lt;Vec&lt;i64&gt;&gt;</code> 的每一行单独分配，遍历时指针跳跃较多；若矩阵规模固定且不大（如几百乘几百），把它压成 <code>Vec&lt;i64&gt;</code> 并用 <code>i*(m+1)+j</code> 索引，常数会明显下降，代价是代码可读性变差。第二，delta 允许为负（上面演示就有 -2），所以 <code>tree</code> 元素必须是有符号整数；若用 <code>u64</code> 存计数，减去一个较大值就会下溢 panic。<code>lowbit</code> 用 <code>wrapping_neg</code> 而不是 <code>-x</code>，是因为标准库对无符号数的一元负号会触发溢出检查，而位模式取反加一正是我们要的低位提取，用 wrapping 语义既安全又表达准确。</p>
+<h2 id="rust-ch03-advanced-data-structures-31-5-主席树-把每个前缀都存成一张-快照">31.5 主席树：把每个前缀都存成一张&quot;快照&quot;</h2>
+<p>主席树（可持久化线段树）解决的问题是：静态数组上查 [l,r] 的第 k 小。做法是把值离散化到 1..m，对前缀 a[1..i] 建一棵值域线段树 <code>root[i]</code>，节点计数表示&quot;该值域区间里出现了多少个数&quot;。关键技巧是<strong>路径复制</strong>：插入一个值时只复制从根到叶的 log m 个节点，其余子树直接沿用旧版本的编号。这样 <code>root[i]</code> 与 <code>root[i-1]</code> 共享大部分节点，空间从 O(nm) 降到 O(n log m)。</p>
+<p>举个具体例子帮助建立图像：若值域 m=8，前缀版本 root[3] 已经在 rank 5 和 rank 7 上各有一个计数，现在要插入 rank 7。路径从根 [1,8] → 右子 [5,8] → 右子 [7,8] → 叶 [7,7]，共 4 个节点被复制；[5,6] 这段子树完全没变，因此 root[4] 的 [5,6] 孩子编号直接复用 root[3] 的对应编号。两个版本加起来只多出 4 个节点，而不是重建整棵 15 节点的树。节点 0 被设为 <code>(0,0,0)</code> 哨兵：空孩子的计数恒为 0，孩子编号恒为 0，这样&quot;不存在的子树&quot;也满足同一套不变量，查询时无需特判 null——这正是用哨兵换掉分支判定的典型手法。</p>
+<p>不变量有两条。<code>nodes[cur].2</code> 等于该节点值域区间在当前版本中的计数；<code>root[r]</code> 减去 <code>root[l-1]</code> 得到 [l,r] 的计数直方图（对应节点逐相减）。第二条是查询正确性的核心：root[r] 含 a[1..r] 的计数，root[l-1] 含 a[1..l-1] 的计数，两棵结构相同的值域树逐节点相减，剩下的正是 a[l..r] 中各值出现次数，因为前缀差满足可减性。查询时若左孩子计数 ≥ k，答案在左半值域，否则去右半并把 k 减去左计数；走到叶子即排名，映射回离散化前的原值。注意&quot;第 k 小&quot;按出现次数计数：重复值各占一名，所以 [5,5,7] 的第 2 小仍是 5，这与 <code>sort_unstable</code> 后取下标 k-1 完全一致，也是对拍选用的暴力基准。</p>
+<p>Rust 实现里，<code>update</code> 先 <code>let old = self.nodes[prev]; let cur = self.nodes.len(); self.nodes.push(old);</code> 取出旧节点并复制，再对计数加一，然后递归只修改一侧孩子并回写编号。这里 <code>Vec</code> 的引用在 push 之后会失效，所以必须先把旧节点拷贝成局部值，不能持有 <code>&amp;self.nodes[prev]</code> 跨过 push——这是主席树实现最常见的借用错误。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">72 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 主席树（可持久化线段树）：静态区间第 k 小。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">/// nodes[i] = (左孩子, 右孩子, 该节点覆盖区间内的计数)，0 号为哨兵空节点。</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct PersistentSegTree {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    nodes: Vec&lt;(usize, usize, usize)&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    roots: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    m: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">impl PersistentSegTree {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    fn new(m: usize, n: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        Self { nodes: vec![(0, 0, 0)], roots: vec![0; n + 1], m }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    fn update(&amp;mut self, prev: usize, l: usize, r: usize, pos: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        let old = self.nodes[prev];</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let cur = self.nodes.len();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        self.nodes.push(old);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        self.nodes[cur].2 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        if l != r {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">            let mid = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">            if pos &lt;= mid {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">                let child = self.update(old.0, l, mid, pos);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">                self.nodes[cur].0 = child;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            } else {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">                let child = self.update(old.1, mid + 1, r, pos);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">                self.nodes[cur].1 = child;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        cur</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    fn query(&amp;self, right_root: usize, left_root: usize, l: usize, r: usize, k: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        if l == r { return l; }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        let mid = l + (r - l) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        let left_count = self.nodes[self.nodes[right_root].0].2</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            - self.nodes[self.nodes[left_root].0].2;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        if k &lt;= left_count {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            self.query(self.nodes[right_root].0, self.nodes[left_root].0, l, mid, k)</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">            self.query(self.nodes[right_root].1, self.nodes[left_root].1, mid + 1, r, k - left_count)</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    /// 在原始数组 a（下标 1..n）上查询区间 [l,r] 的第 k 小，返回原始值。</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    fn kth(&amp;self, l: usize, r: usize, k: usize, sorted_unique: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let rank = self.query(self.roots[r], self.roots[l - 1], 1, self.m, k);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        sorted_unique[rank - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="49"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">fn build_from(a: &amp;[i64]) -&gt; (PersistentSegTree, Vec&lt;i64&gt;) {</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let mut vals: Vec&lt;i64&gt; = a.to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    vals.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    vals.dedup();</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    let m = vals.len();</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let mut pst = PersistentSegTree::new(m, n);</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        let rank = vals.binary_search(&amp;a[i]).unwrap() + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        let root = pst.update(pst.roots[i], 1, m, rank);</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        pst.roots[i + 1] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    (pst, vals)</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="64"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    let a = vec![4i64, 1, 5, 2, 7, 3, 5, 8];</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    let (pst, vals) = build_from(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    println!(&quot;sorted unique = {:?}&quot;, vals);</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    for (l, r, k) in [(1usize, 5usize, 3usize), (2, 7, 2), (3, 8, 6), (1, 8, 1)] {</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        println!(&quot;a[{}..{}] k={} -&gt; {}&quot;, l, r, k, pst.kth(l, r, k, &amp;vals));</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v31_pst.rs -o v31_pst &amp;&amp; ./v31_pst</span></div>
+<div class="cl is-text"><span class="code">sorted unique = [1, 2, 3, 4, 5, 7, 8]</span></div>
+<div class="cl is-text"><span class="code">a[1..5] k=3 -&gt; 4</span></div>
+<div class="cl is-text"><span class="code">a[2..7] k=2 -&gt; 2</span></div>
+<div class="cl is-text"><span class="code">a[3..8] k=6 -&gt; 8</span></div>
+<div class="cl is-text"><span class="code">a[1..8] k=1 -&gt; 1</span></div></div></div>
+<p>验证一下：a[1..5] = [4,1,5,2,7]，排序后 [1,2,4,5,7]，第 3 小是 4；a[3..8] = [5,2,7,3,5,8]，排序后 [2,3,5,5,7,8]，第 6 小是 8。结果与手算一致。复杂度：建树 O(n log m)，单次查询 O(log m)，节点数 O(n log m)；代价是<strong>不支持修改</strong>，数组一变就得重建，这是它和线段树的本质分工。</p>
+<h2 id="rust-ch03-advanced-data-structures-31-6-三种结构的复杂度与工程取舍">31.6 三种结构的复杂度与工程取舍</h2>
+<p>把三种结构放在同一张表里，可以看清&quot;维护什么、牺牲什么&quot;。线段树换来了通用性（区间加、区间乘、区间最值都能套同一个框架），但每个节点要维护 sum / lazy 两个量；二维 BIT 代码最短、常数最小，却只支持&quot;点改 + 可减区间查&quot;，一旦更新变成&quot;子矩阵加&quot;就得换二维线段树或二维差分；主席树空间换时间，适合离线静态查询，不能原地修改。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>选结构其实就是问三个问题——会不会改？查的是&quot;总和&quot;还是&quot;排名&quot;？数据是一维还是二维？会改且查总和选线段树；二维点改查区域选 BIT；不改却要查排名选主席树。把这三个问题答完，结构自然就定了，不必背模板。</p>
+
+</div>
+</section>
+<table>
+<thead>
+<tr>
+<th>结构</th>
+<th>支持的操作</th>
+<th>单次复杂度</th>
+<th>空间</th>
+<th>能否修改</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>懒标记线段树</td>
+<td>区间加、区间和</td>
+<td>O(log n)</td>
+<td>O(n)</td>
+<td>能，在线</td>
+</tr>
+<tr>
+<td>二维 BIT</td>
+<td>单点加、矩形和</td>
+<td>O(log n · log m)</td>
+<td>O(nm)</td>
+<td>能，仅点改</td>
+</tr>
+<tr>
+<td>主席树</td>
+<td>静态区间第 k 小</td>
+<td>O(log m)</td>
+<td>O(n log m)</td>
+<td>不能，需重建</td>
+</tr>
+</tbody></table>
+
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">输入数组是否全程不变？
+├─ 否，且查&quot;和/最值&quot; → 线段树（懒标记）
+├─ 否，且是二维点改 → 二维 BIT
+└─ 是，且查&quot;第 k 小&quot; → 离散化 + 主席树</pre></figure>
+<p>工程取舍还涉及数值范围与内存层级。线段树的 sum 在 n 较大时要考虑 i64 是否够：n=1e5、元素绝对值 1e9，总和 1e14，i64 游刃有余；若元素到 1e18 则必须 i128，且 <code>len as i128</code> 的转换要显式写出。二维 BIT 的矩阵若是稀疏的（绝大多数格子为 0），用稠密 <code>Vec&lt;Vec&gt;</code> 会浪费上百倍内存，此时应改用哈希映射存非零节点，或用&quot;动态开点&quot;的树状数组。主席树的节点数上限约为 <code>n*(log₂m+1)</code>，n=1e5、m=1e5 时约 1.7e6 个三元组，按每个三元组 24 字节算约 40 MB，仍在可接受范围；但把三元组换成三个独立 <code>Vec&lt;usize&gt;</code> 的 SoA 布局，往往因缓存友好而更快，这是性能敏感场景的后续优化方向，不影响算法正确性。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：主席树的 <code>k</code> 必须先校验 <code>1 &lt;= k &lt;= r-l+1</code>。<code>query</code> 假设 k 合法，若传入 0 会一路走左分支并在叶子返回错误排名；若大于区间长度则在右分支越界。另外离散化用 <code>binary_search</code> 前要对 <code>vals</code> 排序去重，否则同一原值可能对应不同 rank，计数值不会被正确聚合。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-advanced-data-structures-31-7-随机对拍-给每个结构找一个-第二实现">31.7 随机对拍：给每个结构找一个&quot;第二实现&quot;</h2>
+<p>对拍的核心不是&quot;多跑几遍&quot;，而是让两个<strong>独立实现</strong>在<strong>同一随机输入</strong>上给出同一答案。下面程序用 xorshift64 生成可复现的随机数据：种子固定为 20261123，因此任何人重跑都得到逐字相同的输出。三个对照分别是：线段树对&quot;逐元素累加的数组&quot;、二维 BIT 对&quot;直接遍历网格求和&quot;、主席树对&quot;截取子数组排序取第 k 个&quot;。任何一次 mismatch 都会让计数增加，最终全为 0 才算通过。</p>
+<p>为什么强调&quot;独立实现&quot;？如果对照版复用了被测版的 push / lowbit / 差分逻辑，那么一个错误会同时污染两边，对拍永远绿。真正的暴力版必须笨到不可能错：逐元素加、遍历网格、排序取下标——这些代码的正确性几乎不证自明，才能充当裁判。xorshift64 相比标准库的 <code>rand</code> 无需外部依赖，且状态只有一个 u64，便于在失败时把种子写入日志复现；代价是它不是密码学安全随机源，但对算法对拍完全够用。若担心低位随机性偏差，可以把输出右移若干位再取模，本单元数据量小，直接取模不影响覆盖。</p>
+<p>测试规模也有讲究：线段树用 n=40、300 次操作，既覆盖全区间更新也覆盖零散区间；BIT 用 8×8 网格、100 次加 + 200 次查，保证矩形组合足够多样；主席树用 n=60、值域 0..59，重复值必然出现，才能验证&quot;重复计数&quot;的语义。若把规模设成 1 或 2，很多边界分支根本走不到；若设成 1e6，暴力对照又慢到跑不完。对拍规模应取&quot;暴力还能秒出结果、但组合数量足够覆盖分支&quot;的甜点区。真出现 mismatch 时，下一步是缩小用例（delta debugging）：固定随机种子后逐段删操作，只要仍然失败就保留删除，最终得到一个最小反例——第 34 单元会把这套流程做成通用工具。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">随机对拍的三层数据
+栈：rng (s)  ops/l  r  v  got  want      ← 小、随用随弃
+堆：base[n]  brute[n]  grid[8][8]  arr[60]  vals[]  ← 被对照的数据
+树：st.sum/lazy  bit.t  pst.nodes/roots     ← 被测结构</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">168 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">// ---- std-only xorshift64 ----</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    fn below(&amp;mut self, n: usize) -&gt; usize { (self.next() % n as u64) as usize }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn range(&amp;mut self, lo: usize, hi: usize) -&gt; usize { lo + self.below(hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">// ---- segment tree ----</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">struct SegTree { n: usize, sum: Vec&lt;i64&gt;, lazy: Vec&lt;i64&gt; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">impl SegTree {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    fn new(a: &amp;[i64]) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut st = Self { n, sum: vec![0; 4*n+4], lazy: vec![0; 4*n+4] };</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        st.build(1, 0, n-1, a); st</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    fn build(&amp;mut self, p: usize, l: usize, r: usize, a: &amp;[i64]) {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        if l == r { self.sum[p] = a[l]; return; }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        let m = l + (r-l)/2;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        self.build(p*2, l, m, a); self.build(p*2+1, m+1, r, a);</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        self.sum[p] = self.sum[p*2] + self.sum[p*2+1];</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    fn apply(&amp;mut self, p: usize, len: usize, v: i64) { self.sum[p] += v*len as i64; self.lazy[p] += v; }</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    fn push(&amp;mut self, p: usize, l: usize, r: usize) {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        if self.lazy[p] != 0 &amp;&amp; l &lt; r {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            let m = l + (r-l)/2; let v = self.lazy[p];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            self.apply(p*2, m-l+1, v); self.apply(p*2+1, r-m, v); self.lazy[p] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    fn add(&amp;mut self, ql: usize, qr: usize, v: i64) { if ql &lt;= qr { self.add_rec(1, 0, self.n-1, ql, qr, v); } }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    fn add_rec(&amp;mut self, p: usize, l: usize, r: usize, ql: usize, qr: usize, v: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        if ql &lt;= l &amp;&amp; r &lt;= qr { self.apply(p, r-l+1, v); return; }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        self.push(p, l, r);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        let m = l + (r-l)/2;</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        if ql &lt;= m { self.add_rec(p*2, l, m, ql, qr, v); }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        if qr &gt; m { self.add_rec(p*2+1, m+1, r, ql, qr, v); }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        self.sum[p] = self.sum[p*2] + self.sum[p*2+1];</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    fn query(&amp;mut self, ql: usize, qr: usize) -&gt; i64 { if ql &gt; qr { 0 } else { self.query_rec(1, 0, self.n-1, ql, qr) } }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    fn query_rec(&amp;mut self, p: usize, l: usize, r: usize, ql: usize, qr: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        if ql &lt;= l &amp;&amp; r &lt;= qr { return self.sum[p]; }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        self.push(p, l, r);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let m = l + (r-l)/2; let mut res = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        if ql &lt;= m { res += self.query_rec(p*2, l, m, ql, qr); }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        if qr &gt; m { res += self.query_rec(p*2+1, m+1, r, ql, qr); }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        res</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="56"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">// ---- 2D BIT ----</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">fn lowbit(x: usize) -&gt; usize { x &amp; x.wrapping_neg() }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">struct Bit2D { n: usize, m: usize, t: Vec&lt;Vec&lt;i64&gt;&gt; }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">impl Bit2D {</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    fn new(n: usize, m: usize) -&gt; Self { Self { n, m, t: vec![vec![0; m+1]; n+1] } }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    fn add(&amp;mut self, x: usize, y: usize, v: i64) {</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        let mut i = x;</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        while i &lt;= self.n { let mut j = y; while j &lt;= self.m { self.t[i][j] += v; j += lowbit(j); } i += lowbit(i); }</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    fn prefix(&amp;self, x: usize, y: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        let mut r = 0; let mut i = x;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        while i &gt; 0 { let mut j = y; while j &gt; 0 { r += self.t[i][j]; j -= lowbit(j); } i -= lowbit(i); } r</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    fn rect(&amp;self, x1: usize, y1: usize, x2: usize, y2: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        if x1 &gt; x2 || y1 &gt; y2 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        self.prefix(x2,y2) - self.prefix(x1-1,y2) - self.prefix(x2,y1-1) + self.prefix(x1-1,y1-1)</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="75"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">// ---- persistent seg tree ----</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">struct Pst { nodes: Vec&lt;(usize,usize,usize)&gt;, roots: Vec&lt;usize&gt;, m: usize }</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">impl Pst {</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    fn new(m: usize, n: usize) -&gt; Self { Self { nodes: vec![(0,0,0)], roots: vec![0;n+1], m } }</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">    fn update(&amp;mut self, prev: usize, l: usize, r: usize, pos: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">        let old = self.nodes[prev]; let cur = self.nodes.len(); self.nodes.push(old); self.nodes[cur].2 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">        if l != r { let mid = l+(r-l)/2;</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">            if pos &lt;= mid { let c = self.update(old.0,l,mid,pos); self.nodes[cur].0 = c; }</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">            else { let c = self.update(old.1,mid+1,r,pos); self.nodes[cur].1 = c; }</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">        } cur</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">    fn query(&amp;self, rr: usize, lr: usize, l: usize, r: usize, k: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">        if l == r { return l; }</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">        let mid = l+(r-l)/2;</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">        let lc = self.nodes[self.nodes[rr].0].2 - self.nodes[self.nodes[lr].0].2;</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">        if k &lt;= lc { self.query(self.nodes[rr].0, self.nodes[lr].0, l, mid, k) }</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">        else { self.query(self.nodes[rr].1, self.nodes[lr].1, mid+1, r, k-lc) }</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">    fn kth(&amp;self, l: usize, r: usize, k: usize, vals: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">        vals[self.query(self.roots[r], self.roots[l-1], 1, self.m, k) - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="98"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="100"></span><span class="code">    let mut rng = Rng::new(20261123);</span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">    // 1) 线段树对拍</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">    let n = 40usize;</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">    let base: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(200) as i64 - 100).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">    let mut st = SegTree::new(&amp;base);</span></div>
+<div class="cl"><span class="ln" data-ln="105"></span><span class="code">    let mut brute = base.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">    let (mut ops, mut bad) = (0usize, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">        let l = rng.range(0, n-1); let r = rng.range(l, n-1);</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">        if rng.below(2) == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">            let v = rng.below(41) as i64 - 20;</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">            st.add(l, r, v);</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">            for x in &amp;mut brute[l..=r] { *x += v; }</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">            ops += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">            let got = st.query(l, r);</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">            let want: i64 = brute[l..=r].iter().sum();</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">            if got != want { bad += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">    println!(&quot;[segtree] n={} queries={} mismatches={}&quot;, n, ops, bad);</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">    println!(&quot;[segtree] final sum tree={} brute={}&quot;, st.query(0, n-1), brute.iter().sum::&lt;i64&gt;());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="122"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">    // 2) 二维 BIT 对拍</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">    let (nn, mm) = (8usize, 8usize);</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">    let mut bit = Bit2D::new(nn, mm);</span></div>
+<div class="cl"><span class="ln" data-ln="126"></span><span class="code">    let mut grid = vec![vec![0i64; mm+1]; nn+1];</span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">    let (mut q2, mut bad2) = (0usize, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">    for _ in 0..100 {</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">        let x = rng.range(1, nn); let y = rng.range(1, mm); let v = rng.below(21) as i64 - 10;</span></div>
+<div class="cl"><span class="ln" data-ln="130"></span><span class="code">        bit.add(x, y, v); grid[x][y] += v;</span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">        let x1 = rng.range(1,nn); let x2 = rng.range(x1,nn);</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">        let y1 = rng.range(1,mm); let y2 = rng.range(y1,mm);</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">        q2 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">        let got = bit.rect(x1,y1,x2,y2);</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">        let mut want = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">        for i in x1..=x2 { for j in y1..=y2 { want += grid[i][j]; } }</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">        if got != want { bad2 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">    println!(&quot;[bit2d] queries={} mismatches={}&quot;, q2, bad2);</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">    println!(&quot;[bit2d] full grid tree={} brute={}&quot;, bit.rect(1,1,nn,mm),</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">        grid.iter().flat_map(|row| row.iter()).sum::&lt;i64&gt;());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="144"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">    // 3) 主席树对拍</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">    let m = 60usize;</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">    let arr: Vec&lt;i64&gt; = (0..m).map(|_| rng.below(60) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">    let mut vals = arr.clone(); vals.sort_unstable(); vals.dedup();</span></div>
+<div class="cl"><span class="ln" data-ln="149"></span><span class="code">    let mut pst = Pst::new(vals.len(), m);</span></div>
+<div class="cl"><span class="ln" data-ln="150"></span><span class="code">    for i in 0..m { let rank = vals.binary_search(&amp;arr[i]).unwrap()+1; let root = pst.update(pst.roots[i], 1, vals.len(), rank); pst.roots[i+1] = root; }</span></div>
+<div class="cl"><span class="ln" data-ln="151"></span><span class="code">    let (mut q3, mut bad3) = (0usize, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="152"></span><span class="code">    let mut sample: Vec&lt;(usize, usize, usize)&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="153"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="154"></span><span class="code">        let l = rng.range(1, m); let r = rng.range(l, m); let k = rng.range(1, r-l+1);</span></div>
+<div class="cl"><span class="ln" data-ln="155"></span><span class="code">        q3 += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="156"></span><span class="code">        let got = pst.kth(l, r, k, &amp;vals);</span></div>
+<div class="cl"><span class="ln" data-ln="157"></span><span class="code">        let mut sub: Vec&lt;i64&gt; = arr[l-1..r].to_vec(); sub.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="158"></span><span class="code">        let want = sub[k-1];</span></div>
+<div class="cl"><span class="ln" data-ln="159"></span><span class="code">        if got != want { bad3 += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="160"></span><span class="code">        if sample.len() &lt; 4 { sample.push((l, r, k)); }</span></div>
+<div class="cl"><span class="ln" data-ln="161"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="162"></span><span class="code">    println!(&quot;[pst] n={} queries={} mismatches={}&quot;, m, q3, bad3);</span></div>
+<div class="cl"><span class="ln" data-ln="163"></span><span class="code">    for (l,r,k) in sample {</span></div>
+<div class="cl"><span class="ln" data-ln="164"></span><span class="code">        let got = pst.kth(l,r,k,&amp;vals);</span></div>
+<div class="cl"><span class="ln" data-ln="165"></span><span class="code">        let mut sub: Vec&lt;i64&gt; = arr[l-1..r].to_vec(); sub.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="166"></span><span class="code">        println!(&quot;[pst] kth(a[{}..{}], k={}) = {} (brute {})&quot;, l, r, k, got, sub[k-1]);</span></div>
+<div class="cl"><span class="ln" data-ln="167"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="168"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v31_cross.rs -o v31_cross &amp;&amp; ./v31_cross</span></div>
+<div class="cl is-text"><span class="code">[segtree] n=40 queries=151 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[segtree] final sum tree=1881 brute=1881</span></div>
+<div class="cl is-text"><span class="code">[bit2d] queries=200 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[bit2d] full grid tree=-13 brute=-13</span></div>
+<div class="cl is-text"><span class="code">[pst] n=60 queries=200 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[pst] kth(a[6..23], k=11) = 33 (brute 33)</span></div>
+<div class="cl is-text"><span class="code">[pst] kth(a[56..59], k=1) = 2 (brute 2)</span></div>
+<div class="cl is-text"><span class="code">[pst] kth(a[21..41], k=5) = 17 (brute 17)</span></div>
+<div class="cl is-text"><span class="code">[pst] kth(a[4..58], k=6) = 10 (brute 10)</span></div></div></div>
+<p>三组 mismatch 全为 0，且最终全量查询与暴力总和相同。注意线段树只进行了 151 次查询（其余 149 次是更新），因为 300 次操作按随机变量类型分流——这提醒我们：对拍报告里要同时打印操作计数，否则&quot;跑了很多次&quot;可能是假象。主席树的四个抽样展示了真实下标与 k 值，便于人工复核第 k 小的定义是否理解正确。</p>
+<h2 id="rust-ch03-advanced-data-structures-31-8-自检与练习">31.8 自检与练习</h2>
+<p>三种结构看似毫不相干，实则共享同一条方法论：<strong>先写不变量，再写操作，最后用不变量解释每一行代码</strong>。线段树的不变量是&quot;sum 含 lazy 记账、push 只搬运记账&quot;，二维 BIT 的不变量是&quot;tree[i][j] 覆盖 lowbit 矩形&quot;，主席树的不变量是&quot;版本差即区间计数直方图&quot;。调试时不要一上来打日志，而应先问：哪条操作破坏了哪条不变量？整段命中是否漏了 push？1-based 是否被某处 0-based 污染？版本差是否把 l-1 写成了 l？把问题定位到具体不变量，修复往往只有一行；反之盲目改代码，常常按下葫芦浮起瓢。这也解释了为什么对拍必须打印操作计数与抽样细节——它们是把&quot;哪一步出错&quot;缩小到&quot;哪一类操作出错&quot;的线索。下一单元开始处理数论，其中的 exgcd 与快速幂同样依赖&quot;每步保持什么不变&quot;的推理方式，本单元练就的思路会直接复用。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>线段树里 <code>apply</code> 为什么要乘以区间长度，而 <code>push</code> 要给左右孩子传不同长度？</li>
+<li>二维 BIT 的下标如果从 0 开始，<code>lowbit(0)=0</code> 会让哪个循环卡死？怎么改才安全？</li>
+<li>主席树的 <code>root[r] - root[l-1]</code> 为什么恰好得到 [l,r] 的计数直方图？</li>
+<li>为什么线段树查询也必须调用 <code>push</code>，而主席树查询完全不需要修改节点？</li>
+</ul>
+
+</div>
+</section>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>练习 1：给线段树再加&quot;区间乘 + 区间和&quot;，提示：节点需要两个标记（乘标记、加标记），push 时先乘后加；把 300 次随机操作与数组暴力对拍，报告 mismatch。</li>
+<li>练习 2：把二维 BIT 改成&quot;子矩阵加 + 单点查&quot;，提示：用二维差分 + 四次前缀更新，仍然 1-based；用 8×8 网格与暴力对拍 200 次。</li>
+<li>练习 3：给主席树加上 <code>count(l,r,x)</code>——返回 [l,r] 中 ≤ x 的元素个数，提示：在值域线段树上按 rank 边界累加计数；用排序子数组 + <code>partition_point</code> 对照。</li>
+<li>练习 4：把对拍种子改成你自己的学号，重跑 <code>v31_cross.rs</code>，确认三个 mismatch 仍为 0；若出现不为 0，打印失败时的 l、r、k 并定位是不变量写错还是随机数据越界。</li>
+</ul>
+
+</div></div>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__greedy-and-constructive.md.html">← 贪心与构造</a><a href="rust__chapters__ch03__number-theory.md.html">数论：快速幂、扩展欧几里得、逆元、CRT 与素数判定 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

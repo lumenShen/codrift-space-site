@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>unsafe 与 FFI 边界</title>
+<meta name="description" content="第 13 单元 · 建议 90 分钟 · 把 unsafe 当作需要书面契约的例外，而不是绕开规则的捷径">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">unsafe 与 FFI 边界</h1><p class="doc-sub">第 13 单元 · 建议 90 分钟 · 把 unsafe 当作需要书面契约的例外，而不是绕开规则的捷径</p><p class="doc-meta">第二部分 · Rust 工程 · 源文件 13-unsafe-and-ffi.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-1-unsafe-解锁了什么-又没解锁什么">13.1 unsafe 解锁了什么，又没解锁什么</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-2-裸指针-别名规则与来源">13.2 裸指针、别名规则与来源</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-3-最小包围-把特权压到一行">13.3 最小包围：把特权压到一行</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-4-unsafe-fn-与-safety-契约">13.4 unsafe fn 与 `# Safety` 契约</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-5-maybeuninit-让-还没初始化-成为合法状态">13.5 MaybeUninit：让"还没初始化"成为合法状态</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-6-extern-c-与-repr-c-跨语言边界的形状">13.6 extern "C" 与 repr(C)：跨语言边界的形状</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-7-字符串与所有权-ffi-最容易出错的边界">13.7 字符串与所有权：FFI 最容易出错的边界</a></li><li class="toc-l2"><a href="#rust-ch02-unsafe-and-ffi-13-8-miri-sanitizer-与-soundness-清单">13.8 Miri、sanitizer 与 soundness 清单</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能说清 unsafe 额外解锁的五件事，以及它绝不关闭的那些检查</li>
+<li>能用最小 unsafe 块与 SAFETY 注释把裸指针操作压缩到可审查的一两行</li>
+<li>能定义带 <code># Safety</code> 契约的 unsafe fn，并用 MaybeUninit 表达&quot;尚未初始化&quot;</li>
+<li>能用 <code>repr(C)</code> 与 <code>extern &quot;C&quot;</code> 完成一次真实的 C 互操作，处理字符串与所有权边界</li>
+<li>能按 soundness 清单评审一段 unsafe 代码，而不是靠&quot;跑起来没崩&quot;来判断</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch02-unsafe-and-ffi-13-1-unsafe-解锁了什么-又没解锁什么">13.1 unsafe 解锁了什么，又没解锁什么</h2>
+<p>很多初学者把 <code>unsafe</code> 理解成&quot;关闭借用检查器的开关&quot;，这是最危险的误解。准确的说法是：unsafe 只额外允许五件事——解引用裸指针、调用 unsafe 函数、访问可变静态变量、实现 unsafe trait、读取 union 字段。类型系统的其余部分照常工作：类型检查、trait 解析、生命周期检查、模式匹配的穷尽性一个都不会少。写 <code>unsafe</code> 不能让一个类型错误凭空消失，它只是把一部分安全责任从编译器转移到人身上。在 2021 edition 里，整个 unsafe 函数体默认处于&quot;特权模式&quot;；从 2024 edition 起，函数内部也必须逐个写出 unsafe 块，目的就是让每一处特权操作都留痕。</p>
+<p>真正需要敬畏的是未定义行为（undefined behavior，UB）。安全 Rust 的承诺是&quot;良构程序不会触发 UB&quot;，编译器和优化器都建立在这个前提上。一旦违约，优化器就有权做任意事情：删掉它认为不可能走的分支、把两次读取合并成一次、甚至让整个函数在数学上等价于任意结果。举个具体的例子：如果你先通过裸指针写入，又用一个已经失效的 <code>&amp;mut</code> 读取，优化器可以依据&quot;可变引用独占&quot;这条前提推断两次访问不可能重叠，于是把你的写入重排到读取之后——程序在测试机上看似正常，发布版却给出错误答案。更麻烦的是 UB 常常不在现场暴露：栈回溯往往指向完全无关的位置，因为破坏发生在优化阶段而非运行阶段。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>unsafe 像医院里的特殊药品。它不会让你变成医生，只是允许你在有明确处方时使用；处方上必须写适用条件和剂量，否则出了事没人能帮你追溯。安全 Rust 是&quot;编译器替你守门&quot;，unsafe 是&quot;你亲自签名守门&quot;，签名意味着出事时第一个被追问的是你。</p>
+
+</div>
+</section>
+<p>这里还要区分两个词：<strong>unsafe 代码</strong>和 <strong>unsound 代码</strong>。unsafe 只是&quot;编译器不替你证明&quot;，unsound 才是&quot;实际上违反了前提&quot;。一段 unsafe 代码可以完全 sound，标准库里到处都是；一个没有写任何 unsafe 的 safe 函数也可能因为逻辑错误产生错误结果，但那只是 bug，不是 UB。判断标准是抽象的边界：一个模块如果对外只暴露安全 API，且无论调用方怎么调用都不会触发 UB，那它就是可靠的安全抽象。编写 unsafe 的目标，就是尽快回到这个状态——把危险关进盒子，给外面一个普通的函数签名。</p>
+<p>因此审查 unsafe 代码的标准不是&quot;测试通过了没有&quot;，而是&quot;能否在纸上证明它的前提成立&quot;。标准库里大量 unsafe 实现都配有长篇注释，那些注释记录的不是操作说明，而是证明过程：为什么这里的指针一定有效、为什么此刻不存在别名、为什么这段内存一定已初始化。写不出这种注释，通常说明抽象层次选错了，应当退回安全 API 重新设计。</p>
+<p>一个实用的心智模型是&quot;责任账本&quot;：每出现一个 unsafe 块，就相当于向账本借了一笔，借款人必须在注释里写明还款计划，也就是前提由谁保证。审计时顺着账本往前追，任何一笔找不到保证来源的借款都算坏账。这个模型也解释了为什么在 unsafe 函数里嵌套多层 unsafe 块是坏味道——借款人变成了模糊的&quot;整个函数&quot;，责任被摊薄后没人能说清哪条前提对应哪次使用。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-13-2-裸指针-别名规则与来源">13.2 裸指针、别名规则与来源</h2>
+<p>裸指针 <code>*const T</code> 和 <code>*mut T</code> 与引用有本质区别：引用是一个<strong>保证</strong>——非空、对齐、指向有效值、遵守别名规则；裸指针只是一个<strong>地址</strong>，这些保证一个都不带。你可以对裸指针做加减、比较、判空，但解引用必须进入 unsafe。裸指针也不参与生命周期检查，因此一个指向已释放内存的指针在类型层面没有任何异常，这正是它危险的地方。</p>
+<p>别名规则是理解 UB 的关键。共享引用 <code>&amp;T</code> 允许同时存在很多个，但同一时刻不能有任何可变引用指向同一位置；<code>&amp;mut T</code> 保证独占，因此不能与别的引用重叠。裸指针本身不受这套规则约束，但<strong>一旦解引用</strong>，就必须像对应的引用一样满足独占性。经典错误是同时持有两个 <code>*mut</code> 并交错写入，或者在一个 <code>&amp;mut</code> 还活着时通过裸指针写入——优化器会依据&quot;可变引用独占&quot;做重排，于是你的写入可能被认为&quot;不可能发生&quot;而被优化掉。别名模型的细节（Stacked Borrows / Tree Borrows）至今仍在演进，这也提醒我们：不要写&quot;踩在规则边缘&quot;的代码，要给优化器留出明确的余地。</p>
+<p>还有一个容易被忽视的概念叫<strong>来源</strong>（provenance）。指针不只是整数地址，它还携带着&quot;从哪个分配而来&quot;的信息。一个由已释放的 <code>Vec</code> 得到的指针，即使数值地址看起来仍然合理、甚至恰好指向一块新分配的内存，也不能再用来访问——它的来源已经失效。这也是为什么把指针转成 <code>usize</code> 再转回来在很多平台上并不可靠，跨 FFI 边界时尤其如此。实践中的防线很简单：尽量让函数参数接收 <code>&amp;[T]</code> 或 <code>&amp;mut [T]</code>，让借用检查器替你守住有效期，只有在与硬件或外部库交互时才退回到裸指针。</p>
+<p>另一个实用细节是 <code>ptr::addr_of!</code> 与 <code>addr_of_mut!</code>：它们可以在<strong>不创建引用</strong>的前提下取得字段的裸指针。这一点对未初始化内存至关重要，因为&quot;取一个引用&quot;本身就要求目标已经是有效值，即使你并不解引用它。需要用裸指针读写 <code>MaybeUninit</code> 的字段时，应当用这两个宏而不是 <code>&amp;</code>/<code>&amp;mut</code>。至于指针运算，<code>add</code> 以元素为单位且要求结果仍在同一个分配内（否则 UB），<code>offset</code> 以字节为单位；越过分配末尾即使不解引用也可能 UB，因此边界判断必须在指针运算之前完成。</p>
+<p>标准库还提供 <code>NonNull&lt;T&gt;</code>，它是&quot;非空裸指针&quot;的包装，既保留了裸指针的灵活性，又把判空这件事交给类型系统。很多安全抽象内部都用它来表示&quot;我持有指向有效对象的指针，但暂不借用&quot;。需要表达&quot;可能为空&quot;的外部指针时，用 <code>Option&lt;NonNull&lt;T&gt;&gt;</code> 让空值显式化，而不是在裸指针上到处写 <code>is_null()</code>。这种写法能把一部分契约从注释提升到类型，是减少审查负担的有效手段。指针转换方面，<code>cast</code> 用于改变指向类型，<code>as_ptr</code>/<code>as_mut_ptr</code> 用于从切片或 <code>MaybeUninit</code> 取指针；跨类型 reinterpret 要特别小心对齐，因为 <code>cast</code> 不会替你检查目标类型的对齐要求。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：&quot;长度为零就跳过空指针检查&quot;看似优化，实则埋雷。很多 C API 约定空指针加零长度是合法的，但 Rust 侧 <code>slice::from_raw_parts</code> 要求指针即使长度为零也必须非空且对齐。正确做法是对零长度单独返回空切片常量，不要把一个判空失败后仍继续走通用路径的指针传下去。另一个坑是用 <code>align_offset</code> 在运行时&quot;补救&quot;对齐：它只能检测，不能把未对齐的指针变对齐；真正的对齐保证应该来自类型系统（例如从 <code>&amp;[i32]</code> 取指针），而不是运行时补丁。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-unsafe-and-ffi-13-3-最小包围-把特权压到一行">13.3 最小包围：把特权压到一行</h2>
+<p>工程上最重要的纪律是<strong>最小包围</strong>：unsafe 块只包住真正需要特权的那一行，空指针检查、长度校验、边界判断全部留在安全代码里。这样审查者只需要盯住极短的一段，并能对照紧邻的 <code>SAFETY</code> 注释逐条验证契约。下面这段求和函数来自本单元的真实验证项目，编译与运行结果稍后给出。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">26 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 对一段连续的 i32 求和。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">/// 调用方必须保证 ptr 指向至少 len 个已初始化的 i32，且调用期间不被并发写入。</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn sum_slice(ptr: *const i32, len: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    if len == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        return 0;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    assert!(!ptr.is_null(), &quot;ptr 不能为空&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut total = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    for i in 0..len {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        // SAFETY: 调用方契约保证 ptr..ptr+len 已初始化且期间不被并发写入</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        unsafe { total += *ptr.add(i) as i64; }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    total</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">/// 安全外壳：把裸指针藏在参数边界里，调用方无需写 unsafe。</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">fn sum_slice_safe(data: &amp;[i32]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    sum_slice(data.as_ptr(), data.len())</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let data = [1i32, 2, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;sum_slice = {}&quot;, sum_slice_safe(&amp;data));</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div></div></div>
+<p>注意 <code>sum_slice_safe</code> 的价值：它把&quot;指针有效&quot;这件事变成调用方无需操心的事实。外部只看到普通的安全函数，unsafe 被收敛在一层薄薄的封装里。这正是标准库自身的组织方式——<code>Vec</code>、<code>String</code> 内部有大量 unsafe，但使用者几乎接触不到。审查这种代码时可以采用固定流程：先列出 unsafe 块依赖的全部前提，再逐条追问&quot;谁保证它成立、在哪一行可能被破坏&quot;，最后确认这些前提不会因重构而失效。</p>
+<p>重构时最容易出现的问题是&quot;顺手把 unsafe 块撑大&quot;：为了少写几行类型转换，把原本放在外面的计算也挪进 unsafe 块。这样审查面积会悄悄膨胀，注释却没跟着更新。一个有效的纪律是让 <code>SAFETY</code> 注释与 unsafe 块一一对应，且注释里提到的每个条件都能在紧邻的安全代码里找到对应的检查。工具上可以配合 <code>-W unsafe_op_in_unsafe_fn</code>、<code>cargo clippy -- -W unsafe_op_in_unsafe_fn</code> 以及 <code>clippy::undocumented_unsafe_blocks</code>，把&quot;写注释&quot;变成流水线要求而不是自觉行为。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 summary.rs -o summary &amp;&amp; ./summary</span></div>
+<div class="cl is-text"><span class="code">sum_slice = 10</span></div></div></div>
+<h2 id="rust-ch02-unsafe-and-ffi-13-4-unsafe-fn-与-safety-契约">13.4 unsafe fn 与 <code># Safety</code> 契约</h2>
+<p>把裸指针逻辑包进 <code>unsafe fn</code>，可以把契约集中到一处，让调用点只需证明一次，而函数内部可以多次使用这份证明。函数文档里的 <code># Safety</code> 段落是行业惯例：rustdoc 会把它渲染成醒目的警告区，clippy 的 <code>missing_safety_doc</code> lint 也会检查它。契约必须写成<strong>可验证的条件</strong>，&quot;使用时小心&quot;这种话不算契约，因为它无法被审查。</p>
+<p>下面的 <code>first_byte</code> 即使内部做了空指针和长度检查，仍然标记为 unsafe：因为仅凭一个裸指针，无法证明它指向的内存有效可读。调用方必须能提供可信来源，比如有效切片的 <code>as_ptr()</code>。注意这里的安全外壳只做了一件事——把&quot;来源可信&quot;从调用方的责任变成类型系统的责任。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">23 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 读取缓冲区首字节。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">///</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">/// # Safety</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">/// `ptr` 必须非空、正确对齐，且至少可读 `len` 个字节；</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">/// 调用期间该内存不得被其他线程写入。</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">unsafe fn first_byte(ptr: *const u8, len: usize) -&gt; Option&lt;u8&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    if ptr.is_null() || len == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        return None;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    // SAFETY: 调用方已保证指针有效且 len &gt; 0</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    Some(unsafe { *ptr })</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn first_byte_safe(buf: &amp;[u8]) -&gt; Option&lt;u8&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    unsafe { first_byte(buf.as_ptr(), buf.len()) }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;first = {:?}&quot;, first_byte_safe(b&quot;rust&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;empty = {:?}&quot;, first_byte_safe(b&quot;&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div></div></div>
+<p>写契约时建议采用固定句式：先写&quot;谁负责什么&quot;，再写&quot;在什么时间范围内成立&quot;，最后写&quot;违反会怎样&quot;。例如&quot;调用方保证 <code>ptr</code> 在本次调用期间不被其他线程写入&quot;比&quot;注意线程安全&quot;强得多，因为它把责任主体和时间窗口都明确了。同时要避免在契约里重复实现细节：契约描述的是调用方的义务，不是函数内部做了什么。</p>
+<p>启用 <code>unsafe_op_in_unsafe_fn</code> lint 后，unsafe 函数内部的每个特权操作都必须显式写出 unsafe 块，这正是上面代码刻意保留的写法。它让特权操作在代码里&quot;看得见&quot;，避免读者误以为什么都没发生。</p>
+<p>与 unsafe fn 相对的是 unsafe trait，例如 <code>Send</code>、<code>Sync</code> 或自定义的&quot;实现者必须满足某不变量&quot;的 trait。实现它们意味着你向整个类型系统作出承诺，编译器会据此在别处省略检查。除非你完全掌控类型的内部表示并能证明承诺，否则不要手写实现。遇到&quot;类型不满足 Send&quot;时，优先修正设计——换用 <code>Mutex</code> 或原子类型——而不是加一行 <code>unsafe impl Send</code> 让错误消失。这类&quot;让错误消失&quot;的改动会把一个编译期问题转化为运行期 UB，代价通常要在几周后才显现。</p>
+<h2 id="rust-ch02-unsafe-and-ffi-13-5-maybeuninit-让-还没初始化-成为合法状态">13.5 MaybeUninit：让&quot;还没初始化&quot;成为合法状态</h2>
+<p>Rust 要求所有变量在使用前必须初始化，但很多 C API 采用&quot;调用方分配空间、被调方填充&quot;的模式。直接写 <code>let mut p: T;</code> 然后传给 C 是不合法的；<code>MaybeUninit&lt;T&gt;</code> 才是表达这种状态的正确工具：它占用的空间与 <code>T</code> 相同、对齐与 <code>T</code> 相同，但不要求里面存在有效的 <code>T</code>。读写它需要通过 <code>as_ptr</code>/<code>as_mut_ptr</code> 取得裸指针，确认初始化完成后再用 <code>assume_init</code> 取出值。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">19 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::mem::MaybeUninit;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">/// 演示 C 风格 out 指针：写入完成后才 assume_init。</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn uninit_pair() -&gt; (i32, i32) {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut raw = MaybeUninit::&lt;(i32, i32)&gt;::uninit();</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    // SAFETY: 下面两次写入覆盖了全部字段，之后才读取</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    unsafe {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let p = raw.as_mut_ptr();</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        (*p).0 = 7;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        (*p).1 = 9;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        raw.assume_init()</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;pair = {:?}&quot;, uninit_pair());</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div></div></div>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p><code>MaybeUninit</code> 就是&quot;先占好座位，人还没到&quot;。座位必须留够，但在人坐稳之前不能告诉别人&quot;这里有人&quot;。<code>assume_init()</code> 相当于正式宣布&quot;人到了&quot;，宣布早了就是 UB。</p>
+
+</div>
+</section>
+<p><code>assume_init</code> 是另一个 unsafe 操作，因为编译器无从得知你是否真的写完了。特别注意部分初始化的陷阱：如果 <code>T</code> 有析构函数，而你只初始化了其中一部分字段就调用 <code>assume_init</code>，析构时会读取未初始化内存。稳妥的写法是先写满所有字段，或者用 <code>MaybeUninit</code> 数组逐个元素初始化后再整体转换。另一个反直觉的细节是：对 <code>MaybeUninit&lt;T&gt;</code> 用普通赋值 <code>x = value</code> 会先丢弃旧值，而旧值可能是未初始化的——正确做法是用 <code>MaybeUninit::write</code>，它直接写入而不读取旧内容。</p>
+<p>还要警惕 <code>MaybeUninit::zeroed</code>：全零字节并不等于所有类型的有效值。引用、<code>Box</code>、<code>NonNull</code>、<code>NonZeroU*</code>、<code>fn</code> 指针都禁止全零，<code>bool</code> 的零值虽然是 <code>false</code> 但依赖具体实现约定，枚举更是如此。只有当你明确知道 C API 会写入有效位模式，或者类型是 <code>u8</code>/<code>[u8; N]</code> 这类全零合法的类型时，zeroed 才安全。标准库的 <code>Vec</code> 内部正是用 <code>MaybeUninit</code> 管理容量与长度之间的&quot;已分配但未初始化&quot;区间，这是理解它设计动机的最好例子。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -W unsafe_op_in_unsafe_fn blocks_check.rs -o blocks_check \</span></div>
+<div class="cl is-text"><span class="code">    &amp;&amp; ./blocks_check</span></div>
+<div class="cl is-text"><span class="code">first = Some(114)</span></div>
+<div class="cl is-text"><span class="code">empty = None</span></div>
+<div class="cl is-text"><span class="code">pair  = (7, 9)</span></div></div></div>
+<h2 id="rust-ch02-unsafe-and-ffi-13-6-extern-c-与-repr-c-跨语言边界的形状">13.6 extern &quot;C&quot; 与 repr(C)：跨语言边界的形状</h2>
+<p>跨语言调用必须统一 ABI：调用约定、参数传递方式、名称修饰、返回值处理都要一致。<code>extern &quot;C&quot;</code> 表示使用 C 的 ABI，是 FFI 的默认选择；Rust 自身的 ABI 不稳定，绝不能跨语言边界使用。结构体跨越边界时必须用 <code>#[repr(C)]</code> 固定字段布局，否则编译器可以自由重排字段，另一端的 C 代码会读到错误偏移。类似地 <code>#[repr(transparent)]</code> 适合&quot;只包一个字段的新类型&quot;，它能保证包装层不改变布局。</p>
+<p>下面是本单元真实验证过的完整程序：C 侧提供一个求和函数、一个交换字段的函数和一个填充函数，Rust 侧用 <code>unsafe extern &quot;C&quot;</code> 声明并调用。声明之所以 unsafe，是因为编译器无法验证外部函数的契约；调用点必须自己保证参数有效。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">54 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::ffi::{c_char, CStr, CString};</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">use std::mem::MaybeUninit;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">#[repr(C)]</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">#[derive(Debug, Clone, Copy)]</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">pub struct CPair {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    pub x: i32,</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    pub y: i32,</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">unsafe extern &quot;C&quot; {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn c_add(a: i32, b: i32) -&gt; i32;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    fn c_sum(ptr: *const i32, len: usize) -&gt; i64;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    fn c_pair_flip(p: *mut CPair);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    fn c_fill_pair(out: *mut CPair);</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    fn c_greeting() -&gt; *const c_char;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="20"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">fn pair_from_c() -&gt; CPair {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let mut raw = MaybeUninit::&lt;CPair&gt;::uninit();</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    // SAFETY: c_fill_pair 会完整写入 CPair 的全部字段</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    unsafe {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        c_fill_pair(raw.as_mut_ptr());</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        raw.assume_init()</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn sum_slice(ptr: *const i32, len: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    if len == 0 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let mut total = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    for i in 0..len {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        // SAFETY: 调用方契约保证 ptr..ptr+len 已初始化</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        unsafe { total += *ptr.add(i) as i64; }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    total</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="39"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let data = [1i32, 2, 3, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    println!(&quot;sum_slice = {}&quot;, sum_slice(data.as_ptr(), data.len()));</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    println!(&quot;c_sum    = {}&quot;, unsafe { c_sum(data.as_ptr(), data.len()) });</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    println!(&quot;c_add    = {}&quot;, unsafe { c_add(2, 3) });</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    let mut pair = CPair { x: 2, y: 3 };</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    unsafe { c_pair_flip(&amp;mut pair) };</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    println!(&quot;flipped  = {:?}&quot;, pair);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    println!(&quot;filled   = {:?}&quot;, pair_from_c());</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    println!(&quot;size_of CPair = {}&quot;, std::mem::size_of::&lt;CPair&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    let greeting = unsafe { CStr::from_ptr(c_greeting()) };</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    println!(&quot;greeting = {}&quot;, greeting.to_str().unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let owned = CString::new(&quot;rust -&gt; c&quot;).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    println!(&quot;owned    = {}&quot;, owned.to_str().unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">}</span></div></div></div>
+<p>对应的 C 侧实现只有十来行，核心是固定布局的结构体和按约定写入的 out 指针。两侧共享同一个 <code>CPair</code> 定义：C 用 <code>typedef struct { int32_t x; int32_t y; } CPair;</code>，Rust 用 <code>#[repr(C)]</code> 保证同样的偏移。真实编译与运行输出如下（宿主 rustc 1.96.0，MinGW gcc 编译 C 目标文件后由 MSVC 链接器链接）。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ gcc -c clib.c -o clib.o</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -W unsafe_op_in_unsafe_fn main.rs -C link-arg=clib.o -o ffi-demo.exe</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./ffi-demo.exe</span></div>
+<div class="cl is-text"><span class="code">sum_slice = 10</span></div>
+<div class="cl is-text"><span class="code">c_sum    = 10</span></div>
+<div class="cl is-text"><span class="code">c_add    = 5</span></div>
+<div class="cl is-text"><span class="code">flipped  = CPair { x: 3, y: 2 }</span></div>
+<div class="cl is-text"><span class="code">filled   = CPair { x: 7, y: 9 }</span></div>
+<div class="cl is-text"><span class="code">size_of CPair = 8</span></div>
+<div class="cl is-text"><span class="code">greeting = hello from C</span></div>
+<div class="cl is-text"><span class="code">owned    = rust -&gt; c</span></div></div></div>
+<p>还有几个平台层面的边界要记住：<code>usize</code> 对应 C 的 <code>size_t</code>，在 32 位与 64 位目标上宽度不同，因此用固定宽度的 <code>u32</code>/<code>u64</code> 交换数据更稳妥；带数据的 Rust 枚举即便加了 <code>repr(C)</code> 也不是 C 的 union/tagged struct，需要手工定义标签加联合；函数指针在 Rust 里默认非空，可以用 <code>Option&lt;extern &quot;C&quot; fn()&gt;</code> 表达可空的函数指针，这与 C 的 NULL 自然对应。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：在 edition 2024 中 <code>#[no_mangle]</code> 要写成 <code>#[unsafe(no_mangle)]</code>，本单元统一用 2021。更隐蔽的问题是传递 Rust 集合：<code>String</code>、<code>Vec</code>、<code>HashMap</code> 的布局不受跨语言承诺，<code>Box</code> 也依赖 Rust 分配器。把它们直接交给 C 等于让两端对同一块内存各执一套解释。正确做法是转换成裸指针加长度，或由 C 侧分配、按明确的协议交还，并在文档里写清&quot;谁分配、谁释放、用什么函数释放&quot;。</p>
+
+</div>
+</section>
+<h2 id="rust-ch02-unsafe-and-ffi-13-7-字符串与所有权-ffi-最容易出错的边界">13.7 字符串与所有权：FFI 最容易出错的边界</h2>
+<p>C 侧期待的是以零结尾的字节序列，Rust 的 <code>String</code> 并不保证结尾有 NUL。标准库提供 <code>CString</code> 用于构造、<code>CStr</code> 用于借用查看，对应类型是 <code>c_char</code>。<code>CString::new</code> 会拒绝内部含 NUL 的字符串并返回 <code>NulError</code>——这不是麻烦，而是防止 C 侧提前截断的护栏。反过来，从 C 拿回字符串时不能凭空造出 <code>&amp;str</code>：必须知道长度、验证 UTF-8 有效性，并明确缓冲区由谁释放。上面例子里的 <code>c_greeting</code> 返回静态字符串常量，因此可以用 <code>CStr::from_ptr</code> 借用；如果 C 侧返回的是 <code>malloc</code> 出来的缓冲区，Rust 侧必须在合适的时机调用同一个分配器的释放函数，否则就是内存泄漏或者跨分配器释放。</p>
+<p>所有权边界还包括不透明句柄模式。C 库常把内部状态藏在 <code>void*</code> 后面，Rust 侧可以定义零大小标记类型，用 <code>*mut Opaque</code> 持有句柄，并在 <code>Drop</code> 里调用 C 的析构函数。这样借用检查器无法追踪的生命周期，被转换成了一个正常的 RAII 对象。关键是保证 <code>Drop</code> 只执行一次、句柄不会被复制后双重释放——这也是为什么这类封装通常要显式禁止 <code>Clone</code>，或者用 <code>Arc</code> 加引用计数来共享。</p>
+<p>异常边界同样重要：panic 不允许跨越 <code>extern &quot;C&quot;</code> 函数传播到 C 侧，现代 Rust 会直接 abort。如果 C 回调可能触发 Rust 的 panic，必须用 <code>std::panic::catch_unwind</code> 在边界内接住，转换成错误码返回。回调设计也有固定套路：<code>extern &quot;C&quot; fn</code> 签名里带一个 <code>void* userdata</code>，Rust 侧把上下文盒子转成裸指针传进去，回调内部再转回引用。这里又回到来源与别名问题——回调执行期间不能有其他可变别名指向同一上下文。</p>
+<p>字符串转换的错误处理也要明确：<code>CString::new</code> 失败时返回 <code>NulError</code>，它带有内部字节与 NUL 的位置，适合直接转成领域错误；<code>CStr::to_str</code> 失败说明 C 侧给了非 UTF-8 字节，此时可以用 <code>to_string_lossy</code> 做日志展示，但不要把它当作合法数据继续处理。反过来，把 Rust 字符串交给 C 之前要确认生命周期：<code>as_ptr</code> 得到的指针只在原字符串存活且未被修改期间有效，把它存进 C 侧长期持有的结构体是典型的悬垂来源。工程上更稳妥的做法是在边界处复制一份到 C 侧分配的内存，并配套提供释放函数。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">_verify/ffi/
+├── clib.c            # C 侧实现：c_add / c_sum / c_pair_flip / c_fill_pair
+├── main.rs           # Rust 侧：repr(C) 结构体 + extern &quot;C&quot; 声明
+├── clib.o            # gcc 编译出的目标文件
+└── ffi-demo.exe      # rustc 链接后的真实产物</pre></figure>
+<h2 id="rust-ch02-unsafe-and-ffi-13-8-miri-sanitizer-与-soundness-清单">13.8 Miri、sanitizer 与 soundness 清单</h2>
+<p>即使做了上述所有事情，unsafe 代码仍然需要工具辅助验证。Miri 是 Rust 的解释器，能在执行时检查别名违规、越界、未初始化读取、指针来源错误等问题；它比测试慢得多，但能抓到普通测试发现不了的问题。宿主没有安装 Miri（本单元实测 <code>cargo miri --version</code> 无输出），所以下面的命令作为工作流说明，输出标记为示意。sanitizer 是另一种选择，需要 nightly 工具链，能在真实硬件上以较低开销检查内存错误；它覆盖的面不如 Miri 全，但速度快得多，适合放进日常 CI。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo +nightly miri test          # 示意：宿主未安装 Miri，未真实执行</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ RUSTFLAGS=&quot;-Z sanitizer=address&quot; cargo +nightly test</span></div>
+<div class="cl is-text"><span class="code">（示意输出；实际可用性取决于工具链与平台）</span></div></div></div>
+<p>工具之外还有流程。<code>cargo geiger</code> 可以统计项目与依赖里 unsafe 的分布，帮你判断审查重点；<code>proptest</code> 或 <code>fuzz</code> 能对安全外壳做随机输入压力测试，虽然不能证明 soundness，却能把&quot;明显违反契约&quot;的调用暴露出来。最重要的一条是：新增 unsafe 代码必须随附契约说明和针对性测试，评审时不接受&quot;先合进去以后再补注释&quot;。测试设计上也要刻意覆盖边界：空指针、零长度、最大长度、对齐边界、重复调用与并发调用。这些输入在安全 Rust 里往往由类型系统直接排除，但在 unsafe 边界上它们都是合法可构造的状态，必须逐个验证封装真的把它们挡住了。</p>
+<p>最后给出一份可以贴在代码评审里的 soundness 清单。它不承诺证明正确性，但能迫使作者把隐含前提写出来。每次修改 unsafe 代码后逐条核对，比事后追查 UB 便宜得多。</p>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>典型后果</th>
+<th>正确做法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>解引用空指针或悬垂指针</td>
+<td>立即 UB</td>
+<td>用引用或有效切片作为参数</td>
+</tr>
+<tr>
+<td>越过已分配范围读写</td>
+<td>内存破坏</td>
+<td>长度来自可信来源并校验</td>
+</tr>
+<tr>
+<td>同时存在多个可变别名</td>
+<td>数据竞争</td>
+<td>串行化写入或改用 Mutex</td>
+</tr>
+<tr>
+<td>未初始化内存当作有效值</td>
+<td>UB，引用与布尔尤其危险</td>
+<td>用 MaybeUninit 并显式完成初始化</td>
+</tr>
+<tr>
+<td>FFI 结构体缺 <code>repr(C)</code></td>
+<td>字段偏移错位</td>
+<td>跨边界类型固定布局</td>
+</tr>
+<tr>
+<td>跨边界传递 Rust 集合</td>
+<td>布局与分配器不匹配</td>
+<td>转成裸指针加长度或 C 兼容表示</td>
+</tr>
+<tr>
+<td>自定义 cfg/unsafe impl 未写理由</td>
+<td>后续重构悄悄违约</td>
+<td>注释写明不变量与验证方式</td>
+</tr>
+<tr>
+<td>panic 跨越 <code>extern &quot;C&quot;</code></td>
+<td>进程直接 abort</td>
+<td>在边界用 catch_unwind 转错误码</td>
+</tr>
+</tbody></table>
+
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>在本单元验证项目里新增一个 C 函数 <code>int64_t c_dot(const int32_t *a, const int32_t *b, size_t n)</code>，Rust 侧用安全外壳 <code>fn dot(a: &amp;[i32], b: &amp;[i32]) -&gt; Result&lt;i64, &amp;&#39;static str&gt;</code> 包装：长度不等时返回错误，相等时调用 C。编译运行并贴出真实输出。</li>
+<li>把 <code>first_byte</code> 改成接收 <code>*mut u8</code>，让调用方在读取后写入首字节。先在 <code># Safety</code> 契约里补上&quot;调用期间不得有别名&quot;的条件，再用 <code>first_byte_safe(&amp;mut [u8])</code> 包装，确认外部无需写 unsafe。</li>
+<li>给 FFI 项目加一个 <code>Drop</code> 实现：把 C 侧 <code>malloc</code> 的缓冲区交给 Rust 持有，在 <code>Drop</code> 中调用 C 的 <code>free</code>。用一次真实运行验证释放只发生一次。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>unsafe 额外解除了哪五件事？它是否关闭了类型检查或借用检查？</li>
+<li>SAFETY 注释应该写在哪一层？为什么&quot;使用时小心&quot;不算合格契约？</li>
+<li>什么是来源（provenance）？为什么指针转成整数再转回来可能失效？</li>
+<li>为什么跨语言边界必须同时用 <code>extern &quot;C&quot;</code> 与 <code>repr(C)</code>？Rust 集合为什么不能直接传过去？</li>
+<li>MaybeUninit 的 <code>assume_init</code> 为什么是 unsafe？部分初始化会带来什么后果？</li>
+<li>为什么 panic 不能跨越 <code>extern &quot;C&quot;</code> 边界？应该在哪里接住它？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch02__concurrency-and-async.md.html">← 并发与异步：从所有权到状态机</a><a href="rust__chapters__ch02__shipping-and-ci.md.html">发布与 CI 工程 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

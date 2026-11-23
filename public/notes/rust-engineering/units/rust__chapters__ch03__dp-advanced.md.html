@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动态规划进阶</title>
+<meta name="description" content="第 27 单元 · 建议 90 分钟 · 状压、数位、换根、单调队列与斜率优化，把&quot;状态&quot;与&quot;转移&quot;分别推向极致">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">动态规划进阶</h1><p class="doc-sub">第 27 单元 · 建议 90 分钟 · 状压、数位、换根、单调队列与斜率优化，把&quot;状态&quot;与&quot;转移&quot;分别推向极致</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 27-dp-advanced.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-1-进阶的起点-状态维度与转移结构">27.1 进阶的起点：状态维度与转移结构</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-2-状压-dp-tsp-的状态编码与子集枚举">27.2 状压 DP：TSP 的状态编码与子集枚举</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-3-数位-dp-按位枚举与上界记忆化">27.3 数位 DP：按位枚举与上界记忆化</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-4-树形-dp-进阶-换根求全源距离和">27.4 树形 DP 进阶：换根求全源距离和</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-5-单调队列优化-跳跃游戏的分段最值">27.5 单调队列优化：跳跃游戏的分段最值</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-6-斜率优化-平方代价与单调凸包">27.6 斜率优化：平方代价与单调凸包</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-7-五种手段的横向对照与选择地图">27.7 五种手段的横向对照与选择地图</a></li><li class="toc-l2"><a href="#rust-ch03-dp-advanced-27-8-工程取舍-边界陷阱与调试清单">27.8 工程取舍、边界陷阱与调试清单</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能用二进制掩码编码集合状态，写出 TSP 的状压 DP 并解释子集枚举顺序</li>
+<li>掌握数位 DP 的 tight 约束与记忆化时机，能统计区间内满足数位条件的整数个数</li>
+<li>理解换根 DP 的两遍遍历，能推导根转移公式 ans[v] = ans[u] + n - 2·sz[v]</li>
+<li>会用单调队列把滑动窗口最值型转移降到摊还 O(1)，会写平方代价的斜率优化凸包</li>
+<li>对每种技术都能独立完成&quot;暴力版 → 优化版 → 随机对拍&quot;的验证闭环</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-dp-advanced-27-1-进阶的起点-状态维度与转移结构">27.1 进阶的起点：状态维度与转移结构</h2>
+<p>基础 DP 的核心是把子问题答案存进表里。进阶 DP 并没有脱离这件事，而是沿两个方向把它推到极端：<strong>改变状态的编码方式</strong>，或者<strong>改变转移的候选枚举方式</strong>。状压 DP 和数位 DP 属于前者——状态不再是简单的一维下标，而是一个二进制集合或一串尚未确定的十进制位；换根 DP 属于遍历结构的改造；单调队列优化和斜率优化属于后者——转移方程里那个&quot;对所有 j 取 min&quot;的循环，被数据结构压缩到摊还常数时间。</p>
+<p>判断该用哪件工具，先看题目卡在哪里。如果瓶颈是&quot;选出哪些元素&quot;无法用顺序下标表达，而且规模 n 不超过二十几，就该想到状压；如果题目要求统计满足某种十进制性质的整数个数、且上界很大（比如 10^18），就该想到按位处理；如果问题定义在树上且要求每个点的答案，普通树形 DP 只能求以固定根为基准的值，换根才能铺开到所有点；如果转移是对一个滑动窗口取最值，单调队列几乎总是答案；如果转移是对所有前驱 j 取 min，且代价能拆成只与 j 有关、只与 i 有关、以及 i·j 乘积三部分，那就是斜率优化的信号。</p>
+<p>无论哪种优化，正确的论证方式都一样：先写出暴力版本作为定义，再证明优化版本<strong>丢弃的状态或候选永远不会影响最优值</strong>。状压丢弃的是&quot;同一集合的不同访问顺序&quot;（因为边权只依赖于集合与终点）；数位 DP 丢弃的是&quot;贴界前缀的具体数值&quot;（因为一旦不贴界，剩余位的选择自由度就与前缀无关）；单调队列丢弃的是&quot;窗口内被更新且更优的旧候选&quot;；斜率优化丢弃的是&quot;被前后两条直线夹住的中间直线&quot;。把丢弃理由写成不变量，就是这类题目最可靠的调试锚点。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>DP 进阶不是学新魔法，而是两件事。第一件是&quot;把小本本上那条记录写得更聪明&quot;——比如用一串 0/1 表示哪些城市已经去过，或者只记住&quot;当前填到第几位、还剩多少数位和&quot;。第二件是&quot;查小本本时少翻几页&quot;——本来每次要翻遍所有前面的记录，现在用一个队列或一把尺子直接告诉你要翻哪一页。记住这个二分：改状态，还是改转移。</p>
+
+</div>
+</section>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：不要在没写出暴力版本之前就上优化。状压 DP 里一个非常真实的错误是&quot;把值为 INF 的状态当成不可达而提前 continue&quot;——可所有状态初始化都是 INF，提前跳过会让它们永远得不到计算。优化版必须和一个小规模暴力版对拍通过之后，才可信。本单元每个例子都附了 std-only 随机数据 + 暴力对照的真实运行结果。</p>
+
+</div>
+</section>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">题目特征 → 选工具
+状态是集合且 n ≤ 20 → 状压 DP
+按十进制位处理上界 → 数位 DP
+树上求每个点的答案 → 换根 DP
+转移 = 滑动窗口最值 → 单调队列优化
+转移 = min(只依赖 j + i·j + 只依赖 i) → 斜率优化</pre></figure>
+<h2 id="rust-ch03-dp-advanced-27-2-状压-dp-tsp-的状态编码与子集枚举">27.2 状压 DP：TSP 的状态编码与子集枚举</h2>
+<p><strong>问题定义。</strong> 给定 n 个城市与距离矩阵 <code>dist</code>，从城市 0 出发，把 1 到 n-1 每个城市恰好访问一次后回到 0，求最短回路长度。n 不超过 15。朴素做法枚举访问顺序，共有 (n-1)! 种，n=12 时已近四千万，不可接受。</p>
+<p><strong>状态与不变量。</strong> 定义 <code>dp[mask][i]</code>：已经访问的集合是 <code>mask</code>（二进制第 k 位为 1 表示城市 k 已访问，且第 0 位必为 1），当前停在城市 i 时的最小花费。这里 i 必须在 mask 中——因为下一条边的起点就是 i，不记录终点就无法转移。核心不变量是：对任意 mask 与其中任意 i（i≠0），<code>dp[mask][i]</code> 等于所有从 0 出发、恰好覆盖 mask 且终于 i 的路径的最小长度。归纳基础是 <code>dp[1][0] = 0</code>：只访问 0、停在 0，花费为零。归纳步骤是把 i 从路径末尾摘掉：<code>prev = mask ^ (1&lt;&lt;i)</code> 是去掉 i 后的集合，最后一个访问的城市 j 必在 prev 中，于是 <code>dp[mask][i] = min_{j∈prev} dp[prev][j] + dist[j][i]</code>。因为 <code>prev &lt; mask</code>（去掉一个置位使整数变小），按 mask 数值递增枚举就能保证依赖已算好。</p>
+<p><strong>Rust 实现要点。</strong> 用 <code>Vec&lt;Vec&lt;i32&gt;&gt;</code> 存表，外层下标是 mask，内层是 i。位运算用 <code>1usize &lt;&lt; i</code>。INF 取 <code>i32::MAX / 4</code>，留出加法余量。注意上一节 warn 提到的坑：不能因为 <code>dp[mask][i] == INF</code> 就跳过，那个判断会误伤所有尚未计算的可达状态——正确做法是只跳过&quot;i 不在 mask 中&quot;的无效格。最后答案是 <code>min_{i≠0} dp[full][i] + dist[i][0]</code>，把回程边补上。</p>
+<p><strong>复杂度。</strong> 状态数 2^n · n，每个状态枚举至多 n 个 j，所以时间 O(2^n · n²)，空间 O(2^n · n)。n=15 时约 1600 万状态、64MB，尚可；n=20 时状态数暴涨到两千万以上、内存超过 80MB，就要换思路了。</p>
+<p>下面的程序同时包含状压实现、暴力排列枚举（递归回溯），以及 xorshift 随机生成器驱动的 200 组对拍。随机数据是对称距离矩阵，边权 1 到 40，城市数 3 到 7，暴力枚举 (n-1)! 种顺序仍很快。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">87 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">// 状压 DP：旅行商（返回起点 0 的最短哈密顿回路）</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn tsp(dist: &amp;[Vec&lt;i32&gt;]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let n = dist.len();</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let size = 1usize &lt;&lt; n;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let inf = i32::MAX / 4;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut dp = vec![vec![inf; n]; size];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    dp[1][0] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    for mask in 0..size {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if mask &amp; 1 == 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            if mask &amp; (1 &lt;&lt; i) == 0 { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            let prev = mask ^ (1 &lt;&lt; i);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            for j in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">                if prev &amp; (1 &lt;&lt; j) != 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">                    let cand = dp[prev][j] + dist[j][i];</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">                    if cand &lt; dp[mask][i] { dp[mask][i] = cand; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let full = size - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let mut ans = inf;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let cand = dp[full][i] + dist[i][0];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        if cand &lt; ans { ans = cand; }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    ans</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="30"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">fn brute(n: usize, dist: &amp;[Vec&lt;i32&gt;]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    fn rec(perm: &amp;mut [usize], k: usize, dist: &amp;[Vec&lt;i32&gt;], best: &amp;mut i32) {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        if k == perm.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            let mut cost = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">            let mut prev = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            for &amp;p in perm.iter() { cost += dist[prev][p]; prev = p; }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">            cost += dist[prev][0];</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            if cost &lt; *best { *best = cost; }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            return;</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        for i in k..perm.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">            perm.swap(k, i);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">            rec(perm, k + 1, dist, best);</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            perm.swap(k, i);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut perm: Vec&lt;usize&gt; = (1..n).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    let mut best = i32::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    rec(&amp;mut perm, 0, dist, &amp;mut best);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    best</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="52"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        let mut x = self.0;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        self.0 = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="62"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    let d = vec![</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        vec![0, 10, 15, 20],</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        vec![10, 0, 35, 25],</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        vec![15, 35, 0, 30],</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        vec![20, 25, 30, 0],</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    println!(&quot;demo tsp = {}&quot;, tsp(&amp;d));</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    let mut rng = Rng(0x1234_5678_9abc_def0);</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    for t in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">        let n = 3 + rng.range(0, 5) as usize; // 3..=7</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">        let mut dist = vec![vec![0i32; n]; n];</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">            for j in i + 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">                let w = rng.range(1, 40) as i32;</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">                dist[i][j] = w; dist[j][i] = w;</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">        let a = tsp(&amp;dist);</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        let b = brute(n, &amp;dist);</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">        if a != b { println!(&quot;MISMATCH t={} n={} dp={} brute={}&quot;, t, n, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">    println!(&quot;stress tsp: {} (200 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo tsp = 80</span></div>
+<div class="cl is-text"><span class="code">stress tsp: OK (200 random cases)</span></div></div></div>
+<p>子集枚举还有一个等价写法：先枚举 mask，再枚举 mask 的非空子集 <code>sub = (sub-1) &amp; mask</code>，适合&quot;集合划分&quot;类问题（如把 n 个元素分成若干组）。两种枚举的复杂度都是 O(3^n) 或 O(2^n·n)，选择依据是转移需要&quot;子集&quot;还是&quot;去掉一个元素&quot;。要格外留意 mask 中是否必须包含起点 0：TSP 要求闭合回路所以必须包含，而&quot;选若干城市使价值最大&quot;类问题则不必，起始条件会完全不同。</p>
+<h2 id="rust-ch03-dp-advanced-27-3-数位-dp-按位枚举与上界记忆化">27.3 数位 DP：按位枚举与上界记忆化</h2>
+<p><strong>问题定义。</strong> 给定区间 [L, R]，统计其中十进制表示下各位数字之和恰好等于 S 的整数个数。R 可能高达 10^18，逐个枚举显然不可行。</p>
+<p><strong>为什么普通记忆化失效。</strong> 如果按&quot;前 i 位的取值&quot;设计状态，上界 R 会让不同前缀产生不同约束：前缀越接近 R，后面能填的数越少。若把前缀值也塞进状态，状态数又爆炸。数位 DP 的关键观察是引入 <code>tight</code> 标志：它表示当前已选前缀是否<strong>完全贴着上界</strong>。一旦某一位选了比上界对应位更小的数字，tight 就变为 false，此后剩余位的取值不再受任何上界约束，子问题只由&quot;还剩几位&quot;和&quot;还剩多少数位和&quot;决定——这正是可以记忆化的时刻。</p>
+<p><strong>状态与不变量。</strong> 定义 <code>dfs(pos, sum_left, tight)</code>：从最高位向最低位填数，已经填好 pos 位，还需要让剩下的数位和恰好等于 sum_left 的方案数；tight 表示前缀是否贴界。不变量是：函数返回值只依赖这三个参数的语义，且当 tight=false 时与前缀的具体数值无关。终止条件是 <code>pos == digits.len()</code>：若 sum_left 归零则找到了一个合法数，返回 1，否则返回 0。转移是枚举当前位可填的数字 d（贴界时上限是 digits[pos]，否则是 9），仅在 d ≤ sum_left 时递归到 <code>(pos+1, sum_left-d, tight &amp;&amp; d==limit)</code>。前导零自然贡献 0，因此数字 0 的数位和为 0，被正确统计。区间答案 = F(R, S) − F(L−1, S)，其中 F(x, S) 统计 [0, x] 内满足条件的个数。</p>
+<p><strong>实现细节。</strong> 把 x 转成字符串再逐字节取位，避免反复取模的边界判断；memo 用 <code>-1</code> 表示未计算，维度为 <code>(len+1) × (9·len+1)</code>，只在 <code>!tight</code> 时读写——贴界状态绝不写缓存，因为它依赖具体前缀，复用会出错。若目标 S 超过最大可能数位和 9·len，直接返回 0。</p>
+<p><strong>复杂度。</strong> 设位数为 len，状态数约 len · 9·len，每个状态枚举 10 个数字，时间 O(len² · 90)，对 10^18（len=19）也不过几万次操作，空间 O(len²)。</p>
+<p>下面的程序对 [L, R] ⊆ [0, 2000]、S ∈ [0, 27] 随机生成 300 组，用逐个数 digit sum 的暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">54 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn digit_count(m: i64, target: i32) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    if m &lt; 0 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let digits: Vec&lt;i32&gt; = m.to_string().bytes().map(|b| (b - b'0') as i32).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let n = digits.len();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let maxsum = 9 * n as i32;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    if target &gt; maxsum { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut memo = vec![vec![-1i64; maxsum as usize + 1]; n + 1];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn dfs(digits: &amp;[i32], pos: usize, sum: i32, tight: bool, memo: &amp;mut Vec&lt;Vec&lt;i64&gt;&gt;) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if pos == digits.len() { return if sum == 0 { 1 } else { 0 }; }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        if !tight &amp;&amp; memo[pos][sum as usize] != -1 { return memo[pos][sum as usize]; }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let limit = if tight { digits[pos] } else { 9 };</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        let mut res = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        for d in 0..=limit {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            if sum &gt;= d {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">                res += dfs(digits, pos + 1, sum - d, tight &amp;&amp; d == limit, memo);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        if !tight { memo[pos][sum as usize] = res; }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        res</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    dfs(&amp;digits, 0, target, true, &amp;mut memo)</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">fn digit_sum(m: i64) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let mut x = m; let mut s = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    while x &gt; 0 { s += (x % 10) as i32; x /= 10; }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    s</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="30"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">fn range_count(l: i64, r: i64, t: i32) -&gt; i64 { digit_count(r, t) - digit_count(l - 1, t) }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="32"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="38"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    println!(&quot;count[0,100] digitSum=9 = {}&quot;, range_count(0, 100, 9));</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let mut rng = Rng(0xfeed_beef_1234_5678);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        let a = rng.range(0, 2000) as i64;</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let b = rng.range(0, 2000) as i64;</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        let (l, r) = if a &lt; b { (a, b) } else { (b, a) };</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        let target = rng.range(0, 28) as i32;</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        let dp = range_count(l, r, target);</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let mut brute = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        for x in l..=r { if digit_sum(x) == target { brute += 1; } }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        if dp != brute { println!(&quot;MISMATCH l={} r={} target={} dp={} brute={}&quot;, l, r, target, dp, brute); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    println!(&quot;stress digit: {} (300 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">count[0,100] digitSum=9 = 10</span></div>
+<div class="cl is-text"><span class="code">stress digit: OK (300 random cases)</span></div></div></div>
+<p>数位 DP 的变体极多：统计不含某数字的个数、统计能被 m 整除的个数（把余数加入状态）、统计恰好有 k 个某数字等。共同套路是把&quot;附加条件&quot;塞进 pos 之外的维度，并坚持只在 <code>!tight</code> 时记忆化。一个常见错误是在 <code>tight=true</code> 的分支里也写 memo，导致同一个缓存项被不同前缀污染——记住：贴界状态的值依赖前缀，绝不能共享。</p>
+<h2 id="rust-ch03-dp-advanced-27-4-树形-dp-进阶-换根求全源距离和">27.4 树形 DP 进阶：换根求全源距离和</h2>
+<p><strong>问题定义。</strong> 给定一棵 n 个点的无根树，对每个点 u 求它到所有其他点的距离之和。朴素做法对每个点跑一次 BFS/DFS，复杂度 O(n²)，n 到 10^5 就吃不消。换根 DP 把它降到 O(n)。</p>
+<p><strong>第一遍：自底向上。</strong> 任取 0 为根，先做一次 DFS 得到访问序 <code>order</code>，再用 <code>order</code> 的逆序（后序）计算两个量：<code>sz[u]</code> 是 u 的子树大小，<code>sub[u]</code> 是 u 到其子树内所有点的距离和。合并孩子 v 时：<code>sz[u] += sz[v]</code>，<code>sub[u] += sub[v] + sz[v]</code>——后者是因为 v 子树内每个点到 u 的距离都比到 v 多 1，共 sz[v] 个点，故加 sz[v]。此时 <code>ans[0] = sub[0]</code> 就是根的答案。</p>
+<p><strong>第二遍：自顶向下换根，核心公式。</strong> 考虑把根从 u 移到它的孩子 v。原本在 v 子树内的 sz[v] 个点，到 v 的距离比到 u 少 1，总共减少 sz[v]；其余 n − sz[v] 个点，到 v 的距离比到 u 多 1，总共增加 n − sz[v]。于是 <code>ans[v] = ans[u] − sz[v] + (n − sz[v]) = ans[u] + n − 2·sz[v]</code>。这个与具体形状无关、只依赖子树大小的增量公式，正是换根 DP 的交换论证核心。按 <code>order</code> 的前序处理每个点，就能把答案从根传播到全树。</p>
+<p><strong>不变量与正确性。</strong> 不变量是：处理到 u 时 ans[u] 已是以 u 为根的正确全源距离和；由上面的增量推导，传给每个孩子 v 的 ans[v] 也正确。两遍遍历分别保证子树量就绪与父方向答案就绪。</p>
+<p><strong>实现细节。</strong> 用显式栈做 DFS 避免深树爆栈；<code>parent</code> 数组初始化为 n（哨兵），从 0 出发时 <code>parent[0]=0</code>。第二遍仍沿 <code>order</code> 正序，跳过父节点即可。注意 <code>n as i64 - 2 * sz[v]</code> 的符号：sz[v] 可能大于 n/2，结果为负是正常的（说明 v 子树内点更多，距离和下降）。</p>
+<p><strong>复杂度。</strong> 两遍遍历各 O(n)，空间 O(n)（邻接表、parent、sz、sub、ans、order、栈）。</p>
+<p>下面的程序对随机树（父节点编号恒小于子节点，保证连通无环）n=1..40 生成 150 组，用每个点 BFS 的 O(n²) 暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">77 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn dist_sums(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let mut g = vec![Vec::&lt;usize&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    for &amp;(u, v) in edges { g[u].push(v); g[v].push(u); }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut parent = vec![n; n];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut order = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut st = vec![0usize];</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    parent[0] = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    while let Some(u) = st.pop() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        order.push(u);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            if v == parent[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            parent[v] = u;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            st.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let mut sz = vec![1i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let mut sub = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    for &amp;u in order.iter().rev() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            if v == parent[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            sz[u] += sz[v];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            sub[u] += sub[v] + sz[v];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    let mut ans = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    ans[0] = sub[0];</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    for &amp;u in &amp;order {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            if v == parent[u] { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            ans[v] = ans[u] + (n as i64 - 2 * sz[v]);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    ans</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="38"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">fn brute(n: usize, edges: &amp;[(usize, usize)]) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    let mut g = vec![Vec::&lt;usize&gt;::new(); n];</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    for &amp;(u, v) in edges { g[u].push(v); g[v].push(u); }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    let mut res = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    for s in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        let mut dist = vec![-1i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        dist[s] = 0; q.push_back(s);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">            for &amp;v in &amp;g[u] {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">                if dist[v] == -1 { dist[v] = dist[u] + 1; q.push_back(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        res[s] = dist.iter().sum();</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="56"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="62"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    let edges = [(0usize, 1usize), (0, 2), (1, 3), (1, 4), (2, 5)];</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    println!(&quot;demo dist_sums = {:?}&quot;, dist_sums(6, &amp;edges));</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    let mut rng = Rng(0xabcd_1234_abcd_1234);</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    for _ in 0..150 {</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">        let n = 1 + rng.range(0, 40) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        let mut edges = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        for i in 1..n { edges.push((rng.range(0, i as u64 - 1) as usize, i)); }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        let a = dist_sums(n, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">        let b = brute(n, &amp;edges);</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">        if a != b { println!(&quot;MISMATCH reroot={:?} brute={:?}&quot;, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    println!(&quot;stress reroot: {} (150 random trees)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo dist_sums = [8, 8, 10, 12, 12, 14]</span></div>
+<div class="cl is-text"><span class="code">stress reroot: OK (150 random trees)</span></div></div></div>
+<p>换根 DP 的适用范围远不止距离和：求每个点为根的子树最大深度、求&quot;以每个点为最高点的路径数&quot;等，都遵循同一套路——先自底向上求子树量，再自顶向下用一条只依赖子树量与全局量的公式传播。写第二遍时最容易犯的错是漏掉&quot;从 u 到 v 的方向增量&quot;，或者把 n 写成 sz[u]；用小树手工核对 u=0 的一个孩子即可发现。</p>
+<h2 id="rust-ch03-dp-advanced-27-5-单调队列优化-跳跃游戏的分段最值">27.5 单调队列优化：跳跃游戏的分段最值</h2>
+<p><strong>问题定义。</strong> n 个点排成一行，从 0 走到 n−1，每次可前进 1 到 k 步；落在点 i 需要支付费用 a[i]。求最小总费用。暴力转移是 <code>dp[i] = a[i] + min(dp[j])</code>，其中 j ∈ [max(0, i−k), i−1]，直接算是 O(nk)。</p>
+<p><strong>结构观察。</strong> j 的取值窗口随 i 向右滑动：i 增加 1，窗口右端加 1、左端也加 1。窗口内的最小值可以用单调队列在摊还 O(1) 时间内维护——这正是&quot;滑动窗口最值&quot;的经典结构（本系列单调结构单元已铺垫过）。这里队列里装的不是数组元素本身，而是<strong>候选下标 j</strong>，并按 dp[j] 的值单调递增排列。</p>
+<p><strong>不变量。</strong> 队列满足三条：(1) 下标从小到大；(2) 对应的 dp 值严格递增（因为插入时会从队尾弹出所有 dp ≥ 新值的旧下标）；(3) 队首的下标一定在当前窗口 [i−k, i−1] 内（过期下标从队首弹出）。于是队首就是当前窗口 dp 最小者的下标。更新顺序很关键：先把过期的 <code>j &lt; i−k</code> 从队首弹掉，再用队首更新 dp[i]，最后把 i 从队尾插入（先弹掉所有 dp ≥ dp[i] 的下标）。</p>
+<p><strong>Rust 实现要点。</strong> 用 <code>VecDeque&lt;usize&gt;</code>；<code>i.saturating_sub(k)</code> 避免 usize 下溢（i &lt; k 时窗口左端是 0）；dp 用 <code>i64::MAX / 4</code> 作 INF，防止 <code>dp[j] + a[i]</code> 溢出。队尾弹出用 <code>while let Some(&amp;back) = dq.back()</code> 加条件判断，简洁且无越界风险。</p>
+<p><strong>复杂度。</strong> 每个下标最多入队一次、出队一次，时间 O(n)，空间 O(k)（队列长度不超过 k+1）。相比暴力 O(nk)，当 k 与 n 同阶时是数量级的提升。</p>
+<p>下面的程序对随机 n=1..40、k=1..8、a[i] ∈ [0,30] 生成 300 组，用 O(nk) 双循环暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">58 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::collections::VecDeque;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">// dp[i] = a[i] + min(dp[j]) for j in [i-k, i-1]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn jump_min(a: &amp;[i64], k: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let mut dp = vec![i64::MAX / 4; n];</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    dp[0] = a[0];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let mut dq: VecDeque&lt;usize&gt; = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    dq.push_back(0);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        while let Some(&amp;front) = dq.front() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            if front &lt; i.saturating_sub(k) { dq.pop_front(); } else { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        if let Some(&amp;j) = dq.front() { dp[i] = dp[j] + a[i]; }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        while let Some(&amp;back) = dq.back() {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            if dp[back] &gt;= dp[i] { dq.pop_back(); } else { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        dq.push_back(i);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    dp[n - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">fn brute(a: &amp;[i64], k: usize) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let n = a.len();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let mut dp = vec![i64::MAX / 4; n];</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    dp[0] = a[0];</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let lo = i.saturating_sub(k);</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        for j in lo..i {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            let cand = dp[j] + a[i];</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            if cand &lt; dp[i] { dp[i] = cand; }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    dp[n - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="37"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="43"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    let a = [3i64, 1, 4, 1, 5, 9, 2, 6];</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    println!(&quot;demo jump_min k=3 = {}&quot;, jump_min(&amp;a, 3));</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut rng = Rng(0xdead_beef_dead_beef);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let n = 1 + rng.range(0, 40) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        let k = 1 + rng.range(0, 8) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        let a: Vec&lt;i64&gt; = (0..n).map(|_| rng.range(0, 30) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let x = jump_min(&amp;a, k);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        let y = brute(&amp;a, k);</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        if x != y { println!(&quot;MISMATCH n={} k={} mono={} brute={}&quot;, n, k, x, y); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    println!(&quot;stress monotone: {} (300 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo jump_min k=3 = 12</span></div>
+<div class="cl is-text"><span class="code">stress monotone: OK (300 random cases)</span></div></div></div>
+<p>单调队列优化的判定信号很清晰：转移里的候选 j 构成一个<strong>连续下标区间</strong>，且区间随 i 单调滑动。若候选 j 不是连续区间（比如受另一个数组的值限制），单调队列就不适用。另一个变体是&quot;多重背包单调队列优化&quot;，那里把容量按余数分类后，每类内部同样是滑动窗口最值——本质完全相同。写这类代码时最常见的 bug 是更新顺序颠倒：若先用队首更新 dp[i] 再弹过期下标，就可能用一个已经滑出窗口的 j；务必把&quot;弹过期 → 取值 → 插入&quot;三步固定下来。</p>
+<h2 id="rust-ch03-dp-advanced-27-6-斜率优化-平方代价与单调凸包">27.6 斜率优化：平方代价与单调凸包</h2>
+<p><strong>问题定义。</strong> 给定严格递增的数列 x[0] &lt; x[1] &lt; ... &lt; x[n−1]，定义 dp[0] = 0，<code>dp[i] = min_{j&lt;i} dp[j] + (x[i] − x[j])²</code>。暴力对每个 i 枚举 j，复杂度 O(n²)。</p>
+<p><strong>代数展开：把转移变成直线查询。</strong> 展开平方项：<code>dp[j] + x[j]² − 2·x[i]·x[j] + x[i]²</code>。其中 <code>x[i]²</code> 与 j 无关，可以提到 min 外面；剩下的部分对每个 j 是一条关于变量 x[i] 的直线 <code>y = m·t + b</code>，斜率 <code>m = −2·x[j]</code>、截距 <code>b = dp[j] + x[j]²</code>。于是对每个 i，我们要在所有已插入的直线里，查询 t = x[i] 处的最小 y，再加上 x[i]² 就是 dp[i]。</p>
+<p><strong>单调凸包。</strong> 两个单调性让结构简化：因为 x 递增，插入的斜率 m = −2x[j] <strong>严格递减</strong>；查询点 x[i] 也<strong>严格递增</strong>。这正好是单调凸包（monotonic CHT）的标准场景：直线按斜率顺序插入 deque，查询点按序推进，队首一旦被次首支配就弹出。维护凸包时用一个&quot;交叉相乘&quot;判定中间直线是否无用：若相邻两条直线的交点横坐标不满足单调递增（即中间直线被前后夹住），则它永远不会是最优，直接删除。</p>
+<p><strong>不变量与正确性。</strong> 凸包不变量是：deque 中的直线按斜率递减排列，且相邻交点横坐标严格递增——这保证了对任意查询 x，最优直线必然在 deque 中按查询顺序依次出现。查询不变量是：当前队首在所有直线中于 x[i] 处取值最小；弹出被支配的队首后，新的队首接管。用 i128 做交叉相乘，避免 b 与 m 相乘溢出。</p>
+<p><strong>实现细节。</strong> <code>useless(a, b, c)</code> 判定用交叉相乘 <code>(b.b−a.b)(b.m−c.m) ≥ (c.b−b.b)(a.m−b.m)</code>，等价于&quot;交点(a,b) ≥ 交点(b,c)&quot;。插入新直线后从队尾循环删除无用直线。注意 head 指针：弹出队首后 head 前移，但插入只追加到队尾，需保证 head 不越界。</p>
+<p><strong>复杂度。</strong> 每条直线最多入队出队一次，每个查询点也单调推进，摊还 O(n) 时间与 O(n) 空间。相比暴力 O(n²) 是巨大提升。</p>
+<p>下面的程序对随机严格递增 x（首项 0，步长 1..6）、n=2..41 生成 300 组，用 O(n²) 暴力法对照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">68 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">#[derive(Clone, Copy)]</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Line { m: i128, b: i128 }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn f(l: Line, x: i128) -&gt; i128 { l.m * x + l.b }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">// slopes inserted strictly decreasing; b useless if cross(a,b) &gt;= cross(b,c)</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">fn useless(a: Line, b: Line, c: Line) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    (b.b - a.b) * (b.m - c.m) &gt;= (c.b - b.b) * (a.m - b.m)</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">// dp[0]=0, dp[i]=min_{j&lt;i} dp[j]+(x[i]-x[j])^2, x strictly increasing</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn slope_dp(x: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let n = x.len();</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let mut dp = vec![0i128; n];</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let mut hull: Vec&lt;Line&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    hull.push(Line { m: -2 * x[0] as i128, b: 0 });</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut head = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        let xi = x[i] as i128;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        while head + 1 &lt; hull.len() &amp;&amp; f(hull[head], xi) &gt;= f(hull[head + 1], xi) { head += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        dp[i] = f(hull[head], xi) + xi * xi;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        let nl = Line { m: -2 * xi, b: dp[i] + xi * xi };</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        while hull.len() &gt;= 2 &amp;&amp; useless(hull[hull.len() - 2], hull[hull.len() - 1], nl) {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            hull.pop();</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        hull.push(nl);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        if head &gt;= hull.len() { head = hull.len() - 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    dp[n - 1] as i64</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="31"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">fn brute(x: &amp;[i64]) -&gt; i64 {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let n = x.len();</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let mut dp = vec![0i64; n];</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        let mut best = i64::MAX / 4;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        for j in 0..i {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            let d = x[i] - x[j];</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            let cand = dp[j] + d * d;</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">            if cand &lt; best { best = cand; }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        dp[i] = best;</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    dp[n - 1]</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="46"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="52"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    let x = [0i64, 2, 5, 9, 14, 20];</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    println!(&quot;demo slope_dp = {}&quot;, slope_dp(&amp;x));</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let mut rng = Rng(0x0bad_f00d_0bad_f00d);</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    for _ in 0..300 {</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        let n = 2 + rng.range(0, 40) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        let mut x = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        let mut cur = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">        for _ in 0..n { x.push(cur); cur += rng.range(1, 7) as i64; }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        let a = slope_dp(&amp;x);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let b = brute(&amp;x);</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        if a != b { println!(&quot;MISMATCH n={} slope={} brute={}&quot;, n, a, b); bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    println!(&quot;stress slope: {} (300 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo slope_dp = 90</span></div>
+<div class="cl is-text"><span class="code">stress slope: OK (300 random cases)</span></div></div></div>
+<p>斜率优化的适用前提很苛刻：查询点必须单调（否则不能用 deque，要改用李超线段树或三分），斜率最好也单调（否则要排序或用动态凸包）。本题平方代价天然满足两条。工程上有两个高频陷阱：一是用 i64 做交叉相乘时溢出，务必升到 i128；二是 <code>useless</code> 里的大于等于与大于的选择——在斜率严格递减、求最小值的设定下用 <code>&gt;=</code> 删除中间直线是正确的，但若改成求最大值或斜率递增，符号要全部重新推导，最好用小数据对拍兜底。</p>
+<h2 id="rust-ch03-dp-advanced-27-7-五种手段的横向对照与选择地图">27.7 五种手段的横向对照与选择地图</h2>
+<p>把五种手段放在一起看，差异就清楚了。状压与数位改变的是&quot;状态空间怎么编码&quot;，换根改变的是&quot;树上怎么遍历&quot;，单调队列与斜率优化改变的是&quot;转移时怎么少枚举&quot;。</p>
+<table>
+<thead>
+<tr>
+<th>手段</th>
+<th>状态/结构变化</th>
+<th>优化对象</th>
+<th>时间复杂度</th>
+<th>适用信号</th>
+<th>典型陷阱</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>状压 DP</td>
+<td>集合编码成整数</td>
+<td>状态维度</td>
+<td>O(2ⁿ·n²)</td>
+<td>n ≤ 20 且涉及&quot;选哪些&quot;</td>
+<td>把 INF 状态误跳过</td>
+</tr>
+<tr>
+<td>数位 DP</td>
+<td>按位 + tight</td>
+<td>状态维度</td>
+<td>O(len²)</td>
+<td>统计满足数位条件的数</td>
+<td>贴界时写 memo 污染缓存</td>
+</tr>
+<tr>
+<td>换根 DP</td>
+<td>两遍遍历</td>
+<td>遍历顺序</td>
+<td>O(n)</td>
+<td>树上求每个点的答案</td>
+<td>父方向增量公式写错</td>
+</tr>
+<tr>
+<td>单调队列</td>
+<td>deque 存候选</td>
+<td>转移候选</td>
+<td>O(n)</td>
+<td>转移是滑动窗口最值</td>
+<td>弹过期与取值的顺序颠倒</td>
+</tr>
+<tr>
+<td>斜率优化</td>
+<td>凸包维护直线</td>
+<td>转移候选</td>
+<td>O(n)</td>
+<td>代价可拆成 j 项 + i·j + i 项</td>
+<td>交叉相乘溢出、符号错</td>
+</tr>
+</tbody></table>
+
+<p>选择时先问&quot;状态能不能直接写出来&quot;。若题目自然地按位置、按容量推进，状态没问题，瓶颈在转移，那就看转移结构：候选是连续窗口用单调队列，候选是全前驱且代价可拆用斜率优化。若题目根本无法用位置下标描述（状态里必须装一个集合），才考虑状压。若题目在树上且要所有点的答案，直接换根。若题目要统计区间内满足十进制性质的数，直接数位。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>把这五种工具想成五金工具箱。状压是&quot;把一堆东西编号成一个二进制串&quot;，数位是&quot;一位一位填数字并且记住有没有顶到天花板&quot;，换根是&quot;先算子树再从上往下把答案传一遍&quot;，单调队列是&quot;一个自动淘汰赛，永远把当前最强的候选放在队首&quot;，斜率优化是&quot;把每个前驱画成一条直线，用尺子量出哪条最低&quot;。看题目长什么样，就伸手拿哪件工具。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-dp-advanced-27-8-工程取舍-边界陷阱与调试清单">27.8 工程取舍、边界陷阱与调试清单</h2>
+<p><strong>边界条件清单。</strong> 状压：mask 是否必须含起点、n=0 时的空集、<code>1 &lt;&lt; i</code> 的 usize 类型与溢出（n 太大直接放弃该法）；数位：m&lt;0 返回 0、目标 S 超过 9·len 提前返回、m=0 的数位和视为 0；换根：n=1 时 sz 与 ans 都平凡、树必须连通（随机数据生成时父节点编号要严格小于子节点，否则会出现自环或断连——本单元的真实对拍就踩过这个坑）；单调队列：i&lt;k 时窗口左端是 0 要用 saturating_sub、n=1 时直接返回；斜率：n=2 时凸包只有一条直线、x 必须严格递增（相等斜率要特殊处理）、i128 防止溢出。</p>
+<p><strong>调试流程。</strong> 第一步永远是把暴力版写出来并跑通；第二步用最小的手工例子（n=3 的 TSP、两位数区间、三点链、k=1 的跳跃、三点斜率）核对状态定义；第三步接上随机对拍，先跑几百组小规模，再逐步放大规模与参数范围；第四步才考虑把暴力版删掉或移到 <code>#[cfg(test)]</code>。本单元五个例子都把暴力版与优化版放进同一个程序，正是为了让读者能一键复现整个验证闭环。</p>
+<p><strong>工程取舍。</strong> 状压的内存 2^n·n 增长极快，n=20 已约 80MB，必要时改用只存一维 i 的滚动式（仍 2^n 项）或 meet-in-the-middle；数位 DP 的 memo 维度要随附加条件（余数、计数）扩展，维度越多越要确认状态是否真的有限；换根用迭代 DFS 而非递归，是为了避免 10^5 深链爆栈；单调队列用标准库 <code>VecDeque</code> 而非手写数组，省去循环队列的下标取模；斜率优化用 i128 是廉价的保险，性能敏感时可证明界后降回 i64。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>给 TSP 程序增加&quot;记录最优路径&quot;的 prev 数组，输出一条具体的访问顺序（如 0→2→1→3→0），并用暴力版验证其花费等于最优值。</li>
+<li>把数位 DP 改成统计 [0, 10^18] 中能被 7 整除且数位和为 S 的整数个数：把&quot;模 7 余数&quot;加进 dfs 状态，注意只在 !tight 时记忆化，用较小上界与暴力法对拍。</li>
+<li>换根 DP 改成求&quot;每个点为根时子树最大深度&quot;，写出两遍遍历的合并与传播公式，并用随机树对拍。</li>
+<li>把斜率优化改成求最大值（把 min 换成 max、直线取负或用 &gt;= 反向），并用暴力法验证，观察 useless 判定符号如何变化。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>状压 DP 中为什么不能因为 dp[mask][i] == INF 就跳过？这会导致什么后果？</li>
+<li>数位 DP 为什么只能在 tight=false 时写记忆化？贴界状态的返回值依赖什么？</li>
+<li>换根公式 ans[v] = ans[u] + n − 2·sz[v] 中，n − sz[v] 这一项代表什么？为什么 sz[v] 要被减两次？</li>
+<li>单调队列更新三步（弹过期、取值、插入）的顺序若颠倒，会引入哪类错误？</li>
+<li>斜率优化为什么要求 x 严格递增且斜率单调？交叉相乘为什么用 i128？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__dp-basics.md.html">← 动态规划基础：状态定义、线性、背包与区间</a><a href="rust__chapters__ch03__strings-basics.md.html">字符串基础 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

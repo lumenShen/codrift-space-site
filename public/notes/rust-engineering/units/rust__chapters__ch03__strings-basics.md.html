@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>字符串基础</title>
+<meta name="description" content="第 28 单元 · 建议 90 分钟 · 哈希、KMP、Z 函数与 Trie，从&quot;逐字符比对&quot;走向&quot;预处理一次、查询多次&quot;">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">字符串基础</h1><p class="doc-sub">第 28 单元 · 建议 90 分钟 · 哈希、KMP、Z 函数与 Trie，从&quot;逐字符比对&quot;走向&quot;预处理一次、查询多次&quot;</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 28-strings-basics.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-1-字符串问题的两条主线-比对与索引">28.1 字符串问题的两条主线：比对与索引</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-2-字符串哈希-前缀哈希与子串等性">28.2 字符串哈希：前缀哈希与子串等性</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-3-kmp-前缀函数与失败跳转">28.3 KMP：前缀函数与失败跳转</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-4-z-函数-把模式匹配变成数组比对">28.4 Z 函数：把模式匹配变成数组比对</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-5-trie-前缀共享与批量查询">28.5 Trie：前缀共享与批量查询</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-6-四种工具的横向对照">28.6 四种工具的横向对照</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-7-碰撞-字符集与工程边界">28.7 碰撞、字符集与工程边界</a></li><li class="toc-l2"><a href="#rust-ch03-strings-basics-28-8-练习与自检">28.8 练习与自检</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>掌握多项式滚动哈希的前缀表示，能 O(1) 求任意子串哈希并解释双模防碰撞的理由</li>
+<li>理解 KMP 前缀函数的含义与失败跳转机制，能手工推演匹配指针的移动</li>
+<li>会用 Z 函数把模式匹配化为一次数组比对，并说清它与 KMP 的适用差异</li>
+<li>能用定长孩子数组的 Trie 支持插入、整词查询与前缀计数，并分析其内存代价</li>
+<li>对每种工具都能完成&quot;暴力版 → 优化版 → 随机对拍&quot;的验证闭环</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-strings-basics-28-1-字符串问题的两条主线-比对与索引">28.1 字符串问题的两条主线：比对与索引</h2>
+<p>字符串算法看似庞杂，拆开只有两件事：<strong>比对</strong>（两段字符是否相同、最长公共前缀多长）和<strong>索引</strong>（某个模式在哪里出现、哪些单词共享前缀）。朴素做法是逐字符比较，长度 m 的模式在长度 n 的文本上逐个位置试，最坏 O(n·m)；本节四种工具都通过某种预处理把这个乘积降下来。</p>
+<p>理解&quot;预处理换查询&quot;的代价模型很重要。如果只比对一次，预处理的 O(n+m) 反而不如直接的 O(m) 划算；只有当查询次数足够多、或文本固定而模式反复变化时，预处理才摊薄成本。哈希与 Trie 是典型的&quot;建一次、查多次&quot;结构：前者把每次子串比较压成 O(1)，后者把每次前缀查询压成 O(词长)。KMP 与 Z 函数则不同，它们针对&quot;单次全量匹配&quot;就把总时间压到线性，因为匹配过程中每个字符只被有效比对常数次。读题时先数清&quot;建库几次、查询几次、文本换不换&quot;，就能排除掉一半不适用工具。</p>
+<p>第一条主线里，哈希把字符串映射成一个定长整数，于是&quot;子串是否相等&quot;变成&quot;两个整数是否相等&quot;，比较从 O(m) 降到 O(1)。代价是引入了极小的碰撞概率，工程中用双模或 128 位自然溢出把概率压到可忽略。KMP 与 Z 函数走的是另一条路：不依赖概率，而是利用模式自身的结构——KMP 记录&quot;失配后能复用多少已匹配前缀&quot;，Z 函数记录&quot;每个后缀与整个串的最长公共前缀&quot;。两者都保证严格的线性时间，区别只在组织方式。</p>
+<p>第二条主线里，Trie 把一组字符串的公共前缀合并成树，查询一个词或一批前缀时，沿着字符边走一遍即可，复杂度只与查询词长度有关，与字典大小几乎无关。它是后面 AC 自动机（多模式匹配）的结构基础。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>暴力比对就像每次都从头念一遍课文。哈希给每段文字盖一个&quot;指纹章&quot;，看两个指纹一样就当文字一样，快但有小概率撞章。KMP 和 Z 函数是&quot;记住上次念到哪儿了&quot;，失配时不从头念，直接从已经念对的地方接着念，绝不撞章。Trie 是把一堆单词按共同开头搭成一棵树，查&quot;app&quot;开头的词时只要走到 app 那个岔路口，不用把每个词都翻出来。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-strings-basics-28-2-字符串哈希-前缀哈希与子串等性">28.2 字符串哈希：前缀哈希与子串等性</h2>
+<p><strong>问题定义。</strong> 给定文本 text 与模式 pat，找出 pat 在 text 中所有出现位置。用哈希可把每次子串比较降到 O(1)，整体 O(n+m)。</p>
+<p><strong>机制。</strong> 选一个基数 base 与模数 M，把字符串看作 base 进制数：<code>h(s) = ((s[0]·base + s[1])·base + ...) mod M</code>。预处理文本的前缀哈希 <code>h[0..n+1]</code>，其中 h[k] 是前 k 个字符的哈希；同时预处理 <code>pw[k] = base^k mod M</code>。则子串 text[l..r) 的哈希是 <code>h[r] − h[l]·base^(r−l) mod M</code>——因为前缀 r 等于前缀 l 左移 (r−l) 位再拼上子串。这一步是<strong>不变量</strong>：只要 h 与 pw 的定义一致，减法就精确给出子串的多项式值。</p>
+<p><strong>双模防碰撞。</strong> 单个 64 位模数下，精心构造的输入可能碰撞。用两个互质大素数（如 10^9+7 与 10^9+9）分别取模，只有当两个模下的哈希都相等才判定相等，碰撞概率降到约 10^-18，竞赛与工程都够用。基数要小于模数且随机取，进一步降低被构造碰撞的风险。</p>
+<p><strong>Rust 实现要点。</strong> 用 <code>u64</code> 存哈希，乘法前先 <code>% M</code>，因为 base &lt; M 且 h &lt; M，乘积 &lt; 10^18，不会溢出 u64。<code>sub(l, r)</code> 里减法要先加 M 再取模，避免下溢。预处理 pw 与 h 同步推进。比较时把模式的哈希 <code>(hp.sub(0, m))</code> 算一次，然后在文本上滑窗比对。</p>
+<p>还有一个值得讲清的细节：为什么不直接维护&quot;滑动窗口哈希&quot;逐位滚动，而要存全部前缀哈希？滚动更新每次要做 <code>h = (h - s[i]·pw[m-1])·base + s[i+m]</code>，需要窗口内每个字符的值与一次减法，代码更绕；而前缀哈希把任意区间的查询统一成同一个 <code>sub(l, r)</code> 公式，既能查定长模式，也能查任意长度的子串等性（比如最长公共前缀的二分），通用性更好。两种做法时间都是 O(n)，前缀法多用一个长度 n+1 的数组，换来的是查询接口的统一。基数 base 要显著大于字符集大小，否则不同字符串容易算出相同多项式值；取 911382323 这类接近模数的大质数、或在安全区间随机取，都是常见做法。</p>
+<p><strong>复杂度。</strong> 预处理 O(n+m) 时间与 O(n+m) 空间，查找 O(n)；相比 O(n·m) 的暴力是质变。</p>
+<p>下面的程序用双模哈希（基数随机取自 [256, 10^6]）找出所有出现位置，与逐字节比较的朴素版在随机小写串上对照 400 组。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">76 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">const M1: u64 = 1_000_000_007;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">const M2: u64 = 1_000_000_009;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct DHash {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    h1: Vec&lt;u64&gt;, h2: Vec&lt;u64&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    pw1: Vec&lt;u64&gt;, pw2: Vec&lt;u64&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">impl DHash {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    fn new(s: &amp;[u8], base: u64) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let n = s.len();</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let (mut h1, mut h2) = (vec![0u64; n + 1], vec![0u64; n + 1]);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        let (mut pw1, mut pw2) = (vec![1u64; n + 1], vec![1u64; n + 1]);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            h1[i + 1] = (h1[i] * base + s[i] as u64) % M1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            h2[i + 1] = (h2[i] * base + s[i] as u64) % M2;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            pw1[i + 1] = pw1[i] * base % M1;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            pw2[i + 1] = pw2[i] * base % M2;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        Self { h1, h2, pw1, pw2 }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    fn sub(&amp;self, l: usize, r: usize) -&gt; (u64, u64) {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let len = r - l;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        let a = (self.h1[r] + M1 - self.pw1[len] * self.h1[l] % M1) % M1;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        let b = (self.h2[r] + M2 - self.pw2[len] * self.h2[l] % M2) % M2;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        (a, b)</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn find_all(text: &amp;[u8], pat: &amp;[u8], base: u64) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let (n, m) = (text.len(), pat.len());</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    if m == 0 || m &gt; n { return vec![]; }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let ht = DHash::new(text, base);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let hp = DHash::new(pat, base);</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let target = hp.sub(0, m);</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let mut res = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    for i in 0..=n - m {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        if ht.sub(i, i + m) == target { res.push(i); }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="42"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">fn naive_all(text: &amp;[u8], pat: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    let (n, m) = (text.len(), pat.len());</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    if m == 0 || m &gt; n { return vec![]; }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut res = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    for i in 0..=n - m {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        if &amp;text[i..i + m] == pat { res.push(i); }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="52"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="58"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    let text = b&quot;ababababa&quot;;</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    let pat = b&quot;aba&quot;;</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    println!(&quot;demo hash find = {:?}&quot;, find_all(text, pat, 911382323));</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    let mut rng = Rng(0x1234_5678_9abc_def0);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    for _ in 0..400 {</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        let n = 1 + rng.range(0, 200) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        let m = 1 + rng.range(0, 20) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        let t: Vec&lt;u8&gt; = (0..n).map(|_| b'a' + rng.range(0, 4) as u8).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">        let p: Vec&lt;u8&gt; = (0..m).map(|_| b'a' + rng.range(0, 4) as u8).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        let base = 256 + rng.range(0, 1_000_000) as u64;</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        let a = find_all(&amp;t, &amp;p, base);</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        let b = naive_all(&amp;t, &amp;p);</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">        if a != b { bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    println!(&quot;stress hash: {} (400 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo hash find = [0, 2, 4, 6]</span></div>
+<div class="cl is-text"><span class="code">stress hash: OK (400 random cases)</span></div></div></div>
+<p>哈希的软肋是碰撞：本单元用双模把概率压到可忽略，但仍不是严格算法。在需要绝对正确性的场景（如密码学、判定性答案），要么改用 KMP/Z 函数，要么在哈希命中后再做一次逐字节确认——命中数通常很少，这一步几乎不增加成本。另一个陷阱是空串与模式长于文本：<code>m == 0</code> 或 <code>m &gt; n</code> 时减法下标会越界，必须先返回。</p>
+<h2 id="rust-ch03-strings-basics-28-3-kmp-前缀函数与失败跳转">28.3 KMP：前缀函数与失败跳转</h2>
+<p><strong>问题定义。</strong> 同样是在 text 中找 pat 的所有出现位置，但要求严格线性且无概率。KMP 的核心是：匹配过程中文本指针 i 永不回退，只回退模式指针 j。</p>
+<p><strong>前缀函数。</strong> 定义 <code>pi[i]</code> 为 <code>pat[0..=i]</code> 的最长<strong>真前缀</strong>长度，使它同时也是该子串的后缀。例如 <code>ababaca</code> 的 pi 是 <code>[0,0,1,2,3,0,1]</code>。pi 的不变量是：<code>pat[0..pi[i]] == pat[i+1-pi[i] ..= i]</code>，即&quot;以 i 结尾的后缀里，能与开头对齐的最长长度&quot;。计算 pi 本身也是 KMP 式的：用前一个位置的 pi[i−1] 作为候选 j，若 pat[i] 与 pat[j] 不等，就沿 <code>j = pi[j−1]</code> 回退，直到匹配或 j=0。</p>
+<p><strong>匹配过程。</strong> 用 j 表示当前已匹配的 pat 前缀长度。每读入一个 text[i]：若 text[i] == pat[j]，j 加一；否则沿 pi 回退 j（文本指针不动）。当 j == pat.len() 时记录一次匹配，起点是 <code>i+1−j</code>，然后把 j 设为 <code>pi[j−1]</code> 以寻找下一次匹配。这里的精妙之处在于：失配时 we already know 前 j 个字符都匹配，而 pi[j−1] 告诉我们其中有多大一段同时也是 pat 的前缀，这段无需重新比对——这就是&quot;失败跳转&quot;节省的时间。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">文本串：  a b a b c a b c a b a b a b d
+模式串：  a b a b d
+              ↑ 在 c 处失配，j=4 → pi[3]=2
+跳转后复用 &quot;ab&quot;，文本指针不回退</pre></figure>
+<p><strong>正确性。</strong> 文本指针单调右移，j 的每次回退都严格减小，摊还后总操作数 O(n+m)。回退之所以安全，是因为 pi[j−1] 保证了被复用的那段确实是 pat 的前缀，与 text 中对应位置一定相等。摊还分析可以这样做：把 j 看作一个&quot;势能&quot;，每读入一个文本字符，j 最多增加 1，所以整个过程中 j 的总增量不超过 n；而每次回退都让 j 至少减少 1，因此回退的总次数不超过总增量，也就是不超过 n。匹配成功后的 <code>j = pi[j-1]</code> 同样是一次减小，也计入这个上界。于是 while 循环的总执行次数是 O(n)，加上预处理 pi 的 O(m)，总时间严格线性。这个&quot;势能法&quot;是分析所有带回退指针算法（包括下一节的 Z 函数）的通用工具。</p>
+<p><strong>Rust 实现要点。</strong> <code>pat.is_empty()</code> 要先返回，否则访问 pat[j] 会越界。<code>while j &gt; 0 &amp;&amp; text[i] != pat[j]</code> 的回退循环用 <code>pi[j-1]</code>，注意 j&gt;0 保证下标合法。完整匹配后用 <code>pi[j-1]</code> 而不是 0，这样才能找到重叠出现（如 <code>aaaa</code> 中找 <code>aa</code>）。</p>
+<p>下面的程序先打印 <code>ababaca</code> 的 pi 与一个示例匹配结果，再对随机串做 500 组与朴素法的对拍。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">58 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn prefix_function(p: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let mut pi = vec![0usize; p.len()];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    for i in 1..p.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">        let mut j = pi[i - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        while j &gt; 0 &amp;&amp; p[i] != p[j] { j = pi[j - 1]; }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        if p[i] == p[j] { j += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        pi[i] = j;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    pi</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">fn kmp(text: &amp;[u8], pat: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    if pat.is_empty() { return vec![]; }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let pi = prefix_function(pat);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    let mut res = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let mut j = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for i in 0..text.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        while j &gt; 0 &amp;&amp; text[i] != pat[j] { j = pi[j - 1]; }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        if text[i] == pat[j] { j += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        if j == pat.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">            res.push(i + 1 - j);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            j = pi[j - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="28"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">fn naive(text: &amp;[u8], pat: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let (n, m) = (text.len(), pat.len());</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    if m == 0 || m &gt; n { return vec![]; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let mut res = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    for i in 0..=n - m { if &amp;text[i..i + m] == pat { res.push(i); } }</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="36"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="42"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    println!(&quot;demo pi = {:?}&quot;, prefix_function(b&quot;ababaca&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    println!(&quot;demo kmp = {:?}&quot;, kmp(b&quot;ababcabcabababd&quot;, b&quot;ababd&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut rng = Rng(0xfeed_beef_1234_5678);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    for _ in 0..500 {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let n = 1 + rng.range(0, 300) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let m = 1 + rng.range(0, 25) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        let t: Vec&lt;u8&gt; = (0..n).map(|_| b'a' + rng.range(0, 4) as u8).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        let p: Vec&lt;u8&gt; = (0..m).map(|_| b'a' + rng.range(0, 4) as u8).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let a = kmp(&amp;t, &amp;p);</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        let b = naive(&amp;t, &amp;p);</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        if a != b { bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    println!(&quot;stress kmp: {} (500 random cases)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo pi = [0, 0, 1, 2, 3, 0, 1]</span></div>
+<div class="cl is-text"><span class="code">demo kmp = [10]</span></div>
+<div class="cl is-text"><span class="code">stress kmp: OK (500 random cases)</span></div></div></div>
+<p>KMP 的难点从来不是代码而是 pi 的含义。一个有效的自检方式是打印 pi 数组，逐位核对 <code>pat[0..pi[i]]</code> 是否等于 <code>pat[i+1-pi[i]..=i]</code>。若你发现匹配结果漏掉了重叠出现，八成是完整匹配后把 j 直接清零了——改成 <code>pi[j-1]</code> 即可。</p>
+<h2 id="rust-ch03-strings-basics-28-4-z-函数-把模式匹配变成数组比对">28.4 Z 函数：把模式匹配变成数组比对</h2>
+<p><strong>问题定义与定义。</strong> 对字符串 s，<code>z[i]</code> 是 <code>s</code> 与后缀 <code>s[i..]</code> 的最长公共前缀（LCP）长度，约定 z[0] = 0。有了 Z 数组，模式匹配只需构造 <code>pat + 分隔符 + text</code>，在拼接串上求 z，凡是 <code>z[i] ≥ pat.len()</code> 的位置 i 就对应一次匹配，起点为 <code>i − m − 1</code>。分隔符必须是模式与文本字符集中不出现的值，否则会跨越边界误匹配。</p>
+<p><strong>线性求解机制。</strong> 维护当前已知的最右匹配区间 <code>[l, r]</code>。处理 i 时：若 i ≤ r，则 <code>s[i..]</code> 与 <code>s[i−l..]</code> 处在同一个已匹配盒子里，可先取 <code>z[i] = min(r−i+1, z[i−l])</code> 作为下界（盒子内的对齐部分必定相等），再从下界继续向后暴力扩展；若 i &gt; r，则从 0 开始扩展。每次扩展成功后更新 <code>[l, r] = [i, i+z[i]−1]</code>。关键不变量是：盒内 z 值可直接复用，因为盒子保证 <code>s[l..=r] == s[0..=r−l]</code>，于是 <code>s[i+k] == s[i−l+k]</code> 对盒内所有 k 成立。</p>
+<p><strong>与 KMP 的对比。</strong> KMP 的前缀函数描述&quot;模式每个前缀的自我重复&quot;，Z 函数描述&quot;整个串与每个后缀的公共前缀&quot;。Z 函数更直观、代码更短，适合单模式匹配与回文相关变换；KMP 的 pi 在自动机、周期判定等场景更自然，且不需要拼接串与分隔符。两者都是严格 O(n+m)。从信息量看，Z 数组比 pi 数组更&quot;全局&quot;：pi 是模式内部的前后缀关系，Z 是整串对每个后缀的关系，Z[i] 的值域可能远超 pi[i]。因此 Z 函数还能直接回答&quot;从第 i 位开始与原串相同多长&quot;这类查询，而 pi 只能回答&quot;前缀的重复长度&quot;。若你要处理的是字符串周期、最小表示、回文半径等问题，Z 数组往往是更趁手的中间产物；若要做状态机式的逐字符扫描（比如把 KMP 扩展成 AC 自动机），pi 的失败链语义则不可替代。</p>
+<p><strong>Rust 实现要点。</strong> <code>z[i] = (r−i+1).min(z[i−l])</code> 只在 i ≤ r 时成立；扩展循环 <code>while i+z[i] &lt; n &amp;&amp; s[z[i]] == s[i+z[i]]</code> 用下标 z[i] 同时索引前缀与后缀。更新盒子前要判断 z[i] &gt; 0，否则 <code>i + z[i] − 1</code> 在 i=0 时会下溢——虽然循环从 i=1 起，但写成显式判断更稳妥。</p>
+<p>下面的程序对 <code>aaaa</code> 打印 z 数组（应为 <code>[0,3,2,1]</code>），对 <code>ababababa</code> 找 <code>aba</code> 给出匹配位置，再对随机串把 Z 数组与逐字符朴素版对照 400 组。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">59 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">fn z_function(s: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let n = s.len();</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let mut z = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let (mut l, mut r) = (0usize, 0usize);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        if i &lt;= r { z[i] = (r - i + 1).min(z[i - l]); }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        while i + z[i] &lt; n &amp;&amp; s[z[i]] == s[i + z[i]] { z[i] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        if z[i] &gt; 0 &amp;&amp; i + z[i] - 1 &gt; r {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            l = i; r = i + z[i] - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    z</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn naive_z(s: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let n = s.len();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let mut z = vec![0usize; n];</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    for i in 1..n {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        let mut k = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        while i + k &lt; n &amp;&amp; s[k] == s[i + k] { k += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        z[i] = k;</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    z</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="26"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">fn z_find(text: &amp;[u8], pat: &amp;[u8]) -&gt; Vec&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    if pat.is_empty() { return vec![]; }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let mut s = Vec::with_capacity(pat.len() + 1 + text.len());</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    s.extend_from_slice(pat);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    s.push(1u8);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    s.extend_from_slice(text);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let z = z_function(&amp;s);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let m = pat.len();</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let mut res = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    for i in m + 1..s.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        if z[i] &gt;= m { res.push(i - m - 1); }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    res</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    println!(&quot;demo z = {:?}&quot;, z_function(b&quot;aaaa&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    println!(&quot;demo z_find = {:?}&quot;, z_find(b&quot;ababababa&quot;, b&quot;aba&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    let mut rng = Rng(0xabcd_1234_abcd_1234);</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    for _ in 0..400 {</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        let n = 1 + rng.range(0, 120) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        let s: Vec&lt;u8&gt; = (0..n).map(|_| b'a' + rng.range(0, 4) as u8).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">        if z_function(&amp;s) != naive_z(&amp;s) { bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    println!(&quot;stress z: {} (400 random strings)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo z = [0, 3, 2, 1]</span></div>
+<div class="cl is-text"><span class="code">demo z_find = [0, 2, 4, 6]</span></div>
+<div class="cl is-text"><span class="code">stress z: OK (400 random strings)</span></div></div></div>
+<p>分隔符的选择是 Z 函数匹配最容易出错的地方：如果用字符 &#39;a&#39;..&#39;z&#39; 的文本与模式，取字节 1 作分隔符是安全的；若文本是任意字节流，就得换成一个绝不会出现的值，或改用 KMP 避免分隔符。另一个细节是 z[0] 约定为 0——虽然&quot;整个串与自身的 LCP&quot;是 n，但设为 0 才能让复用公式与边界处理一致。</p>
+<h2 id="rust-ch03-strings-basics-28-5-trie-前缀共享与批量查询">28.5 Trie：前缀共享与批量查询</h2>
+<p><strong>问题定义。</strong> 给定一组字符串（字典），支持插入一个词、查询某词是否在字典中、统计有多少词以某前缀开头。朴素做法每次遍历整个字典，O(字典大小 × 词长)；Trie 把公共前缀合并成树，查询只与查询词长度相关。</p>
+<p><strong>结构机制。</strong> 每个节点保存一张字符到子节点的映射、一个 <code>end</code> 标志（是否有词在此结束）、一个 <code>pass</code> 计数（有多少词经过此节点）。插入时从根出发，沿字符逐层走，缺边则新建节点，途中 pass 加一，末尾置 end。查询整词就是走到末节点看 end；统计前缀就是走到前缀末节点读 pass。根节点的 pass 等于字典总词数。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">root (pass=4)
+├── a (pass=3)
+│   └── p (pass=3)
+│       └── p (pass=3, end)      ← &quot;app&quot;
+│           └── l → e → (end)    ← &quot;apple&quot;
+└── b (pass=1)
+    └── a → n → a → n → a (end)  ← &quot;banana&quot;</pre></figure>
+<p><strong>不变量与正确性。</strong> 不变量是：从根到任意节点的路径恰好拼成某个前缀，且 pass 等于字典中以该前缀开头的词数——插入时每个词给它路径上所有节点（含根）的 pass 加一，正好维护了这个计数。end 标志则区分&quot;前缀&quot;与&quot;完整词&quot;。因此查询只需一次路径遍历，无需扫描字典。</p>
+<p><strong>Rust 实现要点。</strong> 字符集固定且很小时，用 <code>[usize; 26]</code> 加 <code>NIL = usize::MAX</code> 哨兵比 <code>HashMap</code> 更快也更省内存；插入时 <code>let k = (c - b&#39;a&#39;) as usize</code> 直接下标。若字符集是任意字节或 Unicode，改用 <code>Vec&lt;(u8, usize)&gt;</code> 或 <code>HashMap&lt;u8, usize&gt;</code>。三个 Vec（<code>ch</code>、<code>end</code>、<code>pass</code>）按下标对齐表示同一批节点，新建节点时三者同步 push——这是&quot;结构体数组 vs 数组结构体&quot;取舍里典型的 SoA 写法，缓存友好。</p>
+<p><strong>复杂度。</strong> 插入与查询均为 O(L)，L 是词长；空间 O(总字符数 × 字符集大小)（定长数组实现）或 O(总字符数)（链式实现）。定长数组在 26 字母下每个节点 26×8=208 字节，字典很大时要留意内存。三个平行 Vec 的 SoA（Structure of Arrays）布局在这里很有代表性：访问某节点的第 k 个孩子只需 <code>ch[u][k]</code> 一次索引，而若把 ch、end、pass 塞进同一个 <code>struct Node</code> 放进 <code>Vec&lt;Node&gt;</code>（AoS），单次访问会连带把相邻字段也拉进缓存行，对 Trie 这种随机跳转的访问模式并不更优。两种布局性能接近时，选代码更清晰的那一种即可；真正影响性能的往往是节点数量而非布局。若字典里的词有大量公共前缀（如一棵词库），Trie 的节点数远小于&quot;总字符数&quot;，压缩收益明显；若词彼此毫无前缀重叠，Trie 反而比直接排序后二分更费内存。</p>
+<p>下面的程序构造含 <code>app</code>、<code>apple</code>、<code>banana</code>、<code>app</code> 的字典（app 出现两次），随后对随机字典与随机查询词把 Trie 的整词查询、前缀计数与朴素遍历对照 200 组。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">83 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">const NIL: usize = usize::MAX;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Trie {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    ch: Vec&lt;[usize; 26]&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    end: Vec&lt;bool&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    pass: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">impl Trie {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    fn new() -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        Self { ch: vec![[NIL; 26]], end: vec![false], pass: vec![0] }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    fn insert(&amp;mut self, w: &amp;[u8]) {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        let mut u = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        self.pass[u] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        for &amp;c in w {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            let k = (c - b'a') as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            if self.ch[u][k] == NIL {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">                self.ch[u][k] = self.ch.len();</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">                self.ch.push([NIL; 26]);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">                self.end.push(false);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">                self.pass.push(0);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            u = self.ch[u][k];</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            self.pass[u] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        self.end[u] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    fn walk(&amp;self, pre: &amp;[u8]) -&gt; Option&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        let mut u = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        for &amp;c in pre {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            let k = (c - b'a') as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">            u = self.ch[u][k];</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            if u == NIL { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        Some(u)</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    fn contains(&amp;self, w: &amp;[u8]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">        match self.walk(w) { Some(u) =&gt; self.end[u], None =&gt; false }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    fn prefix_count(&amp;self, pre: &amp;[u8]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">        match self.walk(pre) { Some(u) =&gt; self.pass[u], None =&gt; 0 }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="45"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">struct Rng(u64);</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    fn next_u64(&amp;mut self) -&gt; u64 { let mut x = self.0; x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17; self.0 = x; x }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    fn range(&amp;mut self, lo: u64, hi: u64) -&gt; u64 { lo + self.next_u64() % (hi - lo + 1) }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">fn rand_word(rng: &amp;mut Rng) -&gt; Vec&lt;u8&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    let n = 1 + rng.range(0, 6) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">    (0..n).map(|_| b'a' + rng.range(0, 3) as u8).collect()</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="55"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    let mut trie = Trie::new();</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    for w in [&amp;b&quot;app&quot;[..], b&quot;apple&quot;, b&quot;banana&quot;, b&quot;app&quot;] { trie.insert(w); }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    println!(&quot;demo contains(app)={} contains(apx)={} prefix(app)={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        trie.contains(b&quot;app&quot;), trie.contains(b&quot;apx&quot;), trie.prefix_count(b&quot;app&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    let mut rng = Rng(0x0bad_f00d_0bad_f00d);</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    let mut bad = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    for _ in 0..200 {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let cnt = 1 + rng.range(0, 40) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        let mut words: Vec&lt;Vec&lt;u8&gt;&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        let mut trie = Trie::new();</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        for _ in 0..cnt {</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">            let w = rand_word(&amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">            trie.insert(&amp;w);</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">            words.push(w);</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        for _ in 0..40 {</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">            let q = rand_word(&amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">            let c1 = trie.contains(&amp;q);</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">            let c2 = words.iter().any(|w| w == &amp;q);</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">            let p1 = trie.prefix_count(&amp;q);</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">            let p2 = words.iter().filter(|w| w.starts_with(&amp;q)).count();</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">            if c1 != c2 || p1 != p2 { bad += 1; break; }</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        if bad &gt; 0 { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">    println!(&quot;stress trie: {} (200 random dictionaries)&quot;, if bad == 0 { &quot;OK&quot; } else { &quot;FAIL&quot; });</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">demo contains(app)=true contains(apx)=false prefix(app)=3</span></div>
+<div class="cl is-text"><span class="code">stress trie: OK (200 random dictionaries)</span></div></div></div>
+<p>Trie 的一个语义陷阱：重复插入同一个词时，pass 会累加但 end 仍是 true。本单元把&quot;字典&quot;当多重集处理（app 出现两次，prefix(app)=3），若业务要求集合语义，插入前应先用 contains 去重，或在 end 处记录出现次数而非布尔值。定长 26 数组的实现只覆盖小写字母，遇到大写、数字或 Unicode 必须先做归一化或换用映射结构。</p>
+<h2 id="rust-ch03-strings-basics-28-6-四种工具的横向对照">28.6 四种工具的横向对照</h2>
+<p>四者解决的都是&quot;字符串比对/索引&quot;，但代价模型完全不同。哈希用概率换常数时间，KMP/Z 用确定性的结构复用换线性保证，Trie 用空间换批量查询的前缀共享。</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>核心预处理</th>
+<th>查询/匹配复杂度</th>
+<th>是否确定性</th>
+<th>适用场景</th>
+<th>主要成本</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>双模哈希</td>
+<td>前缀哈希 + 幂表</td>
+<td>O(1) 子串等性</td>
+<td>否（概率可忽略）</td>
+<td>大量子串比较、字符串相等判定</td>
+<td>模乘常数、碰撞风险</td>
+</tr>
+<tr>
+<td>KMP</td>
+<td>前缀函数 pi</td>
+<td>O(n+m) 匹配</td>
+<td>是</td>
+<td>单模式匹配、周期判定、自动机</td>
+<td>回退逻辑较难调试</td>
+</tr>
+<tr>
+<td>Z 函数</td>
+<td>Z 数组</td>
+<td>O(n+m) 匹配</td>
+<td>是</td>
+<td>单模式匹配、LCP 批量查询</td>
+<td>需分隔符、拼接额外空间</td>
+</tr>
+<tr>
+<td>Trie</td>
+<td>前缀树</td>
+<td>O(L) 每查询</td>
+<td>是</td>
+<td>词典查询、前缀统计、多模式基础</td>
+<td>定长数组空间开销</td>
+</tr>
+</tbody></table>
+
+<p>如何选择：若只需判断两段子串是否相等且能接受极小概率，哈希最简；若要在线性时间内严格找出单模式所有出现，KMP 或 Z 二选一——需要分隔符-free 或要做自动机选 KMP，想要代码短、顺带算 LCP 选 Z；若是一次建库、多次按前缀查询，或要扩展到多模式匹配，选 Trie。注意这四者可以组合：先用哈希快速筛出&quot;可能匹配&quot;的候选位置，再用 KMP 或逐字节确认排除碰撞，是工程里兼顾速度与确定性的常见套路；Trie 的每个节点也可以挂一个哈希值，用来快速判断两条路径是否指向相同的前缀集合。工具之间没有互斥关系，真正的取舍标准是你的查询模式与可接受的出错概率。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>四种工具其实是四种&quot;记笔记&quot;的方式。哈希是给每段文字盖章，比章快但可能撞章；KMP 是记&quot;这个词自己哪里重复&quot;，失配时跳到重复处；Z 函数是记&quot;整串和每个后缀能对齐多少&quot;，一次算完大家共用；Trie 是把词按开头搭成家谱树，找同开头的词只要走到那个分支。它们之间没有谁全面胜出，看你是要比对、要匹配还是要查前缀。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-strings-basics-28-7-碰撞-字符集与工程边界">28.7 碰撞、字符集与工程边界</h2>
+<p><strong>哈希边界。</strong> 双模仍非零碰撞概率，绝对正确性场景要么用确定性算法，要么在哈希命中后追加逐字节确认。基数是随机取的，若输入可能被对抗性构造，固定基数会引入风险。<code>m==0</code> 与 <code>m&gt;n</code> 必须先返回，否则 <code>n-m</code> 在 usize 下下溢。前缀哈希的减法要先加模数再取模，否则 u64 下溢成巨大值。</p>
+<p><strong>KMP/Z 边界。</strong> 空模式要显式处理：KMP 里访问 <code>pat[j]</code> 会越界，Z 里的拼接串若模式为空则分隔符位置错乱。分隔符必须是文本与模式字符集中不出现的值——ASCII 文本用字节 1 是常见选择，任意字节流则需要更谨慎的编码或改用 KMP。Z 更新盒子时 <code>i+z[i]-1</code> 的减法要求 z[i] &gt; 0。</p>
+<p><strong>Trie 边界。</strong> 定长 26 数组只适用于小写拉丁字母，其他字符集要先归一化或换 <code>HashMap</code>。空词插入会在根节点置 end，查询空词应返回根节点的 end；前缀计数对不存在的路径返回 0。<code>NIL = usize::MAX</code> 哨兵要保证不会与合法节点下标冲突（节点数远小于 usize::MAX，实际不可能）。</p>
+<p><strong>工程取舍。</strong> 字符用 <code>&amp;[u8]</code> 而非 <code>String</code>，让算法与编码解耦：UTF-8 下按字节处理对 ASCII 模式是安全的（多字节字符不会与 ASCII 模式字节产生跨字符匹配，因为首字节都在 0x80 以上），但按字符匹配中文时就要先切成 <code>Vec&lt;char&gt;</code> 或按 <code>char_indices</code> 重建字节边界。内存上，Trie 的定长数组每个节点 208 字节，百万节点就是 200MB，字典极大时改用压缩 Trie 或 <code>HashMap&lt;u8, usize&gt;</code>。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：Z 函数匹配时的分隔符不是&quot;随便一个特殊符号&quot;。若你在英文文本上用 <code>pat + &quot;#&quot; + text</code>，而文本里恰好出现 &#39;#&#39;，Z 值可能跨越分隔符，导致把文本内部的一段误判为匹配。正确做法是从字符集里挑一个确定不出现的值（如字节 1），或干脆用不需要分隔符的 KMP。本单元对拍刻意只生成 &#39;a&#39;..&#39;d&#39;，用字节 1 作分隔符才安全。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-strings-basics-28-8-练习与自检">28.8 练习与自检</h2>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>给哈希程序加&quot;命中后逐字节确认&quot;的兜底：当双模哈希相等时再比较 <code>text[i..i+m] == pat</code>，统计 400 组对拍中确认步骤被调用的次数，观察它是否几乎不发生。</li>
+<li>用 KMP 的前缀函数判断一个串是否为某个更短串的重复：若 <code>pi[n-1] &gt; 0</code> 且 <code>n % (n - pi[n-1]) == 0</code>，则最小周期是 <code>n - pi[n-1]</code>。用随机串与朴素周期判定对拍。</li>
+<li>把 Z 函数用于&quot;统计字符串中所有回文前缀&quot;的变体练习：构造 <code>s + 分隔符 + reverse(s)</code>，分析哪些 z 值对应回文前缀，并用朴素法对拍。</li>
+<li>把 Trie 的定长数组改成 <code>Vec&lt;(u8, usize)&gt;</code> 链式孩子，支持任意字节字符集，并用含数字与大写字母的随机字典对拍前缀计数。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>双模哈希为什么比单模更安全？<code>sub(l, r)</code> 的减法为什么要先加模数？</li>
+<li>KMP 前缀函数 pi[i] 的不变量是什么？为什么完整匹配后要把 j 设为 pi[j-1] 而不是 0？</li>
+<li>Z 函数处理 i ≤ r 时为什么能取 <code>min(r-i+1, z[i-l])</code> 作为下界？这个复用为何正确？</li>
+<li>Trie 里 pass 与 end 各表示什么？重复插入同一个词时两者如何变化？</li>
+<li>Z 函数匹配为什么要选一个字符集外的分隔符？选错了会出现什么错误？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__dp-advanced.md.html">← 动态规划进阶</a><a href="rust__chapters__ch03__strings-advanced.md.html">字符串进阶 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

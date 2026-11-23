@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枚举与错误处理</title>
+<meta name="description" content="第 5 单元 · 建议 90 分钟 · 从 niche 布局到错误链，把「可能失败」编码进类型与机器码">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">枚举与错误处理</h1><p class="doc-sub">第 5 单元 · 建议 90 分钟 · 从 niche 布局到错误链，把「可能失败」编码进类型与机器码</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 05-enums-and-errors.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-1-枚举不是-带标签的结构体-布局与-niche-优化">5.1 枚举不是「带标签的结构体」：布局与 niche 优化</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-2-穷尽性检查与-non_exhaustive-编译器替你维护清单">5.2 穷尽性检查与 `#[non_exhaustive]`：编译器替你维护清单</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-3-option-与-result-的组合子-把分支折成流水线">5.3 Option 与 Result 的组合子：把分支折成流水线</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-4-的展开式与-from-错误如何自动换挡">5.4 `?` 的展开式与 `From`：错误如何自动换挡</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-5-error-trait-与错误链-让上下文随错误一起上行">5.5 `Error` trait 与错误链：让上下文随错误一起上行</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-6-panic-unwind-abort-与-catch_unwind-的边界">5.6 panic：unwind、abort 与 `catch_unwind` 的边界</a></li><li class="toc-l2"><a href="#rust-ch01-enums-and-errors-5-7-从错误到-api-库与应用的不同边界">5.7 从错误到 API：库与应用的不同边界</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能解释枚举的内存布局与 niche 优化，读懂 <code>size_of</code> 打出来的数字</li>
+<li>理解穷尽性检查与 <code>#[non_exhaustive]</code> 各自保护的是谁</li>
+<li>熟练用 <code>Option</code>/<code>Result</code> 的组合子写出线性的错误传播代码</li>
+<li>手写一个带 <code>source()</code> 的错误链，并知道 <code>?</code> 背后的 <code>From</code> 转换</li>
+<li>说清 panic 的 unwind 与 abort 两条路径，以及 <code>catch_unwind</code> 的边界</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-enums-and-errors-5-1-枚举不是-带标签的结构体-布局与-niche-优化">5.1 枚举不是「带标签的结构体」：布局与 niche 优化</h2>
+<p>从类型系统的角度看，枚举是<strong>和类型</strong>（sum type）：一个 <code>enum E { A, B(T), C }</code> 的值，必然是且只是其中某一个变体。它和结构体（积类型，所有字段同时存在）恰好互补。真正有趣的问题在机器层面：编译器怎么用一个固定大小的存储单元，表达「运行时才知道是哪一个变体」？</p>
+<p>最朴素的做法是「判别式 + 足够装下最大变体的载荷区」：前面放一个整数标签，后面是一块按最大变体对齐的字节。这样 <code>Option&lt;u8&gt;</code> 就该占 2 字节（1 字节标签 + 1 字节载荷），<code>Option&lt;&amp;T&gt;</code> 就该占 16 字节（8 字节标签 + 8 字节载荷）。但实测并不是这样，原因就是 <strong>niche optimization（空位优化）</strong>：如果一个类型存在某些「永远不可能出现」的位模式，编译器就把这些位模式借来当判别式，不再额外开字段。</p>
+<p>编译器决定布局大致经过三步：先算出每个变体载荷的大小与对齐；再求所有载荷对齐的最小公倍数作为整个枚举的对齐；最后尝试把判别式塞进载荷的某个 niche，或塞进变体之间的填充字节。如果找不到可用 niche（比如 <code>Option&lt;u8&gt;</code> 的 256 种位模式全被合法值占满），才退回「额外字段」方案。这三步解释了为什么「两个字段差不多大」的枚举有时反而比预期大很多——对齐补足的空洞可能比标签本身还贵。</p>
+<p>对开发者而言，这套机制的直接含义是：<strong>枚举的内存开销主要由最大的变体决定，而不是变体个数</strong>。给一个枚举加第十个小变体，通常一分钱内存都不花；但给它加一个 <code>[u64; 16]</code> 变体，所有实例都会跟着长胖。这也是为什么把大对象放进枚举时，标准做法是先 <code>Box</code> 一层——<code>Box&lt;T&gt;</code> 只有 8 字节且有 niche，既压小了枚举整体尺寸，又让 <code>Option&lt;Big&gt;</code> 免费。</p>
+<p>引用类型永远不可能是空指针，于是 <code>Option&lt;&amp;T&gt;</code> 直接用 <code>0</code> 表示 <code>None</code>：</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">Option&lt;&amp;u8&gt; 的 niche 复用（x86_64，8 字节）
+
+ 0x0000_0000_0000_0000  ──►  None
+ 所有其他位模式          ──►  Some(ptr)
+
+┌────────────────────────────────┐
+│  8 字节指针（非空即 Some）      │
+└────────────────────────────────┘
+↑ 没有独立的 tag 字段：size_of::&lt;Option&lt;&amp;u8&gt;&gt;() == 8</pre></figure>
+<p><code>std::num::NonZeroU8</code> 这类类型主动把 <code>0</code> 声明为非法值，等于显式向编译器交出一个 niche；<code>Box&lt;T&gt;</code>、<code>&amp;[T]</code>（胖指针的元数据部分有非法组合）、<code>char</code>（代理区码点非法）也都自带 niche。下面的程序把常见类型的真实大小打出来，数字取自 x86_64 + rustc 1.96 的实际编译运行：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">27 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::size_of;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::num::NonZeroU8;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">enum Tiny { A, B, C }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">enum WithData {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    Unit,</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    Byte(u8),</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    Big([u64; 3]),</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;u8            = {}&quot;, size_of::&lt;u8&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;Option&lt;u8&gt;    = {}&quot;, size_of::&lt;Option&lt;u8&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;&amp;u8           = {}&quot;, size_of::&lt;&amp;u8&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;Option&lt;&amp;u8&gt;   = {}&quot;, size_of::&lt;Option&lt;&amp;u8&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;NonZeroU8     = {}&quot;, size_of::&lt;NonZeroU8&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    println!(&quot;Option&lt;NZU8&gt;  = {}&quot;, size_of::&lt;Option&lt;NonZeroU8&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    println!(&quot;Box&lt;i32&gt;      = {}&quot;, size_of::&lt;Box&lt;i32&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;Option&lt;Box&gt;   = {}&quot;, size_of::&lt;Option&lt;Box&lt;i32&gt;&gt;&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    println!(&quot;enum Tiny     = {}&quot;, size_of::&lt;Tiny&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    println!(&quot;enum WithData = {}&quot;, size_of::&lt;WithData&gt;());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let slice: &amp;[i32] = &amp;[1, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;&amp;[i32] fat ptr = {}, data = {}&quot;, size_of::&lt;&amp;[i32]&gt;(), slice.len() * size_of::&lt;i32&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b1.rs -o u05_b1 &amp;&amp; ./u05_b1</span></div>
+<div class="cl is-text"><span class="code">u8            = 1</span></div>
+<div class="cl is-text"><span class="code">Option&lt;u8&gt;    = 2</span></div>
+<div class="cl is-text"><span class="code">&amp;u8           = 8</span></div>
+<div class="cl is-text"><span class="code">Option&lt;&amp;u8&gt;   = 8</span></div>
+<div class="cl is-text"><span class="code">NonZeroU8     = 1</span></div>
+<div class="cl is-text"><span class="code">Option&lt;NZU8&gt;  = 1</span></div>
+<div class="cl is-text"><span class="code">Box&lt;i32&gt;      = 8</span></div>
+<div class="cl is-text"><span class="code">Option&lt;Box&gt;   = 8</span></div>
+<div class="cl is-text"><span class="code">enum Tiny     = 1</span></div>
+<div class="cl is-text"><span class="code">enum WithData = 32</span></div>
+<div class="cl is-text"><span class="code">&amp;[i32] fat ptr = 16, data = 12</span></div></div></div>
+<p>逐行解释：<code>u8</code> 有全部 256 种取值，没有 niche，<code>Option&lt;u8&gt;</code> 只能老实加一个字节；<code>&amp;u8</code> 和 <code>Box&lt;i32&gt;</code> 有空指针 niche，<code>Option</code> 免费；<code>NonZeroU8</code> 把零让出来，所以 <code>Option&lt;NonZeroU8&gt;</code> 仍然只有 1 字节；三个变体的 <code>Tiny</code> 只需要 1 字节就能放下判别式；而 <code>WithData</code> 最大变体是 <code>[u64; 3]</code>（24 字节），加上对齐后一共 32 字节——多出来的 8 字节是判别式与尾部填充共同消化的结果。最后一行提醒我们区分「胖指针本身 16 字节」和「它指向的切片数据 12 字节」。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>把枚举想成一张演唱会门票。票上印着「内场 / 看台 / 站席」的标签，但场馆不会真的在票里塞一张标签纸再塞一把椅子——它只在票根上盖个章，座位区按最大区域预留。niche 优化更进一步：如果「站席」是空地，那「票上没写座位号」本身就足够表达「这是站席」，连章都省了。</p>
+
+</div>
+</section>
+<p>回过头看 <code>WithData = 32</code> 这个数字：载荷 <code>[u64; 3]</code> 是 24 字节，其对齐为 8，所以整个枚举的对齐至少是 8；判别式需要区分三个变体，1 字节足够，但放在 24 字节之后会落在 24 这一位置，必须补足到 8 的整数倍，于是整体变成 32 字节。多出来的 8 字节并非全被浪费——编译器可以把判别式放在页内任意空闲位置，也可以利用 <code>Big</code> 变体高位字节的冗余。这里要记住的规律是：<strong>对齐决定粒度，填充决定浪费，niche 决定能否省掉标签</strong>。</p>
+<p>需要注意：<code>repr(Rust)</code> 下的布局是编译器的自由选择，跨版本、跨编译器不保证一致。只有写了 <code>#[repr(C)]</code> 才获得稳定的 C ABI 布局（那时 niche 优化通常不再可用，判别式会变成显式的整数标签）。<code>repr(u8)</code> / <code>repr(usize)</code> 则用于「无字段枚举」，让它拥有确定的原始表示，常用于 FFI 和枚举到整数的 <code>as</code> 转换。不要根据 <code>size_of</code> 的数字去硬编码偏移，它只是理解机制的窗口；真正需要跨语言传递枚举时，用 <code>repr(C)</code> 并显式定义判别式类型。</p>
+<h2 id="rust-ch01-enums-and-errors-5-2-穷尽性检查与-non_exhaustive-编译器替你维护清单">5.2 穷尽性检查与 <code>#[non_exhaustive]</code>：编译器替你维护清单</h2>
+<p><code>match</code> 的核心价值不是「多分支」，而是 <strong>exhaustiveness checking（穷尽性检查）</strong>：编译器把枚举的全部变体列成清单，逐条核对你有没有覆盖。漏掉一个，编译直接失败：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_exhaust_fail.rs -o u05_exhaust_fail</span></div>
+<div class="cl is-text"><span class="code">error[E0004]: non-exhaustive patterns: `Status::Running(_)` not covered</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u05_exhaust_fail.rs:4:11</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">4 |     match s {</span></div>
+<div class="cl is-text"><span class="code">  |           ^ pattern `Status::Running(_)` not covered</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">note: `Status` defined here</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u05_exhaust_fail.rs:1:6</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">1 | enum Status { Pending, Running(u32), Done }</span></div>
+<div class="cl is-text"><span class="code">  |      ^^^^^^            ------- not covered</span></div>
+<div class="cl is-text"><span class="code">  = note: the matched value is of type `Status`</span></div>
+<div class="cl is-text"><span class="code">help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">6 ~         Status::Done =&gt; 2,</span></div>
+<div class="cl is-text"><span class="code">7 ~         Status::Running(_) =&gt; todo!(),</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>这个「拒绝编译」在演进中极其值钱：半年后给 <code>Status</code> 加一个 <code>Failed(Error)</code> 变体，所有 <code>match</code> 它的地方会一起报错，逼你逐个回答「新状态该怎么处理」。相比在线上日志里第一次看到陌生状态、再倒查是哪条路径漏了，这是把 bug 提前到编译期。</p>
+<p>穷尽性检查的判定单位是<strong>模式</strong>，而模式本身有一套小语言：字面量匹配具体值；<code>_</code> 匹配任意值但不绑定，因此不会移动被匹配的值；变量名绑定并移动（对非 <code>Copy</code> 类型）；<code>ref x</code> / <code>&amp;x</code> 只借不移动；<code>x @ Some(_)</code> 用 <code>@</code> 同时给整体和内部命名；<code>0..=9</code> 是范围模式；<code>Some(n) if n &gt; 0</code> 用 guard 追加条件。编译器判断穷尽性时并不要求「模式覆盖所有取值」这么简单，它会做布尔覆盖分析：两个范围模式的并集、一个字面量加一个通配符、以及 <code>true</code>/<code>false</code> 的枚举式覆盖，都能被正确识别。</p>
+<p>还有一个容易被忽视的细节叫 <strong>match ergonomics（匹配人体工学）</strong>：对 <code>&amp;Status</code> 做 <code>match</code> 时，分支里写 <code>Status::Running(p)</code> 而不是 <code>&amp;Status::Running(ref p)</code> 也可以，编译器会自动把匹配层级的 <code>&amp;</code> 和解引用的默认值「对齐」，使 <code>p</code> 类型为 <code>&amp;u32</code>。这让代码干净许多，但也意味着你必须留意绑定的到底是值还是引用——想清楚「这里会不会发生移动」，比背规则更可靠。</p>
+<p><code>#[non_exhaustive]</code> 是枚举作者主动交出这份保护的属性，用于<strong>向外发布的库</strong>：它告诉下游 crate「以后我可能加变体，你现在不能假装已经列全了」。效果只发生在 crate 边界之外，同一 crate 内仍然照常检查：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">19 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">#[non_exhaustive]</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">pub enum Level {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    Low,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    High,</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">// 同一个 crate 内，`#[non_exhaustive]` 不放松穷尽性检查</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn label(l: Level) -&gt; &amp;'static str {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    match l {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        Level::Low =&gt; &quot;low&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        Level::High =&gt; &quot;high&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;{} / {}&quot;, label(Level::Low), label(Level::High));</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">}</span></div></div></div>
+<p>把同一个枚举编成 <code>rlib</code> 再给下游用，情况立刻变了：</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 --crate-type=rlib --crate-name ne u05_ne_lib.rs -o libne.rlib</span></div>
+<div class="cl is-text"><span class="code">lib ok</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 --extern ne=libne.rlib u05_ne_user.rs -o u05_ne_user.exe</span></div>
+<div class="cl is-text"><span class="code">error[E0004]: non-exhaustive patterns: `_` not covered</span></div>
+<div class="cl is-text"><span class="code"> --&gt; u05_ne_user.rs:5:11</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">5 |     match x {</span></div>
+<div class="cl is-text"><span class="code">  |           ^ pattern `_` not covered</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">note: `Level` defined here</span></div>
+<div class="cl is-text"><span class="code">  = note: `Level` is marked as non-exhaustive, so a wildcard `_` is necessary to match exhaustively</span></div>
+<div class="cl is-text"><span class="code">help: ensure that all possible cases are being handled by adding a match arm with a wildcard pattern or an explicit pattern as shown</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p><code>#[non_exhaustive]</code> 也能加在结构体上，效果略有不同：下游 crate 无法用结构体字面量构造它（因为将来可能新增字段），但仍可以用 <code>..</code> 解构，且新增字段时解构处不会被自动强制报错。把它加在枚举上是更强的契约——下游必须保留通配符分支。这是库作者应对 semver 的工具：新增变体在 semver 意义上算破坏性变更，而标记了 <code>non_exhaustive</code> 之后，下游代码在升级后仍能编译，只是新变体会落到 <code>_</code> 分支里，需要靠测试或日志发现。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：为了「一次性编译通过」而在每个 <code>match</code> 末尾加 <code>_ =&gt; {}</code>，等于主动撕掉编译器给的清单。新增变体时，所有写了通配符的地方都会静默走进兜底分支——往往是返回一个看似合理的默认值，bug 就这样潜伏下来。正确做法是：变体数量少且自己维护时逐个列全；确实无法列全（例如对接外部协议几十种状态码）时才用 <code>_</code>，并在分支里记录日志或返回明确的错误，而不是默默忽略。</p>
+
+</div>
+</section>
+<p><code>if let</code> 和 <code>let else</code> 是同一套模式匹配能力在不同场景的表达：只关心一种变体用 <code>if let</code>；「解不开就立刻退出」用 <code>let else</code>，且 <code>else</code> 块必须以 <code>return</code>/<code>break</code>/<code>panic!</code> 这类发散表达式结尾，因为该分支不允许继续往下走。需要覆盖全部变体时，老老实实用 <code>match</code>。</p>
+<h2 id="rust-ch01-enums-and-errors-5-3-option-与-result-的组合子-把分支折成流水线">5.3 Option 与 Result 的组合子：把分支折成流水线</h2>
+<p><code>Option&lt;T&gt;</code> 和 <code>Result&lt;T, E&gt;</code> 就是普通枚举，编译器没有给它们任何特权；它们之所以无处不在，是因为整个标准库围绕它们建立了一套统一的组合子（combinator）约定。组合子让我们用流水线代替嵌套 <code>match</code>，同时保留「错误是值」的显式性。</p>
+<table>
+<thead>
+<tr>
+<th>组合子</th>
+<th>所属类型</th>
+<th>语义</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>map</code></td>
+<td>两者</td>
+<td>成功时变换内部值</td>
+<td>不必拆开再包回去</td>
+</tr>
+<tr>
+<td><code>and_then</code></td>
+<td>两者</td>
+<td>成功时调用返回同类容器的函数</td>
+<td>串联多个可能失败的步骤</td>
+</tr>
+<tr>
+<td><code>or_else</code></td>
+<td>两者</td>
+<td>失败时调用备用逻辑</td>
+<td>降级、回退</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td><code>Option</code></td>
+<td>谓词为假则变 <code>None</code></td>
+<td>条件过滤单个值</td>
+</tr>
+<tr>
+<td><code>zip</code></td>
+<td><code>Option</code></td>
+<td>两个都有值才合成元组</td>
+<td>多源对齐</td>
+</tr>
+<tr>
+<td><code>flatten</code></td>
+<td>两者</td>
+<td>去掉一层嵌套</td>
+<td>扁平化</td>
+</tr>
+<tr>
+<td><code>ok_or</code> / <code>ok</code></td>
+<td>互转</td>
+<td><code>Option</code> ⇄ <code>Result</code></td>
+<td>补一个错误/丢掉错误</td>
+</tr>
+<tr>
+<td><code>transpose</code></td>
+<td>嵌套</td>
+<td><code>Option&lt;Result&lt;T,E&gt;&gt;</code> ⇄ <code>Result&lt;Option&lt;T&gt;,E&gt;</code></td>
+<td>循环里收集可失败项</td>
+</tr>
+</tbody></table>
+
+<p>组合子的设计有一个共同模式：它们都消费 <code>self</code>（即消费掉原来的 <code>Option</code>/<code>Result</code>），返回新的容器。这既是为了转移所有权，也保证了「用过的状态不会再被误用」。<code>as_ref</code>/<code>as_mut</code> 是这一规则的例外：它们把持有 <code>&amp;T</code> 的容器变成持有引用的容器，让你在不移动原值的前提下继续链式调用。理解「消费—变换—返回」这个骨架之后，<code>map</code>、<code>and_then</code>、<code>or_else</code> 之间的区别就只是「传入的闭包返回什么」：<code>map</code> 的闭包返回普通值，<code>and_then</code> 的闭包返回同类容器（所以能摊平一层），<code>or_else</code> 的闭包在失败路径上运行。</p>
+<p>真正体现复利效应的是 <code>collect</code>：把 <code>Iterator&lt;Item = Result&lt;T, E&gt;&gt;</code> 收集成 <code>Result&lt;Vec&lt;T&gt;, E&gt;</code> 时，遇到第一个 <code>Err</code> 就短路，不需要手写循环提前返回。其背后的 <code>FromIterator for Result</code> 实现本质上是一个 <code>try_fold</code>：每轮检查是否为 <code>Err</code>，是则立刻停止。下面的程序把上面这些组合子跑了一遍：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let o = Some(41);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    println!(&quot;map+filter: {:?}&quot;, o.map(|x| x + 1).filter(|x| *x &gt; 40));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let r: Result&lt;i32, String&gt; = &quot;42&quot;.parse::&lt;i32&gt;().map_err(|e| e.to_string());</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;and_then:   {:?}&quot;, r.and_then(|x| if x &gt; 0 { Ok(x * 2) } else { Err(&quot;non-positive&quot;.into()) }));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let a = Some(1);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let b = Some(2);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;zip:        {:?}&quot;, a.zip(b));</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;flatten:    {:?}&quot;, Some(Some(7)).flatten());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let vr: Vec&lt;Result&lt;i32, &amp;str&gt;&gt; = vec![Ok(1), Ok(2)];</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let rr: Result&lt;Vec&lt;i32&gt;, &amp;str&gt; = vr.into_iter().collect();</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;collect R:  {:?}&quot;, rr);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let so: Option&lt;Result&lt;i32, &amp;str&gt;&gt; = Some(Ok(5));</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;transpose:  {:?}&quot;, so.transpose());</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    println!(&quot;ok_or:      {:?}&quot;, None::&lt;i32&gt;.ok_or(&quot;缺失&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b3.rs -o u05_b3 &amp;&amp; ./u05_b3</span></div>
+<div class="cl is-text"><span class="code">map+filter: Some(42)</span></div>
+<div class="cl is-text"><span class="code">and_then:   Ok(84)</span></div>
+<div class="cl is-text"><span class="code">zip:        Some((1, 2))</span></div>
+<div class="cl is-text"><span class="code">flatten:    Some(7)</span></div>
+<div class="cl is-text"><span class="code">collect R:  Ok([1, 2])</span></div>
+<div class="cl is-text"><span class="code">transpose:  Ok(Some(5))</span></div>
+<div class="cl is-text"><span class="code">ok_or:      Err(&quot;缺失&quot;)</span></div></div></div>
+<p>注意 <code>or_else</code> 和 <code>unwrap_or_else</code> 接受闭包是刻意的<strong>惰性设计</strong>：只有确实失败时才执行闭包。若把昂贵的字符串拼接写成 <code>unwrap_or(format!(...))</code>，无论成功与否都会付出格式化开销；改成 <code>unwrap_or_else(|| format!(...))</code> 就只在失败路径付费。<code>Option::filter</code> 同样是惰性的反面案例——它立刻求值谓词，因为必须当场决定保留还是丢弃。</p>
+<p>组合子不是越多越好。三层以上的 <code>and_then</code> 链，可读性往往不如一个带 <code>?</code> 的函数；而 <code>map_err</code> 里塞复杂逻辑，通常意味着该把错误转换抽成显式的 <code>From</code> 实现（下一节）。判断标准很简单：<strong>流水线每一步都在同一个抽象层次上，就用组合子；层次一乱，就拆成函数。</strong> 另一个实用建议是给长链起一个中间变量名（<code>let parsed = ...;</code>），让每一段的中间类型在调试器里可见，而不是把六个调用堆成一行。</p>
+<h2 id="rust-ch01-enums-and-errors-5-4-的展开式与-from-错误如何自动换挡">5.4 <code>?</code> 的展开式与 <code>From</code>：错误如何自动换挡</h2>
+<p><code>?</code> 看似语法糖，展开后是一次精确的 <code>match</code> 加一次显式转换。设 <code>parse::&lt;i32&gt;()</code> 返回 <code>Result&lt;i32, ParseIntError&gt;</code>，而函数返回 <code>Result&lt;i32, AppError&gt;</code>，那么：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">text</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">1 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">let n: i32 = s.trim().parse()?;</span></div></div></div>
+<p>约等于：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">text</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">4 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">let n: i32 = match s.trim().parse() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    Ok(v)  =&gt; v,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    Err(e) =&gt; return Err(AppError::from(e)),  // From 在这里被自动调用</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">};</span></div></div></div>
+<p>两个动作缺一不可：<code>Err</code> 时<strong>提前返回</strong>（所以 <code>?</code> 只能在返回 <code>Option</code>/<code>Result</code>/兼容类型且实现 <code>Try</code> 的函数里用），以及把底层错误通过 <code>From</code> 转成当前函数的错误类型。这也是为什么只要为自定义错误实现 <code>From&lt;ParseIntError&gt;</code>，<code>?</code> 就能跨错误类型工作——「自动转换」不是魔法，是 trait 解析找到了那条实现。</p>
+<p>更一般地，这个机制由 <code>Try</code> trait 与 <code>Residual</code> 关联类型支撑：<code>Result&lt;T, E&gt;</code> 的残余类型是 <code>Result&lt;Infallible, E&gt;</code>，<code>Option&lt;T&gt;</code> 的残余类型是 <code>Option&lt;Infallible&gt;</code>，因此 <code>?</code> 既能用在返回 <code>Result</code> 的函数里，也能用在返回 <code>Option</code> 的函数里（<code>Err</code> 变成 <code>None</code>）。标准库里还有一条 blanket 实现 <code>impl&lt;T&gt; From&lt;T&gt; for T</code>，所以同类型错误之间不需要手写 <code>From</code>；而 <code>TryFrom&lt;U&gt;</code> 正是「可能失败的 <code>From</code>」，它让 <code>try_into()?</code> 与 <code>parse()?</code> 在写法上完全一致。理解这一层之后，<code>?</code> 就不再是「Rust 特有的问号」，而是一个通用的、由 trait 驱动的可恢复错误传播协议。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">29 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::num::ParseIntError;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">enum AppError {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    Parse(ParseIntError),</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    Range(i32),</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">impl From&lt;ParseIntError&gt; for AppError {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn from(e: ParseIntError) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        AppError::Parse(e)</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">// 展开 ? 后的等价写法（见正文对照）</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">fn parse_positive(s: &amp;str) -&gt; Result&lt;i32, AppError&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let n: i32 = s.trim().parse()?;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    if n &lt;= 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        return Err(AppError::Range(n));</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    Ok(n)</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="24"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    for s in [&quot; 7 &quot;, &quot;0&quot;, &quot;x&quot;] {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        println!(&quot;{s:?} -&gt; {:?}&quot;, parse_positive(s));</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b4.rs -o u05_b4 &amp;&amp; ./u05_b4</span></div>
+<div class="cl is-text"><span class="code">&quot; 7 &quot; -&gt; Ok(7)</span></div>
+<div class="cl is-text"><span class="code">&quot;0&quot; -&gt; Err(Range(0))</span></div>
+<div class="cl is-text"><span class="code">&quot;x&quot; -&gt; Err(Parse(ParseIntError { kind: InvalidDigit }))</span></div></div></div>
+<p>第三行的输出揭示了一个重要的工程事实：<code>Parse(ParseIntError { kind: InvalidDigit })</code> 保留了底层错误的全部细节。如果这里图省事写成 <code>.map_err(|_| AppError::Parse(&quot;bad&quot;))</code>，字符串里就只剩一句「出错」，线上排查时再也无法区分是空串、越界还是非法字符。<code>From</code> 实现的代码量很小，却守住了错误的<strong>可诊断性</strong>。</p>
+<p>反面案例是给自定义错误实现 <code>From&lt;String&gt;</code>：一旦有了这条实现，任何 <code>.map_err(|e| e.to_string())?</code> 都能悄悄变成 <code>AppError</code>，错误类型最终退化成「某个字符串」，穷尽性检查和 <code>source()</code> 链路一起失效。更克制的做法是只在明确的来源类型上实现 <code>From</code>，把「临时拼一句人话」留在最外层的展示代码里。另一个细节是 <code>?</code> 会立即把错误转成当前函数类型，因此多层调用中错误类型可能连续转换两次；只要每层都实现 <code>From</code> 且保留 <code>source</code>，链路仍然是完整的。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p><code>?</code> 像快递的「到付+转运」。包裹（值）正常就继续往下一站走；一旦贴了「失败」标签，就当场原路退回，但退回前先换上本楼层统一的包装箱——这个换箱动作就是 <code>From</code>。没有统一包装箱（没实现 <code>From</code>），快递员就拒绝揽件，编译器直接报错。</p>
+
+</div>
+</section>
+<p>还有一个边界：<code>?</code> 在 <code>main</code> 里可用，前提是 <code>main</code> 返回 <code>Result&lt;(), E&gt;</code>（或实现了 <code>Termination</code> 的类型）。此时未处理的错误会以非零退出码结束进程并打印 <code>Debug</code> 表示，适合 CLI 工具，但不适合需要自定义退出码或错误展示的库。</p>
+<h2 id="rust-ch01-enums-and-errors-5-5-error-trait-与错误链-让上下文随错误一起上行">5.5 <code>Error</code> trait 与错误链：让上下文随错误一起上行</h2>
+<p><code>Display</code> 负责「给人看」，<code>Debug</code> 负责「给开发者看」，而 <code>std::error::Error</code> 负责「给程序看」——它最重要的能力是 <code>source()</code>，返回一个更底层的错误引用，从而把多个层次的错误串成<strong>错误链（error chain）</strong>。库代码应该实现 <code>Error</code>，并在包装错误时保留 <code>source</code>，这样上层既能展示自己的上下文，也能沿链向下挖掘根因。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">40 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::error::Error;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::fmt;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct IoLike { path: String }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">impl fmt::Display for IoLike {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        write!(f, &quot;无法读取 {}&quot;, self.path)</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">impl Error for IoLike {}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">struct Wrapped { ctx: String, src: IoLike }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="16"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">impl fmt::Display for Wrapped {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        write!(f, &quot;{}（上下文：{}）&quot;, self.src, self.ctx)</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">impl Error for Wrapped {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    fn source(&amp;self) -&gt; Option&lt;&amp;(dyn Error + 'static)&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        Some(&amp;self.src)</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="27"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let e = Wrapped {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        ctx: &quot;加载配置&quot;.to_string(),</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        src: IoLike { path: &quot;/etc/app.toml&quot;.to_string() },</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    };</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut cur: Option&lt;&amp;(dyn Error + 'static)&gt; = Some(&amp;e);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    while let Some(err) = cur {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        println!(&quot;[{i}] {err}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        cur = err.source();</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        i += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b5.rs -o u05_b5 &amp;&amp; ./u05_b5</span></div>
+<div class="cl is-text"><span class="code">[0] 无法读取 /etc/app.toml（上下文：加载配置）</span></div>
+<div class="cl is-text"><span class="code">[1] 无法读取 /etc/app.toml</span></div></div></div>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">错误链的自上而下遍历
+
+ 外层 Wrapped（ctx=加载配置）
+        │  source()
+        ▼
+ 内层 IoLike（path=/etc/app.toml）
+        │  source()
+        ▼
+      None（链尾，根因）</pre></figure>
+<p>注意 <code>source()</code> 的签名里是 <code>dyn Error + &#39;static</code>：错误链上的每一环都必须拥有足够长的生命周期，通常意味着错误类型本身拥有数据（而不是借用局部字符串）。这也是为什么实际项目里错误结构体多用 <code>String</code> 而不是 <code>&amp;str</code>——看似多一次分配，换来的是错误能安全跨函数、跨线程传递。</p>
+<p>当错误被擦除成 <code>Box&lt;dyn Error&gt;</code> 之后，还能恢复类型信息吗？可以，<code>downcast_ref</code> 是 <code>dyn Error</code> 提供的下转能力（要求具体类型是 <code>&#39;static</code>）。这让「上层用统一错误类型、个别调用点需要知道具体错误以决定是否重试」成为可能：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">28 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::error::Error;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::fmt;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct Locked { code: u32 }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">impl fmt::Display for Locked {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn fmt(&amp;self, f: &amp;mut fmt::Formatter&lt;'_&gt;) -&gt; fmt::Result {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        write!(f, &quot;服务端锁定，状态码 {}&quot;, self.code)</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">impl Error for Locked {}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">impl Locked {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    fn is_retryable(&amp;self) -&gt; bool { self.code == 503 }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let err: Box&lt;dyn Error&gt; = Box::new(Locked { code: 503 });</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    if let Some(l) = err.downcast_ref::&lt;Locked&gt;() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        println!(&quot;识别为 Locked: code={}, retryable={}&quot;, l.code, l.is_retryable());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    } else {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        println!(&quot;未知错误: {err}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="25"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let other: Box&lt;dyn Error&gt; = Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, &quot;nope&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;能否下转为 Locked? {}&quot;, other.downcast_ref::&lt;Locked&gt;().is_some());</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b7.rs -o u05_b7 &amp;&amp; ./u05_b7</span></div>
+<div class="cl is-text"><span class="code">识别为 Locked: code=503, retryable=true</span></div>
+<div class="cl is-text"><span class="code">能否下转为 Locked? false</span></div></div></div>
+<p>但下转是一种「逃出抽象」的操作，用多了说明错误类型设计得不够好：如果调用方经常需要下转，不如一开始就让错误枚举显式列出这些情况。还要注意 <code>downcast_ref</code> 只适用于 <code>&#39;static</code> 的具体类型，且一次只能匹配一个类型；错误链上的每一环都要分别下转，代码很快会变得笨重。只有在「绝大多数调用方只关心统一错误，极少数调用方需要额外信息」这种不对称场景下，下转才是合适的工具。</p>
+<p>另外，<code>Error</code> 还有两个可选方法 <code>provide</code>（用于 <code>request_ref</code>/<code>request_value</code> 取出结构化信息）和已废弃的 <code>description</code>/<code>cause</code>。日常写库只需要 <code>Display + Debug + Error</code>，再按需要提供 <code>source</code>。社区里的 <code>thiserror</code> 派生宏，本质就是把你手写的这三件事自动生成；理解手写版本之后，再用宏就不会对其行为感到意外。</p>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>关注点</th>
+<th>典型表示</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>底层 I/O / 解析</td>
+<td>发生了什么客观事实</td>
+<td><code>ParseIntError</code>、<code>io::Error</code></td>
+</tr>
+<tr>
+<td>领域层</td>
+<td>这个事实对业务意味着什么</td>
+<td><code>AppError</code> 枚举，带上下文</td>
+</tr>
+<tr>
+<td>应用层</td>
+<td>如何展示、是否重试、退出码</td>
+<td><code>Display</code> 文案 + <code>main -&gt; Result</code></td>
+</tr>
+</tbody></table>
+
+<h2 id="rust-ch01-enums-and-errors-5-6-panic-unwind-abort-与-catch_unwind-的边界">5.6 panic：unwind、abort 与 <code>catch_unwind</code> 的边界</h2>
+<p>不是所有失败都适合用 <code>Result</code> 表达。当程序进入「继续运行只会产生更坏结果」的状态（不变量被破坏、内存布局假设失效），或者错误发生在无法返回值的上下文（如 <code>Drop</code>、<code>FnOnce</code> 回调签名被外部规定），就会用到 <code>panic!</code>。panic 有两条退路：</p>
+<p><strong>unwind（展开）</strong>：默认策略。从 panic 点开始逐层退出栈帧，沿途调用每个局部变量的 <code>Drop</code>，直到线程入口；如果是主线程且没人接住，进程以非零码结束。<code>catch_unwind</code> 只能在 unwind 策略下工作，它把「展开」拦在一个边界内，返回一个 <code>Result</code>。</p>
+<p><strong>abort（终止）</strong>：不做展开，立刻整个进程结束，代码体积更小，也不存在析构函数抛异常的问题。通过 Cargo 配置切换：</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">2 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[profile.release]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">panic = &quot;abort&quot;</span></div></div></div>
+<p>下面的程序演示 unwind 的两个关键事实：栈展开时 <code>Drop</code> 确实被调用；<code>catch_unwind</code> 之后外层代码继续执行。同时它也演示了为什么需要 <code>AssertUnwindSafe</code>——闭包捕获了 <code>Cell</code>（内部可变性），标准库无法自动证明它「panic 后仍满足不变量」，需要程序员显式背书。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">25 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::panic::{catch_unwind, AssertUnwindSafe};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Guard(&amp;'static str);</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Drop for Guard {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn drop(&amp;mut self) {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        println!(&quot;  drop {}&quot;, self.0);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let r = catch_unwind(|| {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let _g = Guard(&quot;内层&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        println!(&quot;panic 之前&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        panic!(&quot;boom&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    });</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;catch_unwind 返回 Err? {}&quot;, r.is_err());</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    println!(&quot;外层仍然活着&quot;);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    let n = std::cell::Cell::new(0);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let r2 = catch_unwind(AssertUnwindSafe(|| {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        n.set(n.get() + 1);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        println!(&quot;闭包计数 {}&quot;, n.get());</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    }));</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    println!(&quot;第二个 catch: {:?}&quot;, r2.is_ok());</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u05_b6.rs -o u05_b6 &amp;&amp; ./u05_b6</span></div>
+<div class="cl is-text"><span class="code">panic 之前</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">thread 'main' (45124) panicked at u05_b6.rs:14:9:</span></div>
+<div class="cl is-text"><span class="code">boom</span></div>
+<div class="cl is-text"><span class="code">note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</span></div>
+<div class="cl is-text"><span class="code">  drop 内层</span></div>
+<div class="cl is-text"><span class="code">catch_unwind 返回 Err? true</span></div>
+<div class="cl is-text"><span class="code">外层仍然活着</span></div>
+<div class="cl is-text"><span class="code">闭包计数 1</span></div>
+<div class="cl is-text"><span class="code">第二个 catch: true</span></div></div></div>
+<p>stderr 的 panic 信息与 stdout 的 <code>drop</code> 行在终端里可能交错，取决于缓冲刷新时机；两行的先后顺序不影响结论——<code>drop 内层</code> 确实在 panic 之后、外层代码继续之前发生了。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑一：编译成 <code>panic = &quot;abort&quot;</code> 后，<code>catch_unwind</code> 永远等不到 <code>Err</code>，进程直接死。库代码不要假设自己一定能被「接住」。坑二：panic 跨越 <code>extern &quot;C&quot;</code> 边界是未定义行为，FFI 回调里必须用 <code>catch_unwind</code> 把 panic 拦在 Rust 侧再转成错误码。坑三：<code>catch_unwind</code> 不是异常处理——捕获后共享状态可能处于「不变量被破坏」的中间态，这正是 <code>UnwindSafe</code> 约束想提醒你的事；不要用它来实现普通的业务分支。</p>
+
+</div>
+</section>
+<p>还有两个工程细节值得知道。其一，<code>std::panic::set_hook</code> 可以替换 panic 的默认打印逻辑，接入日志系统；<code>take_hook</code> 则可以把原钩子取回来包装。其二，如果 <code>Drop</code> 实现里再次 panic，而此时栈已经在展开，就会触发 <strong>double panic</strong> 并直接 abort——这也是为什么析构函数里严禁调用 <code>unwrap()</code>。panic 的默认输出里带线程名和文件行号，可以 <code>$RUST_BACKTRACE=1</code> 打开完整栈回溯；<code>panic!</code> 使用格式化字符串，<code>panic_any</code> 则可以抛出任意 <code>&#39;static</code> 载荷，<code>catch_unwind</code> 拿回的 <code>Box&lt;dyn Any + Send&gt;</code> 可再下转取出。</p>
+<p>为什么有人主动选 abort？因为 unwind 需要生成大量 landing pad 和类型信息，会增大二进制体积；在嵌入式、WASM 或与 C 链接的场景里，展开表也可能不被支持。切换方式只有一行 Cargo 配置，但要清楚它的代价：所有 <code>catch_unwind</code> 失效，且 panic 不再给任何局部对象调用 <code>Drop</code>（包括文件内容可能来不及刷盘）。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>Result 像「提前挂号看病」，病人（调用方）清醒地拿着单子去处理；panic 像「火警」，楼里所有人立刻往外撤，撤退时每个房间最后检查一遍（Drop）。catch_unwind 是在楼道里加一道防火门，把火挡在某个区段内；但火已经烧过的房间不能假设还是原样，这就是不变量可能被破坏的意思。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-enums-and-errors-5-7-从错误到-api-库与应用的不同边界">5.7 从错误到 API：库与应用的不同边界</h2>
+<p>错误处理没有唯一正确答案，但有几个稳定的取舍维度。把它们想清楚，比记住某个 crate 的宏用法更重要。</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>库（library）</th>
+<th>应用（binary）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>错误类型</td>
+<td>自定义枚举，保留机器可读信息</td>
+<td>可以用 <code>Box&lt;dyn Error&gt;</code> / anyhow 聚合</td>
+</tr>
+<tr>
+<td>上下文</td>
+<td>在自己这一层加最少必要上下文</td>
+<td>在最外层统一转成用户可读文案</td>
+</tr>
+<tr>
+<td>是否 panic</td>
+<td>几乎不；不变量破坏除外</td>
+<td>启动配置错误等可以早失败</td>
+</tr>
+<tr>
+<td>是否暴露底层错误</td>
+<td>暴露并通过 <code>source()</code> 串起来</td>
+<td>一般不直接展示给用户</td>
+</tr>
+</tbody></table>
+
+<p>第一，错误类型宁可结构丰富，也不要把一切都压成 <code>String</code>。<code>String</code> 只适合「我确实只想知道人话」的边界；在库内部，它丢掉了程序做决策所需的信息——重试还是放弃、重试几次、要不要回滚，靠的都是结构化的错误类别。</p>
+<p>第二，组合优于继承。Rust 没有异常层级，常见做法是定义一个顶层错误枚举，每个变体承载一类来源错误，再用 <code>From</code> 把来源错误映射进来。这样 <code>?</code> 能自然工作，<code>source()</code> 也能把链路补全。当错误来源超过十几个、且组合方式复杂时，才考虑用 <code>Box&lt;dyn Error&gt;</code> 牺牲一点类型信息换取简洁。</p>
+<p>第三，<code>unwrap</code>/<code>expect</code> 不是禁忌，但要能回答「凭什么确定不会失败」。在 <code>main</code> 里解析一个编译期写死的常量、在测试里构造已知合法的输入，都是合理场景；在来自网络、文件、用户输入的路径上滥用，等于把 <code>Result</code> 的好处全部作废，重新变回「运行时随机崩溃」。</p>
+<p>第四，错误枚举要「平」不要「深」。把二十种错误塞进五个嵌套枚举里，看似分类清晰，实则逼调用方写二十行下转代码判断重试；一个带 <code>kind</code> 字段的扁平枚举反而更易用。只有当不同类别的错误<strong>确实需要不同的处理策略</strong>（可重试 / 致命 / 需用户介入）时，才值得分成不同的顶层类型。</p>
+<p>第五，日志与错误是分工，不是替代。<code>log::error!</code> 记录的是「发生了什么、现场是什么样」，写给运维看；返回给调用方的 <code>Err</code> 是「这一步失败了、原因是什么」，写给程序看。把错误 <code>println!</code> 出来再返回 <code>Ok(())</code>，是同时丢失机器可读性和上下文归属的反模式。反过来，把每个中间层都打一遍日志也是噪音——错误链本身已经携带了路径信息，只应该在最外层记录一次。</p>
+<p>最后，<code>main</code> 可以返回 <code>Result&lt;(), E&gt;</code>，这要归功于 <code>Termination</code> trait；也可以返回 <code>std::process::ExitCode</code> 来精确控制退出码。<code>?</code> 让启动阶段的错误自然冒泡到 <code>main</code>，由运行时统一打印，这对 CLI 工具很方便；但如果程序是守护进程，更需要的是「捕获启动错误 → 记录 → 按错误类别决定退出码或重试」，那就该在 <code>main</code> 里显式 <code>match</code>。</p>
+<p>把这七节串起来看，Rust 的错误处理其实是一条完整链路：枚举在类型层穷举所有可能，niche 优化让这份表达力几乎不花额外内存；组合子与 <code>?</code> 让成功路径保持线性、失败路径自动短路；<code>From</code> 与 <code>Error::source()</code> 保证错误在跨层时既不丢细节也不丢上下文；而 panic 则是当量变引发质变、继续运行已无意义时，那条被明确标注的逃生通道。理解每一环「为什么这样设计」，远比背下 API 名字更能迁移到新代码库里。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>写一个 <code>enum ParseState { Empty, Partial(usize), Complete(String) }</code>，用 <code>size_of</code> 算出它的大小，并解释为什么它不会等于三个字段大小之和。</li>
+<li>把 <code>5.4</code> 的 <code>parse_positive</code> 改成同时接受 <code>ParseIntError</code> 和 <code>std::io::Error</code> 两种来源（例如从 stdin 读一行再解析），要求只用 <code>?</code> 不手写 <code>match</code>，并打印出底层错误种类。</li>
+<li>给 <code>5.5</code> 的错误链再加一层 <code>ConfigError</code>，使 <code>source()</code> 链长度为 3；然后写一个循环逐层打印，并验证链尾返回 <code>None</code>。</li>
+<li>在一个小程序里分别用 <code>panic = &quot;unwind&quot;</code>（默认）和 <code>panic = &quot;abort&quot;</code> 编译，观察并解释 <code>catch_unwind</code> 在两种情况下的行为差异（提示：abort 版本会直接退出，需要用子进程或退出码观察）。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li><code>Option&lt;&amp;u8&gt;</code> 为什么不需要额外的判别式字节？哪一类「非法位模式」被借用了？</li>
+<li><code>#[non_exhaustive]</code> 对同一 crate 内的 <code>match</code> 有影响吗？它真正保护的是谁？</li>
+<li><code>?</code> 展开后的 <code>match</code> 表达式里，<code>From</code> 转换发生在哪一个分支、为什么？</li>
+<li><code>Error::source()</code> 为什么要返回 <code>dyn Error + &#39;static</code>？如果返回借用局部 <code>String</code> 的引用会怎样？</li>
+<li><code>catch_unwind</code> 在 <code>panic = &quot;abort&quot;</code> 下还能捕获 panic 吗？跨 FFI 边界时正确做法是什么？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__lifetimes.md.html">← 生命周期</a><a href="rust__chapters__ch01__structs-traits-generics.md.html">trait 与泛型 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

@@ -4,33 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>并查集与堆</title>
-<meta name="description" content="第 16 单元 · 建议 60 分钟 · 从「等价类合并」到「动态维护最值」，掌握两种摊还数据结构">
+<meta name="description" content="第 19 单元 · 建议 90 分钟 · 从「等价类合并」到「动态维护最值」，吃透两种摊还数据结构">
 <meta name="author" content="Codrift · Rust 工程笔记">
 <meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
 <link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
 </head>
 <body class="type-unit">
 <a class="skip-link" href="#content">跳到正文</a>
 <nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
 <main class="doc" id="doc">
-<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">并查集与堆</h1><p class="doc-sub">第 16 单元 · 建议 60 分钟 · 从「等价类合并」到「动态维护最值」，掌握两种摊还数据结构</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 16-union-find-and-heap.md</p></header>
-<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-16-1-并查集-路径压缩与按秩合并">16.1 并查集：路径压缩与按秩合并</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-16-2-并查集的应用-连通块计数">16.2 并查集的应用：连通块计数</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-16-3-binaryheap-标准库的最大堆">16.3 BinaryHeap：标准库的最大堆</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-16-4-手写二叉堆与复杂度小结">16.4 手写二叉堆与复杂度小结</a></li></ol></nav>
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">并查集与堆</h1><p class="doc-sub">第 19 单元 · 建议 90 分钟 · 从「等价类合并」到「动态维护最值」，吃透两种摊还数据结构</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 19-union-find-and-heap.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-1-并查集的不变量与迭代-find">19.1 并查集的不变量与迭代 find</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-2-摊还要点-路径压缩与按秩合作为何接近-o-1">19.2 摊还要点：路径压缩与按秩合作为何接近 O(1)</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-3-应用-连通块计数与网格压维">19.3 应用：连通块计数与网格压维</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-4-binaryheap-标准库最大堆与-reverse-小根堆">19.4 BinaryHeap：标准库最大堆与 Reverse 小根堆</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-5-手写二叉堆-下标公式与上浮下沉">19.5 手写二叉堆：下标公式与上浮下沉</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-6-建堆的线性时间与-binaryheap-内部">19.6 建堆的线性时间与 BinaryHeap 内部</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-7-随机对拍-并查集对-bfs-手写堆对标准库">19.7 随机对拍：并查集对 BFS、手写堆对标准库</a></li><li class="toc-l2"><a href="#rust-ch03-union-find-and-heap-19-8-工程取舍-调试清单与练习">19.8 工程取舍、调试清单与练习</a></li></ol></nav>
 <article class="content" id="content" aria-label="正文">
 <section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
 <div class="box-b">
 <ul>
-<li>理解并查集维护的等价类不变量，能写出迭代版 find 与按秩合并，并解释路径压缩的作用</li>
-<li>会把二维网格压成一维下标，用并查集统计连通块，且正确处理边界处的 usize 减法</li>
-<li>会用 BinaryHeap 实现 top-k，并用 std::cmp::Reverse 把它变成小根堆</li>
-<li>能手写二叉堆的 sift-up / sift-down，说明父子下标关系与堆排序的思路</li>
+<li>理解并查集维护的等价类不变量，能写出迭代版 <code>find</code> 与按秩合并，并说清路径压缩的作用</li>
+<li>会用并查集统计连通块、把二维网格压成一维下标，且正确处理边界处的 <code>usize</code> 减法</li>
+<li>会用 <code>BinaryHeap</code> 实现 top-k，并用 <code>std::cmp::Reverse</code> 把它变成小根堆</li>
+<li>能手写二叉堆的 sift-up / sift-down，说明父子下标关系与 O(n) 建堆的理由</li>
+<li>能用 LCG 随机数据把并查集与 BFS、手写堆与标准库做对拍验证</li>
 </ul>
 
 </div>
 </section>
-<h2 id="rust-ch03-union-find-and-heap-16-1-并查集-路径压缩与按秩合并">16.1 并查集：路径压缩与按秩合并</h2>
-<p>并查集维护一组<strong>不相交集合</strong>，支持两个操作：判断两个元素是否属于同一集合，以及把两个集合合并。实现方式是给每个元素一个 <code>parent</code> 指针，每棵树的根代表整个集合。核心不变量很简单：<strong>沿着 parent 一路向上走必然到达根，同集合元素的根相同</strong>；合并时只改一个根的 parent，不碰其他节点。</p>
-<p>裸的 find 在链状树上可能退化成 O(n)，所以必须加两个优化。<strong>路径压缩</strong>：find 过程中把沿途所有节点直接挂到根下，使树高度趋近于 1。<strong>按秩合并</strong>：始终让节点数少（或高度小）的树挂到另一棵下面，避免长链。两者叠加后，单次操作的摊还复杂度是反阿克曼函数 α(n)，在实际数据规模下可以当作常数。</p>
-<p>Rust 里要把 find 写成<strong>迭代</strong>而不是递归。递归版在深链上会占用大量栈帧，虽然路径压缩后链很短，但在压缩发生之前仍可能很深；迭代版用两个 while 循环，第一趟找根，第二趟把沿途节点改挂到根，完全不碰调用栈。注意第二趟里要先用 <code>let next = self.parent[cur];</code> 把下一个节点存到局部变量，再写 <code>self.parent[cur] = root</code>，否则既读又写同一个 <code>Vec</code> 的位置，虽然编译器未必报错，逻辑上也容易把链路改乱。</p>
+<h2 id="rust-ch03-union-find-and-heap-19-1-并查集的不变量与迭代-find">19.1 并查集的不变量与迭代 find</h2>
+<p><strong>问题定义</strong>：维护一组不相交集合，支持判断两个元素是否属于同一集合（查询），以及把两个集合合并（更新）。典型场景是动态连通性：边逐条加入，随时要回答&quot;这两个点连通吗&quot;。</p>
+<p><strong>不变量</strong>：给每个元素一个 <code>parent</code> 指针，每棵树的根代表整个集合。沿着 <code>parent</code> 一路向上走必然到达根，同集合元素的根相同。合并时只改一个根的 <code>parent</code>，不碰其他节点——这是并查集高效的根本原因：一次操作只动 O(1) 个指针。</p>
+<p>裸的 <code>find</code> 在链状树上可能退化成 O(n)，所以必须做两件事。<strong>路径压缩</strong>：find 过程中把沿途所有节点直接挂到根下，让树高度趋近 1。<strong>按秩合并</strong>：始终让节点数少（或高度小）的树挂到另一棵下面，避免长链。两者叠加后，单次操作的摊还复杂度是反阿克曼函数 α(n)，在实际数据规模下不超过 5，可以当作常数。</p>
+<p>Rust 里要把 <code>find</code> 写成<strong>两趟迭代</strong>而非递归。第一趟顺着 <code>parent</code> 找根；第二趟把沿途节点改挂到根下。第二趟里必须先用 <code>let next = self.parent[cur];</code> 把下一个节点存到局部变量，再写 <code>self.parent[cur] = root</code>，否则链路会被提前改乱，导致后续节点找不到原来的根。递归版在深链上会占用大量栈帧，虽然路径压缩后链很短，但在压缩发生之前仍可能很深；迭代版完全不碰调用栈。</p>
 <div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">63 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct UnionFind {</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
 <div class="cl"><span class="ln" data-ln="3"></span><span class="code">    rank: Vec&lt;u32&gt;,</span></div>
@@ -94,20 +97,61 @@
 <div class="cl"><span class="ln" data-ln="61"></span><span class="code">    println!(&quot;0~2 connected = {}&quot;, uf.connected(0, 2));</span></div>
 <div class="cl"><span class="ln" data-ln="62"></span><span class="code">    println!(&quot;0~5 connected = {}&quot;, uf.connected(0, 5));</span></div>
 <div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div></div></div>
-<p><code>connected</code> 里刻意把两次 find 的结果先存进局部变量再比较。写成 <code>self.find(a) == self.find(b)</code> 通常也能编译，但拆开写能避免&quot;同一表达式里两次可变借用 self&quot;的隐患，意图也更清楚。<code>union</code> 返回 <code>bool</code> 表示这次合并是否真的发生——这个返回值非常有用，下一节就靠它统计连通块数量。</p>
-<p>选择并查集还是 DFS/BFS，取决于&quot;查询是静态的还是动态的&quot;。如果所有边一次性给定、只问一次连通性，DFS 或 BFS 更直接；如果边是逐条加入的、中间要随时回答&quot;这两个点是否已连通&quot;，并查集才是正解。<code>rank</code> 字段用 <code>u8</code> 就够了，因为树的高度最多 log₂(n)，即使 n 取 10⁹ 也不会超过 31，省下的内存对大规模节点很可观。另外务必统一编号约定：如果题目给的是 1 到 n 的编号，读入后要么整体减一转成 0 基，要么把数组开成 <code>n + 1</code> 并浪费 0 号位，两种做法都行，但绝不能混用。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
-<div class="cl is-text"><span class="code">components = 2</span></div>
-<div class="cl is-text"><span class="code">0~2 connected = true</span></div>
-<div class="cl is-text"><span class="code">0~5 connected = false</span></div></div></div>
+<p><code>connected</code> 里刻意把两次 <code>find</code> 的结果先存进局部变量再比较。写成 <code>self.find(a) == self.find(b)</code> 通常也能编译，但拆开写能避免&quot;同一表达式里两次可变借用 self&quot;的隐患，意图也更清楚。<code>union</code> 返回 <code>bool</code> 表示这次合并是否真的发生——这个返回值非常有用，下一节就靠它统计连通块数量。</p>
+<p>一个初学者常问的问题是：为什么 <code>find</code> 需要 <code>&amp;mut self</code>？因为路径压缩会修改 <code>parent</code> 数组——查询本身也是一次&quot;写操作&quot;。这与很多语言里&quot;查询就是只读&quot;的直觉不同，但在 Rust 里反而顺理成章：类型签名准确反映了副作用，调用方一眼就知道这个方法会动内部结构。如果确实需要只读查询（例如在同一个表达式里对两个不同元素调用），可以写一个不压缩的 <code>find_readonly(&amp;self) -&gt; usize</code> 作为补充，但代价是可能遇到深链，通常没必要。编号约定也要统一：题目给出 1 到 n 的编号时，要么读入后整体减一转成 0 基，要么把数组开成 <code>n + 1</code> 并浪费 0 号位，两种做法都行，但绝不能混用。</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
 <p>并查集就像给一堆人分小组，每组选一个组长。要问两个人是不是同组，就顺着&quot;我的组长是谁&quot;一路问上去，看最后是不是同一个组长；要合并两组，让人少的那组组长认人多的那组当组长。路径压缩就是问过一次之后直接把组长名字改掉，下次一秒出答案。</p>
 
 </div>
 </section>
-<h2 id="rust-ch03-union-find-and-heap-16-2-并查集的应用-连通块计数">16.2 并查集的应用：连通块计数</h2>
-<p>并查集最常见的使用场景是&quot;动态连通性&quot;：一开始每个元素自成一团，随着边或相邻关系不断加入，问最后剩几团。一个直接的做法是维护计数器 <code>count</code>，初值为元素个数；每次 <code>union</code> 返回 <code>true</code> 就把 <code>count</code> 减一，因为一次有效合并恰好消灭一个连通块。这比最后遍历所有元素收集不同的根更省事，也不依赖 <code>HashSet</code>。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u19_b1.rs -o u19_b1 &amp;&amp; ./u19_b1</span></div>
+<div class="cl is-text"><span class="code">components = 2</span></div>
+<div class="cl is-text"><span class="code">0~2 connected = true</span></div>
+<div class="cl is-text"><span class="code">0~5 connected = false</span></div></div></div>
+<h2 id="rust-ch03-union-find-and-heap-19-2-摊还要点-路径压缩与按秩合作为何接近-o-1">19.2 摊还要点：路径压缩与按秩合作为何接近 O(1)</h2>
+<p>两种优化解决的是不同问题。<strong>路径压缩</strong>解决&quot;查询慢&quot;：反复查询同一个深链时，第一次走完整条路，之后所有节点都直接指向根。<strong>按秩合并</strong>解决&quot;合并慢&quot;：即使不做路径压缩，也保证树高是 O(log n)，因为只有秩相等时树高才加一，而秩翻倍需要指数多次合并。单独用任何一个都能改善性能，但都会有退化场景；叠加起来才有 α(n) 的强保证。</p>
+<p><code>rank</code> 字段语义是&quot;树高的上界&quot;，不是精确高度——路径压缩会让真实高度下降，但不更新 rank，这没关系，因为上界依然成立。它用 <code>u8</code> 就足够：树的高度最多 log₂(n)，即使 n 取 10⁹ 也不会超过 31。省下的内存对大规模节点很可观——一百万个节点，<code>Vec&lt;u32&gt;</code> 要 4 MB，<code>Vec&lt;u8&gt;</code> 只要 1 MB。更激进的做法是只存一个 <code>i32 size</code> 字段做按大小合并，语义更直观：让节点少的树挂到节点多的树下，合并后更新根的大小。</p>
+<p>反阿克曼函数 α(n) 增长慢到什么程度？对于任何实际可测的 n（哪怕 n 等于宇宙中原子的数量级），α(n) 都不超过 5。也就是说，&quot;摊还 O(α(n))&quot;在实践中就是 O(1)。这个结论来自势能分析：定义势能为所有节点的&quot;高度贡献&quot;之和，路径压缩虽然让单次查询的实际代价可能较高，却大幅降低势能，从而摊还代价很小；按秩合并则保证势能的总增量有限。理解&quot;实际代价 + 势能变化 = 摊还代价&quot;这个等式，是读懂摊还分析证明的钥匙，也是区分&quot;我背下了结论&quot;和&quot;我理解为什么&quot;的分界线。</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>朴素实现</th>
+<th>加路径压缩</th>
+<th>再加按秩合并</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>查询连通</td>
+<td>O(n)</td>
+<td>摊还 O(log n)</td>
+<td>摊还 O(α(n))</td>
+</tr>
+<tr>
+<td>合并集合</td>
+<td>O(n)</td>
+<td>摊还 O(log n)</td>
+<td>摊还 O(α(n))</td>
+</tr>
+<tr>
+<td>空间</td>
+<td>O(n)</td>
+<td>O(n)</td>
+<td>O(n)</td>
+</tr>
+</tbody></table>
+
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>两个高频错误。其一，把 <code>find</code> 写成递归：在故意构造的深链上，递归深度可达 n，Rust 主线程默认栈只有几 MB，会直接 stack overflow。其二，合并时不比较秩，直接 <code>parent[rb] = ra</code>：如果每次都把大树挂到小树下，会造出长度 n 的链，路径压缩也救不回来，单次操作退化到 O(n)。还有一种隐蔽错误是只压缩被查询节点本身而不压缩沿途节点，这样链的其他部分依旧很深，效果大打折扣——两趟迭代的写法正是为了把整条路径都压平。</p>
+
+</div>
+</section>
+<p>选择并查集还是 DFS/BFS，取决于&quot;查询是静态的还是动态的&quot;。如果所有边一次性给定、只问一次连通性，DFS 或 BFS 更直接；如果边是逐条加入的、中间要随时回答&quot;这两个点是否已连通&quot;，并查集才是正解。注意并查集只支持<strong>合并</strong>不支持<strong>拆分</strong>，一旦需要&quot;删除一条边&quot;，就得换用更高级的动态连通结构，或者离线倒过来处理（先算最终状态，再逆向拆边）。认清这个能力边界，比记住模板更重要。</p>
+<h2 id="rust-ch03-union-find-and-heap-19-3-应用-连通块计数与网格压维">19.3 应用：连通块计数与网格压维</h2>
+<p><strong>问题定义</strong>：给定一个二维网格，<code>&#39;1&#39;</code> 表示陆地、<code>&#39;0&#39;</code> 表示水，求岛屿（水平或垂直相邻的陆地构成的连通块）数量。</p>
+<p><strong>不变量</strong>：<code>count</code> 等于当前已确认的连通块数。初始把所有陆地格子的数量计入 <code>count</code>；每发生一次真正有效的合并（两个原本不同的集合被合并），连通块数恰好减一。<code>union</code> 返回的 <code>bool</code> 正是&quot;是否真的合并&quot;的信号，用它来驱动 <code>count -= 1</code>，比最后遍历收集不同的根更省事，也不依赖 <code>HashSet</code>。</p>
 <p>网格类题目需要把二维坐标 <code>(r, c)</code> 压成一维下标：<code>id = r * cols + c</code>。这样 <code>Vec</code> 只需一维，缓存局部性也更好。危险在于反推邻居时容易出现 <code>r - 1</code> 或 <code>c - 1</code>，而 <code>usize</code> 在 <code>r = 0</code> 或 <code>c = 0</code> 时会下溢 panic。务必把边界判断写在减法<strong>之前</strong>：先 <code>if r &gt; 0</code> 再算 <code>(r - 1) * cols + c</code>。Rust 不会像 C 那样悄悄回绕，这反而是好事——错误会当场暴露。</p>
 <div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">74 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct UnionFind {</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
@@ -184,10 +228,14 @@
 <div class="cl"><span class="ln" data-ln="73"></span><span class="code">    println!(&quot;{}&quot;, num_islands(&amp;g));</span></div>
 <div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div></div></div>
 <p>这里只检查上和左两个方向，而不是上下左右四个方向。因为并查集合并是对称操作，每对相邻陆地只会被访问一次；若同时检查四个方向，同一组相邻格会被重复合并，虽然结果不变，但多做了无用功。这个&quot;只向右和向下扩展&quot;的剪枝在很多网格搜索题里都成立。</p>
-<p>并查集还有个高频用法是<strong>检测环</strong>：按顺序加入无向图的每条边，如果它连接的两个端点已经在同一个集合里，说明这条边构成环。这能在不建完整邻接表的情况下找出&quot;多余的一条边&quot;，复杂度只需 O(m α(n))。相比之下，用 DFS 检测环要额外维护访问状态和父节点，代码更长。记住这个判别式——<code>union</code> 返回 <code>false</code> 即代表遇到环——很多看起来不同的题目（冗余连接、等式方程矛盾、最小生成树判环）都能归到它上面。</p>
-<h2 id="rust-ch03-union-find-and-heap-16-3-binaryheap-标准库的最大堆">16.3 BinaryHeap：标准库的最大堆</h2>
-<p><code>std::collections::BinaryHeap</code> 是<strong>最大堆</strong>，<code>peek</code> 返回最大元素，插入与弹出都是 O(log n)。求第 k 大时，维护一个大小不超过 k 的小堆思想：用最大堆保存当前见过的 k 个最小元素，堆顶是这 k 个里最大的；新元素只有比堆顶还大才替换。最终堆顶就是第 k 大。</p>
-<p>需要小根堆时用 <code>std::cmp::Reverse&lt;T&gt;</code> 包一层，它会把所有比较方向反转，是标准库正式提供的类型，不依赖任何外部 crate。堆里也可以放自定义结构体，只要为它实现 <code>Ord</code> 与 <code>PartialOrd</code>（通常 derive 即可，字段顺序决定优先级）。</p>
+<p>并查集还有个高频用法是<strong>检测环</strong>：按顺序加入无向图的每条边，如果它连接的两个端点已经在同一个集合里，说明这条边构成环。判别式是 <code>union</code> 返回 <code>false</code>，很多看起来不同的题目（冗余连接、等式方程矛盾、最小生成树判环）都能归到它上面。</p>
+<p>复杂度方面，设网格大小为 <code>rows × cols</code>，建表与扫描各一遍，总时间是 O(rows · cols · α(rows · cols))，实践中就是线性；空间是一个长度为 <code>rows · cols</code> 的 <code>parent</code> 数组加一个同样长的 <code>rank</code> 数组。相比之下，用 BFS 求岛屿数也是线性，但需要额外的访问标记队列。并查集的优势在于&quot;边&quot;是逐条给出的场景——如果陆地格子会动态增加，BFS 每次都要重跑，而并查集只需对新格子与邻居做合并。静态网格上两者势均力敌，选择哪一个更多取决于代码习惯。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u19_b2.rs -o u19_b2 &amp;&amp; ./u19_b2</span></div>
+<div class="cl is-text"><span class="code">3</span></div></div></div>
+<h2 id="rust-ch03-union-find-and-heap-19-4-binaryheap-标准库最大堆与-reverse-小根堆">19.4 BinaryHeap：标准库最大堆与 Reverse 小根堆</h2>
+<p><strong>问题定义</strong>：维护一个动态集合，支持插入元素与取出当前最值。堆用完全二叉树实现，根节点永远是最值，插入与弹出都是 O(log n)。</p>
+<p><code>std::collections::BinaryHeap</code> 是<strong>最大堆</strong>，<code>peek</code> 返回最大元素。求第 k 大时，维护一个大小不超过 k 的&quot;小根堆&quot;思想：用最大堆保存当前见过的 k 个最小元素，堆顶是这 k 个里最大的；新元素只有比堆顶还大才替换。最终堆顶就是第 k 大。这个技巧的价值在于把堆的空间从 O(n) 压到 O(k)，在海量数据流场景尤其重要。</p>
+<p>需要真正的小根堆时用 <code>std::cmp::Reverse&lt;T&gt;</code> 包一层，它会把所有比较方向反转，是标准库正式提供的类型。堆里也可以放自定义结构体，只要为它实现 <code>Ord</code> 与 <code>PartialOrd</code>（通常 derive 即可，字段顺序决定优先级）。</p>
 <table>
 <thead>
 <tr>
@@ -219,7 +267,7 @@
 <td>弹最值</td>
 <td><code>pop()</code></td>
 <td>O(log n)</td>
-<td>下沉调整，堆空时返回 None</td>
+<td>下沉调整，堆空返回 None</td>
 </tr>
 <tr>
 <td>变长</td>
@@ -269,10 +317,31 @@
 <div class="cl"><span class="ln" data-ln="38"></span><span class="code">    println!(&quot;kth largest = {:?}&quot;, kth_largest(&amp;a, 2));</span></div>
 <div class="cl"><span class="ln" data-ln="39"></span><span class="code">    println!(&quot;merge cost = {}&quot;, merge_stones(&amp;[1, 2, 3, 4]));</span></div>
 <div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div></div></div>
-<p><code>merge_stones</code> 演示了堆的经典应用：每次取当前最小的两块合并，再把结果放回。用 <code>Reverse</code> 把最大堆翻成小根堆，循环里解构 <code>let Reverse(a) = heap.pop().unwrap();</code> 直接拿到内部值。这个&quot;反复合并最小两项&quot;的贪心结构是 Huffman 编码等问题的基础。</p>
-<p>关于 table 里的 <code>peek</code>：它返回 <code>Option&lt;&amp;T&gt;</code>，空堆时不要直接 <code>unwrap()</code>，除非你能用 <code>len</code> 或循环条件保证非空。上面的 top-k 代码里，<code>else</code> 分支能走到说明堆已经装了 k 个元素且 k &gt; 0，所以 <code>peek().unwrap()</code> 是安全的。另外 <code>BinaryHeap</code> 可以从 <code>Vec</code> 直接 <code>collect</code> 或用 <code>BinaryHeap::from(vec)</code> 构造，标准库会在 O(n) 时间内完成建堆，比逐个 push 的 O(n log n) 更高效。若要在堆里放自定义类型，注意 <code>Ord</code> 必须与 <code>PartialOrd</code> 的语义一致，否则标准库可能表现出违反直觉的行为。</p>
-<h2 id="rust-ch03-union-find-and-heap-16-4-手写二叉堆与复杂度小结">16.4 手写二叉堆与复杂度小结</h2>
-<p>手写堆的价值不在于替代标准库，而在于理解它的下标不变量。用数组按层序存放完全二叉树：下标 i 的左孩子是 <code>2i + 1</code>，右孩子是 <code>2i + 2</code>，父节点是 <code>(i - 1) / 2</code>。这些公式在 <code>i = 0</code> 时都会出问题，所以上浮循环必须写成 <code>while i &gt; 0</code>，先判断再算父节点。下沉时用 <code>l = 2i + 1</code>、<code>r = l + 1</code>，先检查 <code>l &lt; len</code> 再决定是否比较 r。</p>
+<p><code>merge_stones</code> 演示了堆的经典应用：每次取当前最小的两块合并，再把结果放回。用 <code>Reverse</code> 把最大堆翻成小根堆，循环里解构 <code>let Reverse(a) = heap.pop().unwrap();</code> 直接拿到内部值。这个&quot;反复合并最小两项&quot;的贪心结构是 Huffman 编码等问题的基础。关于 <code>peek</code>：它返回 <code>Option&lt;&amp;T&gt;</code>，空堆时不要直接 <code>unwrap()</code>，除非你能用 <code>len</code> 或循环条件保证非空。top-k 代码的 <code>else</code> 分支能走到，说明堆已经装了 k 个元素且 k &gt; 0，所以 <code>peek().unwrap()</code> 安全。</p>
+<p>自定义类型入堆时，优先级由 <code>Ord</code> 决定，而 <code>Ord</code> 必须与 <code>PartialOrd</code> 的语义保持一致，否则标准库可能表现出违反直觉的行为。多关键字排序可以 derive 结构体后按字段顺序自然比较，也可以手写 <code>cmp</code> 实现&quot;先按优先级、再按时间戳&quot;这类规则；后一种情况下务必注意比较的对称性：<code>a.cmp(b)</code> 与 <code>b.cmp(a)</code> 必须互为反向，否则堆的内部调整会破坏不变量。<code>Reverse</code> 本身是一个零成本的包装类型，只在比较时翻转方向，不会带来额外分配或间接访问，所以&quot;用小根堆&quot;不需要任何外部 crate。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>堆像一个自动排好队的取号机，永远把&quot;最重要&quot;的那个放在最前面让你取。它不保证整个队列有序，只保证队首是最优的——这个克制的承诺换来 O(log n) 的插入和弹出。如果你需要&quot;第 k 大&quot;而不是全部有序，堆比排序更省时省空间。</p>
+
+</div>
+</section>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u19_b3.rs -o u19_b3 &amp;&amp; ./u19_b3</span></div>
+<div class="cl is-text"><span class="code">kth largest = Some(6)</span></div>
+<div class="cl is-text"><span class="code">merge cost = 19</span></div></div></div>
+<h2 id="rust-ch03-union-find-and-heap-19-5-手写二叉堆-下标公式与上浮下沉">19.5 手写二叉堆：下标公式与上浮下沉</h2>
+<p>手写堆的价值不在于替代标准库，而在于理解它的下标不变量。用数组按层序存放完全二叉树：下标 i 的左孩子是 <code>2i + 1</code>，右孩子是 <code>2i + 2</code>，父节点是 <code>(i - 1) / 2</code>。这些公式在 <code>i = 0</code> 时都会出问题（<code>(0 - 1) / 2</code> 下溢），所以上浮循环必须写成 <code>while i &gt; 0</code>，先判断再算父节点。下沉时用 <code>l = 2i + 1</code>、<code>r = l + 1</code>，先检查 <code>l &lt; len</code> 再决定是否比较 r。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">完全二叉树与数组下标的对应（小根堆）
+
+          1(0)
+        /      \
+      3(1)      5(2)
+     /   \      /
+    7(3) 9(4) 11(5)
+
+数组: [1, 3, 5, 7, 9, 11]
+下标:   0  1  2  3  4   5
+父(i) = (i-1)/2   左 = 2i+1   右 = 2i+2
+堆性质: 每个父节点 &lt;= 它的孩子</pre></figure>
 <div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">72 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct MinHeap {</span></div>
 <div class="cl"><span class="ln" data-ln="2"></span><span class="code">    data: Vec&lt;i32&gt;,</span></div>
 <div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
@@ -345,20 +414,226 @@
 <div class="cl"><span class="ln" data-ln="70"></span><span class="code">    let a = [5, 3, 8, 1, 9, 2];</span></div>
 <div class="cl"><span class="ln" data-ln="71"></span><span class="code">    println!(&quot;{:?}&quot;, heap_sort(&amp;a));</span></div>
 <div class="cl"><span class="ln" data-ln="72"></span><span class="code">}</span></div></div></div>
-<p>把数组所有元素依次 push 进堆再逐个 pop，就得到升序序列，这是 O(n log n) 的堆排序。若改用原地建堆（从最后一个非叶节点开始下沉），建堆可以做到 O(n)，整体仍为 O(n log n)，但常数更小。堆最常见的用途是优先队列：Dijkstra 取当前距离最小的点、合并 K 路有序序列取最小头元素、以及在海量数据里维护 top-k。它们共同的模式都是&quot;插入一个候选、弹出一个最优&quot;，这正是堆擅长的事。</p>
-<p>上浮与下沉都用 <code>swap</code> 而不是逐个赋值，是因为 <code>Vec::swap</code> 一次完成两个位置的交换，不需要先克隆出临时值；对 <code>i32</code> 这类 <code>Copy</code> 类型差别不大，但换成 String 或自定义结构体时就能省下分配。正确性方面，上浮终止时父节点不大于当前节点，且原本的堆性质未被破坏；下沉终止时当前节点不大于两个孩子，两边子树递归地满足堆性质。这两个局部性质合起来就是全局不变量。写完代码后，用小数组跑一次堆排序并检查结果是否有序，是最省事的自检。</p>
+<p>上浮与下沉都用 <code>swap</code> 而不是逐个赋值，是因为 <code>Vec::swap</code> 一次完成两个位置的交换，不需要先克隆出临时值；对 <code>i32</code> 这类 <code>Copy</code> 类型差别不大，但换成 <code>String</code> 或自定义结构体时就能省下分配。正确性方面，上浮终止时父节点不大于当前节点，且原本的堆性质未被破坏；下沉终止时当前节点不大于两个孩子，两边子树递归地满足堆性质。这两个局部性质合起来就是全局不变量。把数组所有元素依次 push 进堆再逐个 pop，就得到升序序列，这是 O(n log n) 的堆排序。</p>
+<p>上面内存图里那棵树的数组表示也说明了一个工程事实：堆不占用额外的指针空间，父子关系完全靠下标算术推导，缓存局部性远优于显式链式树。这也是为什么 Dijkstra 这类算法喜欢用堆——它的&quot;插入候选、取出最优&quot;操作模式与堆的实现天然契合。若需要在堆中修改某个已存在元素的值（Dijkstra 的减小距离），标准库没有提供索引接口，做法是插入新值并在取出时懒删除旧值，或者自己维护一个 <code>pos</code> 数组实现支持 <code>decrease_key</code> 的索引堆。这两个方案是时间与代码复杂度的取舍：懒删除写起来简单，但堆里可能堆积无效元素；索引堆精确但代码量翻倍。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u19_b4.rs -o u19_b4 &amp;&amp; ./u19_b4</span></div>
+<div class="cl is-text"><span class="code">[1, 2, 3, 5, 8, 9]</span></div></div></div>
+<h2 id="rust-ch03-union-find-and-heap-19-6-建堆的线性时间与-binaryheap-内部">19.6 建堆的线性时间与 BinaryHeap 内部</h2>
+<p>逐个 <code>push</code> n 个元素建堆，总代价是 O(n log n)——因为每个元素最多上浮 log n 层。但标准库的 <code>BinaryHeap::from(vec)</code> 或 <code>collect()</code> 能在 <strong>O(n)</strong> 时间内完成建堆，做法是 Floyd 建堆：从最后一个非叶节点 <code>(n - 2) / 2</code> 开始，下标递减到 0，逐个执行下沉。</p>
+<p>为什么这样是线性的？关键在求和而不是逐点估计。高度为 h 的节点最多有 <code>n / 2^(h+1)</code> 个，每个下沉最多走 h 层，所以总代价不超过 <code>Σ h · n / 2^(h+1)</code>，这个级数收敛到 2n，因此是 O(n)。直觉是：绝大多数节点都在树的底部，它们下沉的距离很短；真正需要走 log n 层的根节点只有一个。把&quot;每个节点都花 log n&quot;误算成 O(n log n)，是忽视了对数高度的节点数量呈指数递减。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">输入 Vec → 从最后一个非叶节点开始 → 对每个节点做 sift-down（只向下比较，不向上）→ 根成为最值 → pop 时把末尾元素放到根再 sift-down</pre></figure>
+<p>O(n) 建堆 + n 次 O(log n) 弹出，总体仍是 O(n log n)，但常数比&quot;n 次 push&quot;更小。这也解释了为什么堆排序在需要原地建堆的场景有优势。实际工程中很少手写建堆——直接用 <code>BinaryHeap::from(vec)</code> 即可——但理解这个证明能让你在别人问&quot;为什么是 O(n)&quot;时讲得清楚，也是分析其他&quot;自底向上&quot;算法的基础。另一个细节是 <code>BinaryHeap::pop</code> 的实现：它把最后一个元素移到根，然后下沉，这正是上面手写 <code>pop</code> 的写法；<code>BinaryHeap</code> 内部就是一个 <code>Vec&lt;T&gt;</code>，所有下标公式与手写版完全一致。</p>
+<p>需要提醒的是，Floyd 建堆要求从后往前处理，顺序反过来（从根到叶子）就会失效——因为下沉依赖两棵子树已经是堆，从后往前正好保证这一点。这个&quot;自底向上&quot;的依赖顺序与动态规划里的拓扑序是同一个思想。如果改成从前往后对每个节点上浮，得到的仍是正确堆，但复杂度退回 O(n log n)。理解&quot;为什么必须这个方向&quot;，比记住&quot;从最后一个非叶节点开始&quot;这个结论更重要：它让你在遇到变体（例如最大堆改成小根堆、数组下标从 1 开始）时，能自己推导出正确的起点。</p>
+<h2 id="rust-ch03-union-find-and-heap-19-7-随机对拍-并查集对-bfs-手写堆对标准库">19.7 随机对拍：并查集对 BFS、手写堆对标准库</h2>
+<p>两个数据结构都容易出&quot;看起来对但边界错&quot;的 bug，对拍是最可靠的验证手段。本节用固定种子 777 的 LCG 同时验证两套实现：</p>
+<p><strong>并查集对照组</strong>：维护邻接矩阵，每次成功合并就同步置位；查询时用 BFS 在矩阵上判断可达性，这就是绝对正确的暴力解法。最后再对比&quot;不同根的数量&quot;与&quot;BFS 数出的连通块数&quot;。</p>
+<p><strong>手写堆对照组</strong>：把同一组随机数据分别塞进 <code>MinHeap</code> 与标准库 <code>BinaryHeap&lt;Reverse&lt;i32&gt;&gt;</code>，把两者的弹出序列与 <code>sort_unstable</code> 的结果三方比对。标准库实现本身就是一份可信参照。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">176 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::cmp::Reverse;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::collections::{BinaryHeap, VecDeque};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn lcg(state: &amp;mut u64) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    *state = state</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .wrapping_mul(6364136223846793005)</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        .wrapping_add(1442695040888963407);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    *state &gt;&gt; 33</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">struct UF {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    rank: Vec&lt;u8&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">impl UF {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    fn new(n: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        UF { parent: (0..n).collect(), rank: vec![0; n] }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut root = x;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        while self.parent[root] != root { root = self.parent[root]; }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let mut cur = x;</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        while self.parent[cur] != cur {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            let next = self.parent[cur];</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">            self.parent[cur] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">            cur = next;</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        root</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        let ra = self.find(a);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        let rb = self.find(b);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">        if ra == rb { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        if self.rank[ra] &lt; self.rank[rb] {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">            self.parent[ra] = rb;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">            self.parent[rb] = ra;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            if self.rank[ra] == self.rank[rb] { self.rank[ra] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">        true</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="44"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">fn reachable(adj: &amp;[Vec&lt;bool&gt;], s: usize, t: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let n = adj.len();</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    let mut vis = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    q.push_back(s);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    vis[s] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        if u == t { return true; }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        for v in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">            if adj[u][v] &amp;&amp; !vis[v] {</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">                vis[v] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">                q.push_back(v);</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    vis[t]</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="62"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">struct MinHeap {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">    data: Vec&lt;i32&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="66"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">impl MinHeap {</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    fn new() -&gt; Self { MinHeap { data: Vec::new() } }</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    fn push(&amp;mut self, v: i32) {</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        self.data.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        let mut i = self.data.len() - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">        while i &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">            let p = (i - 1) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">            if self.data[p] &lt;= self.data[i] { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">            self.data.swap(p, i);</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">            i = p;</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    fn pop(&amp;mut self) -&gt; Option&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        if self.data.is_empty() { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">        let ret = self.data[0];</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">        let last = self.data.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="83"></span><span class="code">        if !self.data.is_empty() {</span></div>
+<div class="cl"><span class="ln" data-ln="84"></span><span class="code">            self.data[0] = last;</span></div>
+<div class="cl"><span class="ln" data-ln="85"></span><span class="code">            let mut i = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="86"></span><span class="code">            loop {</span></div>
+<div class="cl"><span class="ln" data-ln="87"></span><span class="code">                let l = 2 * i + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="88"></span><span class="code">                let r = l + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="89"></span><span class="code">                if l &gt;= self.data.len() { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="90"></span><span class="code">                let mut smallest = l;</span></div>
+<div class="cl"><span class="ln" data-ln="91"></span><span class="code">                if r &lt; self.data.len() &amp;&amp; self.data[r] &lt; self.data[l] { smallest = r; }</span></div>
+<div class="cl"><span class="ln" data-ln="92"></span><span class="code">                if self.data[i] &lt;= self.data[smallest] { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="93"></span><span class="code">                self.data.swap(i, smallest);</span></div>
+<div class="cl"><span class="ln" data-ln="94"></span><span class="code">                i = smallest;</span></div>
+<div class="cl"><span class="ln" data-ln="95"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="96"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="97"></span><span class="code">        Some(ret)</span></div>
+<div class="cl"><span class="ln" data-ln="98"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="99"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="100"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="101"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="102"></span><span class="code">    let seed0 = 777u64;</span></div>
+<div class="cl"><span class="ln" data-ln="103"></span><span class="code">    let mut seed = seed0;</span></div>
+<div class="cl"><span class="ln" data-ln="104"></span><span class="code">    let mut bad = 0usize;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="105"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="106"></span><span class="code">    // 测试一：并查集 vs 邻接矩阵 BFS</span></div>
+<div class="cl"><span class="ln" data-ln="107"></span><span class="code">    for _ in 0..800 {</span></div>
+<div class="cl"><span class="ln" data-ln="108"></span><span class="code">        let n = (lcg(&amp;mut seed) % 8 + 3) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="109"></span><span class="code">        let mut adj = vec![vec![false; n]; n];</span></div>
+<div class="cl"><span class="ln" data-ln="110"></span><span class="code">        let mut uf = UF::new(n);</span></div>
+<div class="cl"><span class="ln" data-ln="111"></span><span class="code">        for _ in 0..40 {</span></div>
+<div class="cl"><span class="ln" data-ln="112"></span><span class="code">            let a = (lcg(&amp;mut seed) % n as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="113"></span><span class="code">            let b = (lcg(&amp;mut seed) % n as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="114"></span><span class="code">            if lcg(&amp;mut seed) % 2 == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="115"></span><span class="code">                if uf.union(a, b) {</span></div>
+<div class="cl"><span class="ln" data-ln="116"></span><span class="code">                    adj[a][b] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="117"></span><span class="code">                    adj[b][a] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="118"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="119"></span><span class="code">            } else if (uf.find(a) == uf.find(b)) != reachable(&amp;adj, a, b) {</span></div>
+<div class="cl"><span class="ln" data-ln="120"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="121"></span><span class="code">                println!(&quot;UF MISMATCH: n={} a={} b={}&quot;, n, a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="122"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="123"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="124"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="125"></span><span class="code">        if bad &gt; 0 { break; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="126"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="127"></span><span class="code">        let mut roots = std::collections::HashSet::new();</span></div>
+<div class="cl"><span class="ln" data-ln="128"></span><span class="code">        for i in 0..n { roots.insert(uf.find(i)); }</span></div>
+<div class="cl"><span class="ln" data-ln="129"></span><span class="code">        let mut vis = vec![false; n];</span></div>
+<div class="cl"><span class="ln" data-ln="130"></span><span class="code">        let mut comps_bfs = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="131"></span><span class="code">        for i in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="132"></span><span class="code">            if !vis[i] {</span></div>
+<div class="cl"><span class="ln" data-ln="133"></span><span class="code">                comps_bfs += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="134"></span><span class="code">                let mut q = VecDeque::new();</span></div>
+<div class="cl"><span class="ln" data-ln="135"></span><span class="code">                q.push_back(i);</span></div>
+<div class="cl"><span class="ln" data-ln="136"></span><span class="code">                vis[i] = true;</span></div>
+<div class="cl"><span class="ln" data-ln="137"></span><span class="code">                while let Some(u) = q.pop_front() {</span></div>
+<div class="cl"><span class="ln" data-ln="138"></span><span class="code">                    for v in 0..n {</span></div>
+<div class="cl"><span class="ln" data-ln="139"></span><span class="code">                        if adj[u][v] &amp;&amp; !vis[v] { vis[v] = true; q.push_back(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="140"></span><span class="code">                    }</span></div>
+<div class="cl"><span class="ln" data-ln="141"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="142"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="143"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="144"></span><span class="code">        if roots.len() != comps_bfs {</span></div>
+<div class="cl"><span class="ln" data-ln="145"></span><span class="code">            bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="146"></span><span class="code">            println!(&quot;COMP MISMATCH: roots={} bfs={}&quot;, roots.len(), comps_bfs);</span></div>
+<div class="cl"><span class="ln" data-ln="147"></span><span class="code">            break;</span></div>
+<div class="cl"><span class="ln" data-ln="148"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="149"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="150"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="151"></span><span class="code">    // 测试二：手写 MinHeap vs 标准库 BinaryHeap&lt;Reverse&gt; vs 排序</span></div>
+<div class="cl"><span class="ln" data-ln="152"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="153"></span><span class="code">        for _ in 0..1500 {</span></div>
+<div class="cl"><span class="ln" data-ln="154"></span><span class="code">            let n = (lcg(&amp;mut seed) % 30 + 1) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="155"></span><span class="code">            let vals: Vec&lt;i32&gt; = (0..n).map(|_| (lcg(&amp;mut seed) % 101) as i32 - 50).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="156"></span><span class="code">            let mut mine = MinHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="157"></span><span class="code">            let mut std_heap: BinaryHeap&lt;Reverse&lt;i32&gt;&gt; = BinaryHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="158"></span><span class="code">            for &amp;x in &amp;vals { mine.push(x); std_heap.push(Reverse(x)); }</span></div>
+<div class="cl"><span class="ln" data-ln="159"></span><span class="code">            let mut got = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="160"></span><span class="code">            let mut got_std = Vec::with_capacity(n);</span></div>
+<div class="cl"><span class="ln" data-ln="161"></span><span class="code">            while let Some(v) = mine.pop() { got.push(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="162"></span><span class="code">            while let Some(Reverse(v)) = std_heap.pop() { got_std.push(v); }</span></div>
+<div class="cl"><span class="ln" data-ln="163"></span><span class="code">            let mut expected = vals.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="164"></span><span class="code">            expected.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="165"></span><span class="code">            if got != expected || got_std != expected {</span></div>
+<div class="cl"><span class="ln" data-ln="166"></span><span class="code">                bad += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="167"></span><span class="code">                println!(&quot;HEAP MISMATCH: vals={:?} got={:?} std={:?} exp={:?}&quot;, vals, got, got_std, expected);</span></div>
+<div class="cl"><span class="ln" data-ln="168"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="169"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="170"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="171"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="172"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="173"></span><span class="code">    if bad == 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="174"></span><span class="code">        println!(&quot;diff seed={}: UF 800 cases + heap 1500 cases passed&quot;, seed0);</span></div>
+<div class="cl"><span class="ln" data-ln="175"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="176"></span><span class="code">}</span></div></div></div>
+<p>并查集测试里每次随机操作后可先判断再做一次一致性检查，用&quot;根相同&quot;与&quot;BFS 可达&quot;互为镜像；两个方向的不一致都会被抓住。堆测试则同时比标准库和排序，既验证手写实现，也验证测试框架本身没写反。固定种子加真实输出，让这份对拍结果可复现、可审计。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 u19_b5.rs -o u19_b5 &amp;&amp; ./u19_b5</span></div>
+<div class="cl is-text"><span class="code">diff seed=777: UF 800 cases + heap 1500 cases passed</span></div></div></div>
+<h2 id="rust-ch03-union-find-and-heap-19-8-工程取舍-调试清单与练习">19.8 工程取舍、调试清单与练习</h2>
+<p>两种数据结构的适用边界值得总结。并查集的强项是<strong>只增不减</strong>的等价关系：合并与查询都近乎常数，但不支持拆分；一旦题目要求&quot;撤销合并&quot;或&quot;删除边&quot;，就要改用可撤销并查集（用栈记录修改）或整体离线处理。堆的强项是<strong>动态最值</strong>：插入与取最值都是 O(log n)，但只能回答最值，查第 k 大需要配套技巧，删除任意元素需要额外的索引映射。两者都属于&quot;用不变量换效率&quot;的典范：并查集靠&quot;只认根&quot;压平查询，堆靠&quot;只保父不大于子&quot;压低维护成本。</p>
+<p>调试这类代码时逐项核对：并查集的 <code>find</code> 是否为迭代两趟、第二趟是否先存 <code>next</code>；<code>union</code> 是否比较了秩、是否只在真正合并时减少计数；网格压维后是否把边界判断写在减法之前；手写堆的上浮循环是否以 <code>i &gt; 0</code> 为条件、下沉是否先检查 <code>l &lt; len</code>；所有 <code>unwrap()</code> 是否都有长度或循环条件作为前提。写完先小规模手工推演，再用随机对拍大范围验证，这类摊还数据结构最怕的就是&quot;某个罕见路径下不变量被破坏&quot;。</p>
+<p>还要注意验证数据的分布。并查集在&quot;所有元素一开始就连通&quot;或&quot;所有操作都是查询&quot;的极端输入下，很多分支根本走不到；堆在全相等数据上，比较器的 Tie 处理是否正确也测不出来。因此对拍时要刻意混合递增、递减、全相等、只有两个不同值等退化样本，再叠加随机数据。第 19.7 节生成的并查集测试数据同时包含合并与查询，堆测试数据横跨正负值，正是出于这个考虑。把&quot;对拍通过&quot;当成必要而非充分条件，才是对正确性负责的态度。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>把第 19.1 节的 <code>rank: Vec&lt;u32&gt;</code> 改成 <code>size: Vec&lt;usize&gt;</code> 实现按大小合并（小树挂到大树下，合并后更新根的大小），用种子 <code>1234</code> 对 1000 组随机操作与 BFS 连通性对拍。</li>
+<li>给第 19.3 节的岛屿计数增加&quot;按行扫描&quot;的写法：只检查上和左改为检查上与左之外的方向组合，验证结果仍为 3，并解释为什么只查两个方向就够。</li>
+<li>把第 19.5 节的 <code>MinHeap</code> 改成泛型 <code>MinHeap&lt;T: Ord&gt;</code>，让 <code>push</code>/<code>pop</code> 处理任意可比较类型，并用 <code>String</code> 数据跑通堆排序。</li>
+<li>在第 19.4 节增加 <code>kth_smallest</code>：用 <code>BinaryHeap&lt;Reverse&lt;i32&gt;&gt;</code> 维护大小为 k 的最大候选集（保存 k 个最小元素），实现后与 <code>sort_unstable()[k-1]</code> 对拍 1000 组随机数据。</li>
+</ul>
+
+</div></div>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">
 <ul>
 <li>路径压缩与按秩合并各自解决什么问题？为什么两者要一起用？</li>
 <li>网格压成一维后，为什么必须先判断 <code>r &gt; 0</code> 再写 <code>r - 1</code>？</li>
-<li>BinaryHeap 默认是最大堆，怎样用标准库把它当小根堆？ Reverse 来自哪个模块？</li>
+<li><code>BinaryHeap</code> 默认是最大堆，怎样用标准库把它当小根堆？<code>Reverse</code> 来自哪个模块？</li>
+<li>手写堆的上浮循环为什么必须是 <code>while i &gt; 0</code>？如果写成 <code>while true</code> 会发生什么？</li>
+<li>Floyd 建堆为什么是 O(n) 而不是 O(n log n)？</li>
 </ul>
 
 </div>
 </section>
 </article>
-<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__stacks-queues-and-monotone.md.html">← 栈、队列与单调结构</a><a href="rust__chapters__ch03__sorting-and-binary-search.md.html">排序与二分 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__stacks-queues-monotone.md.html">← 栈、队列与单调结构</a><a href="rust__chapters__ch03__sorting-and-binary-search.md.html">排序与二分 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
 </main>
 </body>
 </html>

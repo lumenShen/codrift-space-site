@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>类型系统与所有权</title>
+<meta name="description" content="第 2 单元 · 建议 90 分钟 · 从内存布局出发，把 move、Copy、Clone 与 Drop 的精确边界一次讲清">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">类型系统与所有权</h1><p class="doc-sub">第 2 单元 · 建议 90 分钟 · 从内存布局出发，把 move、Copy、Clone 与 Drop 的精确边界一次讲清</p><p class="doc-meta">第一部分 · Rust 语法 · 源文件 02-types-and-ownership.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-1-类型的三重身份-尺寸-对齐与内存布局">2.1 类型的三重身份：尺寸、对齐与内存布局</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-2-copy-的精确边界-什么才能被安全地按位复制">2.2 Copy 的精确边界：什么才能被安全地按位复制</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-3-move-不是搬运-按位复制加失效标记">2.3 move 不是搬运：按位复制加失效标记</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-4-drop-的时机与顺序-像剥洋葱一样确定">2.4 Drop 的时机与顺序：像剥洋葱一样确定</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-5-整数溢出-同一段代码-两套语义">2.5 整数溢出：同一段代码，两套语义</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-6-类型推断与-never-type-编译器在解一组约束方程">2.6 类型推断与 never type：编译器在解一组约束方程</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-7-内部可变性引子-共享引用也能改数据">2.7 内部可变性引子：共享引用也能改数据</a></li><li class="toc-l2"><a href="#rust-ch01-types-and-ownership-2-8-工程取舍-值语义的收益与成本">2.8 工程取舍：值语义的收益与成本</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>用 <code>size_of</code> / <code>align_of</code> 解释栈上的值与堆上的缓冲区如何配合，理解 ZST 与字段重排</li>
+<li>说清 Copy 的充要条件，能预判一个自定义类型能否 <code>#[derive(Copy)]</code></li>
+<li>解释 move 是「按位复制加失效标记」而不是物理搬运，掌握部分移动与数组下标的限制</li>
+<li>说清 Drop 的调用时机与顺序、整数溢出在 debug/release 下的两套语义，以及内部可变性的边界</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch01-types-and-ownership-2-1-类型的三重身份-尺寸-对齐与内存布局">2.1 类型的三重身份：尺寸、对齐与内存布局</h2>
+<p>学类型时最容易被忽略的是：类型首先是一段<strong>内存布局的描述</strong>。编译器需要知道每个类型占多少字节（<code>size_of</code>）、起始地址必须满足什么对齐（<code>align_of</code>），才能正确地在栈上开空间、在结构体里排布字段、生成读写指令。<code>u8</code> 是 1 字节 1 对齐，<code>u64</code> 在常见的 64 位平台上是 8 字节 8 对齐；引用（<code>&amp;str</code>、<code>&amp;[u8]</code>）是胖指针，占两个机器字，因为除了地址还要带长度或元数据；<code>String</code> 和 <code>Vec&lt;T&gt;</code> 都是三个机器字：指向堆缓冲区的指针、长度、容量。这三个字本身在栈上，真正的数据在堆上——所谓「String 在堆上」是简略说法，准确说法是「String 的句柄在栈上，句柄指向的缓冲区在堆上」。</p>
+<p>结构体字段的排布由 <code>repr</code> 决定。默认的 <code>repr(Rust)</code> 不保证字段顺序与源码一致，编译器可以重排以减少填充；<code>repr(C)</code> 则严格按声明顺序排布，用于 FFI。<code>Mixed { a: u8, b: u64, c: u8 }</code> 在默认布局下是 16 字节（编译器把两个 <code>u8</code> 挪到一起），加上 <code>#[repr(C)]</code> 后变成 24 字节（中间要插 7 字节填充）。这个差异不是实现细节的八卦：它提醒你<strong>不要依赖结构体字段的内存顺序</strong>，除非明确写了 <code>repr(C)</code>。</p>
+<p>下面的程序把上述结论变成可观察的输出。<code>show::&lt;T&gt;()</code> 是泛型函数，泛型参数只用在 <code>size_of::&lt;T&gt;()</code> 这类类型级位置，所以调用时必须写 turbofish 语法 <code>::&lt;T&gt;</code>——编译器没法从参数反推出 <code>T</code>。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">23 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::mem::{align_of, size_of};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Mixed { a: u8, b: u64, c: u8 }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">#[repr(C)]</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">struct CMixed { a: u8, b: u64, c: u8 }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">fn show&lt;T&gt;(name: &amp;str) {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;{name:&lt;12} size={:&gt;3} align={:&gt;2}&quot;, size_of::&lt;T&gt;(), align_of::&lt;T&gt;());</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    show::&lt;u8&gt;(&quot;u8&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    show::&lt;i32&gt;(&quot;i32&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    show::&lt;u64&gt;(&quot;u64&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    show::&lt;&amp;str&gt;(&quot;&amp;str&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    show::&lt;String&gt;(&quot;String&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    show::&lt;Vec&lt;u8&gt;&gt;(&quot;Vec&lt;u8&gt;&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    show::&lt;()&gt;(&quot;()&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    show::&lt;[u8; 0]&gt;(&quot;[u8;0]&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    show::&lt;Mixed&gt;(&quot;Mixed&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    show::&lt;CMixed&gt;(&quot;#[repr(C)] Mixed&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div></div></div>
+<p>在本机（64 位）跑出的真实结果如下。注意 <code>()</code> 和 <code>[u8; 0]</code> 是<strong>零大小类型（ZST）</strong>：占 0 字节，但对齐仍为 1。ZST 很有用——它们可以当状态标记、当 trait 的标记类型，<code>Vec&lt;()&gt;</code> 不会为元素分配任何堆内存，<code>push</code> 只是把长度加一。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 layout.rs -o layout &amp;&amp; ./layout</span></div>
+<div class="cl is-text"><span class="code">u8           size=  1 align= 1</span></div>
+<div class="cl is-text"><span class="code">i32          size=  4 align= 4</span></div>
+<div class="cl is-text"><span class="code">u64          size=  8 align= 8</span></div>
+<div class="cl is-text"><span class="code">&amp;str         size= 16 align= 8</span></div>
+<div class="cl is-text"><span class="code">String       size= 24 align= 8</span></div>
+<div class="cl is-text"><span class="code">Vec&lt;u8&gt;      size= 24 align= 8</span></div>
+<div class="cl is-text"><span class="code">()           size=  0 align= 1</span></div>
+<div class="cl is-text"><span class="code">[u8;0]       size=  0 align= 1</span></div>
+<div class="cl is-text"><span class="code">Mixed        size= 16 align= 8</span></div>
+<div class="cl is-text"><span class="code">#[repr(C)] Mixed size= 24 align= 8</span></div></div></div>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">栈（固定大小、编译期可知）          堆（运行时分配、需手动归还）
+┌──────────────────┐          ┌────────────────────┐
+│ String s         │          │ &quot;Ada&quot; 的 UTF-8 字节 │
+│ ├ ptr ───────────┼─────────▶│ 41 64 61           │
+│ ├ len = 3        │          └────────────────────┘
+│ └ cap = 3        │
+└──────────────────┘</pre></figure>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>类型先是一张「占地说明」。栈上放的是句柄（几个机器字），堆上放的是真正的大块数据。ZST 像一张写着「占地为零」的说明：东西存在，但不占地方。结构体字段的顺序编译器可以悄悄调整，除非你用 <code>repr(C)</code> 明确要求按源码顺序摆。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-types-and-ownership-2-2-copy-的精确边界-什么才能被安全地按位复制">2.2 Copy 的精确边界：什么才能被安全地按位复制</h2>
+<p><code>Copy</code> 是一个<strong>标记 trait</strong>：它没有任何方法，只是告诉编译器「这个值可以按位复制，复制完两份都有效」。<code>i32</code>、<code>bool</code>、<code>char</code>、浮点数是 Copy；由 Copy 字段组成的元组、数组、结构体也是 Copy；不可变引用 <code>&amp;T</code> 永远是 Copy，无论 <code>T</code> 是什么；函数指针也是 Copy。反过来，<code>String</code>、<code>Vec&lt;T&gt;</code>、<code>Box&lt;T&gt;</code> 不是 Copy，因为它们拥有堆资源，简单复制位模式会造成两次释放同一块内存。<code>&amp;mut T</code> 也不是 Copy——它代表独占访问权，复制一份就违反独占性。</p>
+<p><code>Copy</code> 与 <code>Clone</code> 的关系是单向的：<code>Copy</code> 要求 <code>Clone</code>，所以能 Copy 的类型一定能显式 Clone；但 Clone 不一定是 Copy。手写 <code>Clone</code> 可以做任意深拷贝，<code>Copy</code> 只能是浅的按位复制。还有一个硬约束：<strong>实现了 <code>Drop</code> 的类型不能实现 <code>Copy</code></strong>，因为编译器不允许一个类型既有自定义析构逻辑、又能被无声地按位复制——那样析构会被调用几次就说不清了。这解释了为什么给一个 struct 加上 <code>Drop</code> 实现后，原本 <code>#[derive(Copy)]</code> 的代码会突然编译失败。</p>
+<p>理解 Copy 的关键不是背类型清单，而是问一个问题：「如果我把这段位模式原样复制一份，两份之间会不会互相干扰、会不会有资源被重复释放？」对 <code>u64</code> 答案是否定的，对 <code>String</code> 答案是肯定的（两个句柄指向同一块缓冲区，drop 时会 double free）。<code>Cell&lt;T&gt;</code> 和 <code>RefCell&lt;T&gt;</code> 这类内部可变性容器也都不是 Copy，因为复制共享的状态会破坏它们的语义。泛型代码里可以用 <code>T: Copy</code> 约束表达「我需要能廉价复制这个参数」，这比无条件 <code>.clone()</code> 更精确，也向调用方传达了真实需求。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>Copy 就是「复印一张纸，两份都能独立用」，比如复印一张写着数字的便签；Clone 是「照着菜谱重新做一份」，可能要重新买菜、重新下锅。字符串像一张写着仓库地址的钥匙卡：把卡片复印一张，两个人拿同一把钥匙去开同一个仓库，还都以为自己负责锁门——这就乱了。所以字符串只能 Clone 不能 Copy。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-types-and-ownership-2-3-move-不是搬运-按位复制加失效标记">2.3 move 不是搬运：按位复制加失效标记</h2>
+<p>新手常把 move 想象成「把数据从旧变量搬到新变量，旧位置被清空」。更接近真相的模型是：<strong>move 在机器层面通常就是一次按位复制，随后编译器把源变量标记为「已初始化失效」</strong>。旧位置的内存可能还残留着原来的字节，但你再也不能通过源变量访问它——编译器会阻止你。所有权不是运行时机制，而是编译器的静态记账：<code>let b = a;</code> 之后，<code>a</code> 在类型检查器眼里就是未初始化状态。</p>
+<p>结构体可以<strong>部分移动（partial move）</strong>：把 <code>String</code> 字段移走后，其余 <code>Copy</code> 字段仍然可用，因为编译器按字段粒度追踪初始化状态。下面的程序演示这一点，并给出数组为什么不能按索引移动。数组下标 <code>arr[0]</code> 是一个「位置表达式」，但编译器无法证明它只被求值一次、也不会在循环里产生重复移动，所以禁止从非 Copy 数组里按索引移出元素（错误码 E0508）；用解构 <code>let [a, b] = arr;</code> 一次性拿走全部元素则是合法的。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#[derive(Debug)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">struct User { id: u64, name: String }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn take_name(name: String) -&gt; usize { name.len() }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let u = User { id: 7, name: String::from(&quot;Ada&quot;) };</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let id = u.id;               // Copy：u.id 之后仍可读</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let name = u.name;           // move：name 字段失效</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;id = {id}, u.id 仍可读 = {}&quot;, u.id);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    println!(&quot;name 长度 = {}&quot;, take_name(name));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="12"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let arr = [String::from(&quot;x&quot;), String::from(&quot;y&quot;)];</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let [first, second] = arr;   // 解构可以整体移出</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;解构数组: {first}, {second}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
+<p>如果把 <code>println!(&quot;{}&quot;, u.name);</code> 加回去，编译器会给出下面这样的诊断（省略了「<code>n</code> 未使用」的附带警告）。注意它明确指出「move occurs because <code>u.name</code> has type <code>String</code>, which does not implement the <code>Copy</code> trait」——错误信息把所有权规则的因果链完整写了出来，而不是冷冰冰地说「变量已移动」。</p>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">error[E0382]: borrow of moved value: `u.name`</span></div>
+<div class="cl is-text"><span class="code"> --&gt; diag_e0382.rs:6:20</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">4 |     let n = u.name;</span></div>
+<div class="cl is-text"><span class="code">  |             ------ value moved here</span></div>
+<div class="cl is-text"><span class="code">5 |     println!(&quot;{}&quot;, u.id);</span></div>
+<div class="cl is-text"><span class="code">6 |     println!(&quot;{}&quot;, u.name);</span></div>
+<div class="cl is-text"><span class="code">  |                    ^^^^^^ value borrowed here after move</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">  = note: move occurs because `u.name` has type `String`, which does not implement the `Copy` trait</span></div>
+<div class="cl is-text"><span class="code"> </span></div>
+<div class="cl is-text"><span class="code">error: aborting due to 1 previous error</span></div></div></div>
+<p>move 在函数调用和闭包里也遵循同样的记账规则：把一个非 Copy 的值传给函数，所有权就转移给形参，调用结束后原变量不能用；闭包捕获外部变量时，如果捕获方式是按值（move 或编译器推断为移动），同样会让原变量失效。靠「我之后还会用」的直觉写代码行不通，必须看最后一次使用发生在哪里——这正是下一单元借用检查器要做的数据流分析。</p>
+<h2 id="rust-ch01-types-and-ownership-2-4-drop-的时机与顺序-像剥洋葱一样确定">2.4 Drop 的时机与顺序：像剥洋葱一样确定</h2>
+<p>当一个值离开作用域，编译器会插入对 <code>Drop::drop</code> 的调用（如果类型实现了 <code>Drop</code>）。顺序是可预测的：<strong>局部变量按声明的相反顺序 drop</strong>；结构体的字段在 <code>Drop::drop</code> 执行完毕后<strong>按声明顺序</strong> drop；<code>Vec</code> 的元素则从前到后依次 drop。把「局部变量后进先出」和「字段先进先出」区分开很重要——前者像栈，后者是结构体内存布局的线性扫描。</p>
+<p>下面的程序用 <code>Guard</code> 在析构时打印自己的名字，把顺序变成可见事实。<code>Pair</code> 自己实现了 <code>Drop</code>，所以你会先看到 <code>drop Pair</code>，再看到两个字段按声明顺序被释放。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">struct Guard(&amp;'static str);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">impl Drop for Guard {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    fn drop(&amp;mut self) { println!(&quot;drop {}&quot;, self.0); }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">struct Pair { first: Guard, second: Guard }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">impl Drop for Pair {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn drop(&amp;mut self) { println!(&quot;drop Pair&quot;); }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let _p = Pair { first: Guard(&quot;first&quot;), second: Guard(&quot;second&quot;) };</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    let _g = Guard(&quot;local&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;--- 作用域结束 ---&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 drop_order.rs -o drop_order &amp;&amp; ./drop_order</span></div>
+<div class="cl is-text"><span class="code">--- 作用域结束 ---</span></div>
+<div class="cl is-text"><span class="code">drop local</span></div>
+<div class="cl is-text"><span class="code">drop Pair</span></div>
+<div class="cl is-text"><span class="code">drop first</span></div>
+<div class="cl is-text"><span class="code">drop second</span></div></div></div>
+<p>drop 顺序不是学究式的细节，它决定资源释放的正确性。考虑一个持有文件句柄和内存缓冲区的结构：如果缓冲区先释放、文件句柄后释放，写盘逻辑还能正常工作；反过来就可能出问题。Rust 用确定的顺序消除了这类不确定性。另一个边界是<strong>部分移动后的析构</strong>：一个结构体即使有字段被移走，它的 <code>Drop::drop</code> 仍会被调用，但你在 <code>drop</code> 里不能访问已移走的字段（编译器会拒绝）——所以实现 <code>Drop</code> 的类型通常避免在 <code>drop</code> 里读取自己的字段内容。</p>
+<p>需要提前释放时，用 <code>std::mem::drop(value)</code>（它只是把值当作形参接收，函数结束时触发析构），或 <code>std::mem::take</code> / <code>std::mem::replace</code> 把值换出来再处理。<code>std::mem::take(&amp;mut s)</code> 会用 <code>Default</code> 值把原值换走，对 <code>String</code> 来说就是拿走内容、留下空串，这比手写「先 clone 再清空」高效得多。若想彻底禁止自动析构，可以用 <code>std::mem::ManuallyDrop&lt;T&gt;</code> 包一层——代价是你自己承担释放责任，通常只在实现底层容器或 FFI 边界时才需要。</p>
+<p><code>Drop</code> 与异常安全也有关：Rust 的 panic 会触发栈展开（unwind），沿途所有局部变量照样按序 drop，这就是 RAII（资源获取即初始化）的保障来源。反过来说，如果编译配置选了 <code>panic = &quot;abort&quot;</code>，程序会立刻终止、不再展开栈，操作系统仍会回收进程占用的资源，但你自己写的 <code>Drop</code> 逻辑不会执行——涉及落盘、释放外部锁这类副作用时，这个差别必须想清楚。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>坑：给一个已经 <code>#[derive(Copy)]</code> 的结构体添加 <code>Drop</code> 实现，编译会报「cannot implement both <code>Drop</code> 和 <code>Copy</code>」。原因是 Copy 会让同一份位模式出现多个「所有者」，析构时无法决定谁负责释放。正确做法是二选一：如果这个类型真的拥有资源，就去掉 Copy 并手写 Clone（深拷贝资源）；如果只是普通的值类型，就不要加 Drop。另一个坑是以为 <code>drop(x)</code> 之后 <code>x</code> 还能用——<code>drop</code> 的参数按值传入，调用后 <code>x</code> 已被移动，编译器会禁止后续访问。</p>
+
+</div>
+</section>
+<h2 id="rust-ch01-types-and-ownership-2-5-整数溢出-同一段代码-两套语义">2.5 整数溢出：同一段代码，两套语义</h2>
+<p>Rust 的整数溢出是个刻意设计的「分裂」行为：<strong>debug 构建默认开启溢出检查，溢出时直接 panic；release 构建默认关闭检查，溢出时按二进制补码回绕（wrap）</strong>。同一行 <code>a + b</code>，在 <code>cargo run</code> 和 <code>cargo run --release</code> 下可能一个崩溃、一个悄悄给出错误结果。这不是 bug，而是在「开发期尽早暴露错误」与「发布后少一次分支判断」之间做的权衡；构建 profile 里的 <code>overflow-checks</code> 设置可以改变默认值，对正确性敏感的服务端程序应当在 release 里也打开它。</p>
+<p>为了避免依赖构建模式，标准库提供了四组显式方法。<code>checked_*</code> 溢出时返回 <code>None</code>；<code>wrapping_*</code> 永远回绕；<code>saturating_*</code> 钳位到类型边界（上溢取 MAX，下溢取 MIN）；<code>overflowing_*</code> 同时返回结果和「是否溢出」的布尔值。它们都是普通函数，不受 profile 影响，是写健壮代码时的首选。下面的程序用 <code>u8</code> 把四种行为跑一遍，并展示 <code>as</code> 转换的截断语义。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let max = u8::MAX;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    println!(&quot;max + 1: checked={:?}&quot;, max.checked_add(1));</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    println!(&quot;max + 1: wrapping={}&quot;, max.wrapping_add(1));</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    println!(&quot;max + 1: overflowing={:?}&quot;, max.overflowing_add(1));</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;1 - 3(u8): checked={:?}&quot;, 1u8.checked_sub(3));</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;1 - 3(u8): wrapping={}&quot;, 1u8.wrapping_sub(3));</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;1 - 3(u8): saturating={}&quot;, 1u8.saturating_sub(3));</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;300u16 as u8 = {}&quot;, 300u16 as u8);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 overflow.rs -o overflow &amp;&amp; ./overflow</span></div>
+<div class="cl is-text"><span class="code">max + 1: checked=None</span></div>
+<div class="cl is-text"><span class="code">max + 1: wrapping=0</span></div>
+<div class="cl is-text"><span class="code">max + 1: overflowing=(0, true)</span></div>
+<div class="cl is-text"><span class="code">1 - 3(u8): checked=None</span></div>
+<div class="cl is-text"><span class="code">1 - 3(u8): wrapping=254</span></div>
+<div class="cl is-text"><span class="code">1 - 3(u8): saturating=0</span></div>
+<div class="cl is-text"><span class="code">300u16 as u8 = 44</span></div></div></div>
+<p>回绕并不总是错误：哈希函数、环形缓冲区索引、部分密码学算法本来就定义在模 2ⁿ 的算术上，<code>wrapping_add</code> 正是为这些场景准备的，它让意图在代码里显式可见，也避免因为 profile 切换而改变结果。真正的危险是「本来不该溢出，却因为回绕悄悄算错」——比如统计计数超过 <code>u32::MAX</code> 后变小，导致缓存淘汰逻辑判断失误。对这类业务数值，<code>checked_add</code> 加 <code>expect(&quot;计数溢出&quot;)</code> 或直接用更宽的 <code>u64</code> 才是稳妥选择。</p>
+<p><code>300u16 as u8 = 44</code> 来自 300 的低 8 位（300 = 256 + 44）。<code>as</code> 的数值转换永远是<strong>截断或按补码解释</strong>，不会 panic 也不会报错——这是它和 <code>try_into()</code> 的根本区别。工程里有一条简单纪律：只要值可能超出目标类型范围，就用 <code>TryFrom</code> / <code>try_into()</code> 拿到 <code>Result</code> 并处理失败，别用 <code>as</code> 蒙混过关。还有一个高频坑是 <code>usize</code> 下溢：循环里写 <code>for i in (0..n).rev()</code> 没问题，但手写 <code>while i &gt;= 0 { i -= 1; }</code> 时 <code>i</code> 是无符号数，<code>0 - 1</code> 会变成巨大的数，导致死循环或越界——这类边界在算法编会反复遇到。</p>
+<h2 id="rust-ch01-types-and-ownership-2-6-类型推断与-never-type-编译器在解一组约束方程">2.6 类型推断与 never type：编译器在解一组约束方程</h2>
+<p>Rust 的类型推断不是「看右边猜类型」这么简单，它更像把整个函数体里的类型约束收集起来解方程组。<code>let x = 5;</code> 里 <code>5</code> 可以是任何整型，没有别的约束时编译器采用默认规则回落到 <code>i32</code>；一旦出现 <code>let y: u8 = x;</code>，约束立刻把 <code>x</code> 定成 <code>u8</code>。<code>collect()</code> 是经典例子：<code>let v = iter.collect();</code> 无法推断目标容器类型，必须写 <code>let v: Vec&lt;i32&gt; = ...</code> 或 <code>iter.collect::&lt;Vec&lt;i32&gt;&gt;()</code>。这种「约束不足就报错」的行为不是编译器笨，而是拒绝在有多种合理答案时替你随机选一个。</p>
+<p><code>!</code> 是 <strong>never type（永不类型）</strong>，表示「这个表达式永远不会产生值」。<code>return</code>、<code>break</code>、<code>panic!()</code>、无限循环 <code>loop {}</code> 的类型都是 <code>!</code>。关键性质是 <code>!</code> 可以强制转换成任意类型：于是 <code>let n: i32 = panic!();</code> 能通过类型检查——因为右边根本不会返回，把它当 <code>i32</code> 用不会带来任何运行时不一致。<code>std::convert::Infallible</code> 是 <code>!</code> 在类型库里的替身，表示一个「不可能被构造出来」的错误类型，常用于「这个操作理论上不会失败」的泛型签名。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::convert::Infallible;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn first_or&lt;T&gt;(items: &amp;[T]) -&gt; Result&lt;&amp;T, Infallible&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    Ok(&amp;items[0])</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let data = [10, 20, 30];</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    let r: &amp;i32 = first_or(&amp;data).unwrap(); // 错误分支是 Infallible，等价于永不会发生</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;first = {r}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let parsed = &quot;42&quot;.parse::&lt;i32&gt;().unwrap(); // parse 的错误类型由目标类型决定</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    println!(&quot;parsed = {parsed}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let empty: Vec&lt;String&gt; = Vec::new(); // 空容器必须标注元素类型</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;empty len = {}&quot;, empty.len());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
+<p>这段程序里藏着两处推断：<code>&quot;42&quot;.parse()</code> 的错误类型由赋值目标 <code>i32</code> 决定（写成 <code>parse::&lt;u8&gt;()</code> 就会走另一条实现）；<code>Vec::new()</code> 完全没有任何类型线索，只能靠标注。理解推断的约束本质，能让你在看到「type annotations needed」时立刻补上正确的标注，而不是乱试 turbofish。另一个常见现象是「整数字面量在比较时才定型」：<code>1 + 2</code> 单独出现时是 <code>i32</code>，放进 <code>let x: u8 = 1 + 2;</code> 就整段变成 <code>u8</code> 运算——约束会沿着表达式反向传播。</p>
+<p>闭包参数也是推断的高频现场：<code>let f = |x| x + 1;</code> 里的 <code>x</code> 类型要等第一次调用才确定，如果在那之前没有任何线索，编译器会报「type annotations needed」。这时可以写 <code>let f = |x: i32| x + 1;</code>，或者给变量一个函数指针类型标注。还有一类「默认类型回落」值得记住：浮点字面量没有约束时回落到 <code>f64</code> 而不是 <code>f32</code>。这些默认规则是语言为了少写标注做出的务实妥协，但一旦你把它当成「类型永远是这样」，就会在泛型代码里摔跤——泛型参数没有默认回落，约束不足就是错误。</p>
+<h2 id="rust-ch01-types-and-ownership-2-7-内部可变性引子-共享引用也能改数据">2.7 内部可变性引子：共享引用也能改数据</h2>
+<p>借用规则说「有 <code>&amp;mut T</code> 就不能有 <code>&amp;T</code>」，但有些场景需要「大家共享一个引用，同时又能修改里面的计数器」。Rust 用**内部可变性（interior mutability）**解决：把可变性从引用类型挪到类型内部。<code>Cell&lt;T&gt;</code> 提供 <code>get</code> / <code>set</code>，<code>set</code> 接收 <code>&amp;self</code>，所以通过一个共享引用就能改值；<code>get</code> 要求 <code>T: Copy</code>，因为要复制一份出来。<code>RefCell&lt;T&gt;</code> 放宽到任意 <code>T</code>：它返回一个 <code>Ref&lt;T&gt;</code> / <code>RefMut&lt;T&gt;</code> 守卫，借用期间借用标志由运行时维护，违反规则时 <code>borrow_mut()</code> 会 panic，而 <code>try_borrow_mut()</code> 返回 <code>Result</code> 让调用方自己处理。</p>
+<p>下面的程序先把 <code>&amp;Cell&lt;i32&gt;</code> 传给函数并调用 <code>set</code>，再演示 <code>RefCell</code> 的运行时借用检查：持有一个共享借用时尝试 <code>try_borrow_mut()</code> 会被拒绝，释放守卫后才成功追加元素。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::cell::{Cell, RefCell};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn bump(c: &amp;Cell&lt;i32&gt;) { c.set(c.get() + 1); }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let c = Cell::new(0);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let r = &amp;c;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    bump(r);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    bump(r);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    println!(&quot;Cell = {}&quot;, c.get());</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let rc = RefCell::new(vec![1, 2, 3]);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let guard = rc.borrow();</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;共享借用 len = {}&quot;, guard.len());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    match rc.try_borrow_mut() {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        Ok(_) =&gt; println!(&quot;拿到可变借用&quot;),</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        Err(e) =&gt; println!(&quot;借用被拒: {e}&quot;),</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    drop(guard);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    rc.borrow_mut().push(4);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;追加后 = {:?}&quot;, rc.borrow());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 cell.rs -o cell &amp;&amp; ./cell</span></div>
+<div class="cl is-text"><span class="code">Cell = 2</span></div>
+<div class="cl is-text"><span class="code">共享借用 len = 3</span></div>
+<div class="cl is-text"><span class="code">借用被拒: RefCell already borrowed</span></div>
+<div class="cl is-text"><span class="code">追加后 = [1, 2, 3, 4]</span></div></div></div>
+<p>内部可变性不是「绕过借用检查」的后门，而是<strong>把检查从编译期挪到运行期</strong>：<code>RefCell</code> 内部有一个借用状态计数器，<code>borrow()</code> 递增共享计数，<code>borrow_mut()</code> 要求计数为零，否则报错。代价有三条：违规变成运行时 panic 而非编译错误；<code>Cell</code> / <code>RefCell</code> 都不是 <code>Sync</code>，不能跨线程共享（线程安全版本是 <code>Mutex</code> / <code>RwLock</code>）；<code>RefCell</code> 的守卫会延长借用存活期，忘记 <code>drop</code> 就容易触发意外冲突。它们的底层都建立在 <code>UnsafeCell&lt;T&gt;</code> 之上——语言把「允许通过共享引用修改」的唯一合法入口封装在这一类型里，标准库再用它构建安全的抽象。这正是下一单元要展开的借用检查器视角的反面：编译期管不住的地方，就用类型把规则编码进 API。</p>
+<h2 id="rust-ch01-types-and-ownership-2-8-工程取舍-值语义的收益与成本">2.8 工程取舍：值语义的收益与成本</h2>
+<p>所有权系统最终要回答一个工程问题：数据到底归谁、复制的代价有多大。一个简单的判断顺序是：能借用就不转移，能 Copy 就不 Clone，必须 Clone 时让代价可见。对 <code>i32</code> 这类 Copy 类型，传值和传引用差别不大，直接传值反而让签名更简单；对 <code>String</code> 和 <code>Vec</code>，按值传递会转移所有权，适合「函数要消费它」的场景，而借用更适合「只读一下」。泛型函数里用 <code>impl AsRef&lt;str&gt;</code> 或 <code>&amp;str</code> 接收字符串，可以让调用方自由选择传 <code>String</code> 还是字面量，避免不必要的分配。</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>首选方式</th>
+<th>代价</th>
+<th>误用的后果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>小型标量/<code>Copy</code> 类型</td>
+<td>直接传值</td>
+<td>按位复制，几乎为零</td>
+<td>无</td>
+</tr>
+<tr>
+<td>大结构只读访问</td>
+<td><code>&amp;T</code> 借用</td>
+<td>一次间接寻址</td>
+<td>生命周期标注变复杂</td>
+</tr>
+<tr>
+<td>函数需要接管数据</td>
+<td>按值 move</td>
+<td>无额外分配</td>
+<td>调用方失去使用权</td>
+</tr>
+<tr>
+<td>双方都要保留副本</td>
+<td><code>.clone()</code></td>
+<td>深拷贝资源</td>
+<td>热路径上可能成为瓶颈</td>
+</tr>
+<tr>
+<td>共享引用下的修改</td>
+<td><code>Cell</code>/<code>RefCell</code></td>
+<td>运行期检查</td>
+<td>违规时 panic、非线程安全</td>
+</tr>
+</tbody></table>
+
+<p>把这张表和前面几节的机制对照起来看：Copy 的边界决定「复制是否安全」，Drop 的顺序决定「释放是否可靠」，整数溢出语义决定「计算是否可信」，内部可变性决定「共享与修改如何共存」。这些都不是孤立的语法点，而是同一个设计目标的不同侧面——用编译期信息换掉运行时的不确定性。下一单元我们进入借用检查器内部，看它如何在控制流图上判断一次借用究竟活到哪儿。</p>
+<p>所有权还有一个常被追问的问题：这些检查有运行时成本吗？绝大多数情况下没有。<code>&amp;T</code> 和 <code>T</code> 的机器表示往往相同（都是一个地址或直接是值本身），move 通常是按位复制，<code>Drop</code> 的插入点由编译器静态决定，Copy 的开销等同于赋值。所谓的「零成本抽象」在这里体现得很直白：你得到的是内存安全保证，付出的主要成本是编译期分析和偶尔一次必要的 <code>.clone()</code>。真正需要权衡的是设计层面——把数据设计成值语义还是引用语义、是否需要共享可变性、要不要为方便而多分配一次。这些取舍没有通用答案，但你可以用本单元给出的机制去估算代价，而不是凭感觉猜。</p>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>在本机编译 2.1 节的内存布局程序，先确认 <code>Mixed</code> 与 <code>CMixed</code> 的大小差异；再新建一个字段顺序不同但类型相同的结构体，预测它的 <code>repr(Rust)</code> 大小，用 <code>size_of</code> 验证你的预测。</li>
+<li>把 2.3 节的 <code>println!(&quot;{}&quot;, u.name);</code> 加回去，亲自编译一次，把真实报错与文中贴出的诊断对比；再改成 <code>let _ = &amp;u.name;</code> 看是否通过，解释「借用」和「移动」为什么在这里不同。</li>
+<li>在 2.4 节的 <code>Pair</code> 里再加一个 <code>Guard(&quot;third&quot;)</code> 字段并改变声明顺序，运行后写出实际 drop 顺序；然后去掉 <code>impl Drop for Pair</code>，观察字段的释放顺序是否变化。</li>
+<li>用 <code>cargo build</code> 与 <code>cargo build --release</code> 分别运行一段包含 <code>u8::MAX + 1</code> 的程序（ debug 下会 panic，记得加 <code>#[allow(overflowing_literals)]</code> 或直接调用 <code>wrapping_add</code> 避免编译期常量折叠），记录两种模式的行为差异，并改用 <code>checked_add</code> 让行为与 profile 无关。</li>
+</ul>
+
+</div></div>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么说 <code>String</code> 的句柄在栈上、缓冲区在堆上？<code>size_of::&lt;String&gt;()</code> 在 64 位平台通常是多少？</li>
+<li>一个类型能 <code>#[derive(Copy)]</code> 的充要条件是什么？为什么实现了 <code>Drop</code> 的类型不能 Copy？</li>
+<li>move 在机器层面通常做了什么？为什么结构体可以部分移动，而非 Copy 数组不能按索引移动？</li>
+<li>局部变量与结构体字段的 drop 顺序分别是什么？</li>
+<li>整数溢出在 debug 和 release 下默认有什么不同？<code>checked_*</code> 与 <code>wrapping_*</code> 各自返回什么？</li>
+<li><code>Cell&lt;T&gt;</code> 和 <code>RefCell&lt;T&gt;</code> 分别把检查放在什么时候？它们的 <code>Sync</code> 属性意味着什么？</li>
+</ul>
+
+</div>
+</section>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch01__toolchain-and-first-program.md.html">← Rust 工具链与第一个程序</a><a href="rust__chapters__ch01__borrowing-and-references.md.html">借用与引用 →</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>

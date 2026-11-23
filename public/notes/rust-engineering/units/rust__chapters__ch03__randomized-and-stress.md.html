@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>随机化与对拍工程：从可复现随机源到失败用例缩小</title>
+<meta name="description" content="第 34 单元 · 建议 90 分钟 · 让正确性可被机器反复检验，让性能可被数字证明">
+<meta name="author" content="Codrift · Rust 工程笔记">
+<meta name="generator" content="rust-notes/build.js（marked + rustc 1.96 真编译校验）">
+<link rel="stylesheet" href="../theme.css">
+<link rel="stylesheet" href="../rust-extra.css">
+</head>
+<body class="type-unit">
+<a class="skip-link" href="#content">跳到正文</a>
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">Rust · 语法 / 工程 / 算法</span><a href="../books/rust.html">整书阅读</a></nav>
+<main class="doc" id="doc">
+<header class="doc-head"><p class="doc-kicker">Rust 工程笔记</p><h1 class="doc-title">随机化与对拍工程：从可复现随机源到失败用例缩小</h1><p class="doc-sub">第 34 单元 · 建议 90 分钟 · 让正确性可被机器反复检验，让性能可被数字证明</p><p class="doc-meta">第三部分 · 算法 Rust 版 · 源文件 34-randomized-and-stress.md</p></header>
+<nav class="toc" id="toc" aria-label="目录"><p class="toc-h">本单元目录</p><ol class="toc-list"><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-1-为什么需要随机化与对拍工程">34.1 为什么需要随机化与对拍工程</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-2-可复现随机源-xorshift64-与种子纪律">34.2 可复现随机源：xorshift64 与种子纪律</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-3-随机化算法-随机主元快排的期望复杂度">34.3 随机化算法：随机主元快排的期望复杂度</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-4-性质测试-用不变量代替正确答案">34.4 性质测试：用不变量代替正确答案</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-5-缩小失败用例-delta-debugging-实战">34.5 缩小失败用例：delta debugging 实战</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-6-计时与剖析-instant-black_box-与-o">34.6 计时与剖析：Instant、black_box 与 -O</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-7-综合对拍-把随机化收益量化">34.7 综合对拍：把随机化收益量化</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-8-工程约定与取舍">34.8 工程约定与取舍</a></li><li class="toc-l2"><a href="#rust-ch03-randomized-and-stress-34-9-自检与练习">34.9 自检与练习</a></li></ol></nav>
+<article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="box-kind">目标</span><span class="box-t">这一单元要带走什么</span></header>
+<div class="box-b">
+<ul>
+<li>能写出 std-only 的 xorshift64 随机源，并解释种子纪律为何比&quot;覆盖更广&quot;更重要</li>
+<li>能实现随机主元快排，用递归深度实测展示随机化如何避开最坏输入</li>
+<li>能把正确性写成性质（有序、保多重集、幂等）而非固定答案，并用 1000 组随机输入检验</li>
+<li>能用 delta debugging 把失败用例从 12 个元素缩到 2 个，并验证极小性</li>
+<li>能用 <code>Instant</code> 与 <code>black_box</code> 做真实计时，如实报告 <code>-O</code> 编译下的测量数字</li>
+</ul>
+
+</div>
+</section>
+<h2 id="rust-ch03-randomized-and-stress-34-1-为什么需要随机化与对拍工程">34.1 为什么需要随机化与对拍工程</h2>
+<p>前 33 个单元里，每个算法都配了&quot;随机数据 + 朴素裁判&quot;对拍。本单元把这套做法本身当作主题讲透。原因很简单：手写测试用例只能覆盖你想到的情况，而 bug 往往藏在你没想到的地方；随机数据能以极低成本探索输入空间，性质测试则把&quot;正确答案是什么&quot;这个难题换成&quot;答案应满足哪些不变量&quot;这个容易回答的问题。再加上一个可复现的随机源与失败用例缩小器，你就拥有一条完整的自动化流水线：生成 → 检验 → 缩小 → 复现。</p>
+<p>这套流水线与工程编第 11 单元的测试分层是互补关系。单元测试适合验证&quot;已知输入的精确输出&quot;，集成测试验证模块间协作，而性质测试与对拍擅长发现&quot;没想到的输入&quot;。三者不能互相替代：性质测试发现 bug 后，仍要把它固定成一个单元测试防止回归；单元测试覆盖不到的组合爆炸，才交给随机探索。本单元聚焦第三层，因为算法代码的核心风险正是输入组合而非模块接口。标准库之外虽有 proptest、criterion 等成熟工具，但理解其背后的生成—缩小—计时机制，才能正确使用它们，也才能在无依赖场景里自己搭一套。</p>
+<p>问题定义如下。随机源：给定非零 64 位种子，产生确定性但看起来随机的 u64 序列，同种子必须逐字复现。随机化算法：在算法关键决策处（如快排主元）引入随机性，使坏输入不再固定地触发最坏情况。性质测试：对函数 f 与输入 x，检验谓词 P(x, f(x)) 是否对所有随机 x 成立，无需知道 f(x) 的精确值。缩小器：给定失败输入 x，找尽可能小的 x&#39; 仍使 P 失败。计时：在受控条件下测量 f 的墙钟时间，避免被编译器优化掉。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>对拍就是请一个&quot;笨但绝对可靠&quot;的裁判，让它和你的聪明实现同时答题，答案不一致就是你有错。随机源决定题目从哪来，性质测试决定裁判怎么判，缩小器负责把一道长题目砍成最短的仍会做错的那道，计时负责告诉你谁跑得快。四件事凑齐，调试就从&quot;盯着屏幕猜&quot;变成&quot;机器替你找反例&quot;。</p>
+
+</div>
+</section>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">流程图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">固定种子 → 随机数据生成器 → 被测实现 + 独立裁判 → 性质判定 → 失败则缩小用例 → 记录种子与最小反例</pre></figure>
+<h2 id="rust-ch03-randomized-and-stress-34-2-可复现随机源-xorshift64-与种子纪律">34.2 可复现随机源：xorshift64 与种子纪律</h2>
+<p>xorshift64 的状态只有一个 u64，推进只需三步移位异或：<code>x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17</code>。种子为 0 时状态永远为 0，所以代码里用黄金比例常数 <code>0x9E3779B97F4A_7C15</code> 替换。它的周期是 2^64-1，对算法测试足够；不是密码学安全随机源，不能用来生成密钥。</p>
+<p>可复现性是对拍的生命线。程序用种子 42 生成前五个数，两个独立实例给出完全相同的序列；换成种子 43，第一个数立刻不同。这意味着任何一次失败都可以通过&quot;种子 + 用例编号&quot;精确重放，而不需要保存整份输入。相比之下，用系统时间做种子虽然每次跑不同数据，看似覆盖更广，但一旦失败就无法复现，只能靠打印大量日志碰运气。正确的做法是：<strong>常规回归用固定种子，额外探索用一组预设种子批量跑</strong>，两者结合。</p>
+<p>均匀性也要粗查。程序把 10000 次 <code>below(10)</code> 的结果分进 10 个桶，理想每桶 1000，实测最大偏差 26。这个偏差在随机波动的合理范围内，说明低位取模没有明显偏斜。若你的算法对分布敏感（例如随机化快排的主元），应优先用高位或乘缩放（<code>next() &gt;&gt; 32</code>）来降低低位相关性；本单元数据规模小，直接取模不影响结论。</p>
+<p>与另一种常见选择线性同余生成器（LCG）相比，xorshift 的优势是只需要移位与异或，没有乘法，因而在 32 位平台也快；LCG 的低位有明显周期性，<code>s % 2</code> 常呈 0、1 交替，用它取模小范围会得到严重偏斜的分布。xorshift64 的低位虽然不是密码学级别，但对算法测试已经够用。若需要更强的统计质量，可以换成 SplitMix64（一次乘法加三次移位异或），它常被用作标准库随机源的种子扩展器。选随机源的判据不是&quot;越高级越好&quot;，而是&quot;是否满足当前测试的统计需求且可复现&quot;。另外，<code>below(n)</code> 用取模实现会带来轻微的模偏差：当 2^64 不能被 n 整除时，余数较小的桶略多。对 n≤200 的测试规模，偏差不足 2^-54，可以忽略；若做严谨的蒙特卡洛统计，应使用拒绝采样消除偏差。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">41 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// xorshift64：一个 u64 状态，周期 2^64-1（种子非 0）。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn new(seed: u64) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        Self { s: if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed } }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        x ^= x &lt;&lt; 13;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        x ^= x &gt;&gt; 7;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        self.s = x;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        x</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    // 可复现性：同种子产生完全相同的序列。</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    let mut a = Rng::new(42);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    let mut b = Rng::new(42);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    let sa: Vec&lt;u64&gt; = (0..5).map(|_| a.next()).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let sb: Vec&lt;u64&gt; = (0..5).map(|_| b.next()).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    println!(&quot;seed=42 seq[0..5] = {:?}&quot;, sa);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    println!(&quot;reproducible = {}&quot;, sa == sb);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="28"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    // 粗略均匀性：10000 次取模落入 10 个桶，理想每桶 1000。</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let mut rng = Rng::new(20261123);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let mut buckets = vec![0u32; 10];</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    for _ in 0..10000 { buckets[rng.below(10) as usize] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    println!(&quot;buckets(10000 draws, expect 1000 each) = {:?}&quot;, buckets);</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let mut max_dev = 0i64;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    for &amp;c in &amp;buckets { max_dev = max_dev.max((c as i64 - 1000).abs()); }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    println!(&quot;max deviation = {}&quot;, max_dev);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="37"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    // 不同种子给出不同序列。</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    let mut c = Rng::new(43);</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    println!(&quot;seed=43 first = {}, seed=42 first = {}&quot;, c.next(), sa[0]);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v34_rng.rs -o v34_rng &amp;&amp; ./v34_rng</span></div>
+<div class="cl is-text"><span class="code">seed=42 seq[0..5] = [45454805674, 11532217803599905471, 10021416941527320954, 2899061411254629736, 5661411637479084162]</span></div>
+<div class="cl is-text"><span class="code">reproducible = true</span></div>
+<div class="cl is-text"><span class="code">buckets(10000 draws, expect 1000 each) = [997, 1021, 997, 1000, 1001, 1005, 1025, 1004, 976, 974]</span></div>
+<div class="cl is-text"><span class="code">max deviation = 26</span></div>
+<div class="cl is-text"><span class="code">seed=43 first = 46537075435, seed=42 first = 45454805674</span></div></div></div>
+<h2 id="rust-ch03-randomized-and-stress-34-3-随机化算法-随机主元快排的期望复杂度">34.3 随机化算法：随机主元快排的期望复杂度</h2>
+<p>确定性快排若总取最后一个元素作主元，遇到已排序输入时每次划分只缩小 1，递归深度 n，总时间 O(n²)。随机化把主元下标改成 <code>rng.below(len)</code>，任何固定输入都不再能预先命中最坏划分；期望比较次数是 2n·ln n 左右，期望递归深度 O(log n)。注意随机化不改变最坏情况（仍可能是 O(n²)，只是概率极低），它改变的是<strong>坏输入的分布</strong>：对手无法构造一个固定序列让你每次都退化。</p>
+<p>划分不变量是：Lomuto 扫描结束后，<code>a[..i]</code> 全部 <code>&lt; pivot</code>，<code>a[i+1..]</code> 全部 <code>&gt;= pivot</code>，<code>a[i]</code> 是主元最终位置。循环里 <code>i</code> 指向&quot;下一个小于主元的元素该放的位置&quot;，<code>j</code> 扫描整个区间；遇到 <code>a[j] &lt; pivot</code> 就交换 <code>a[i]</code> 与 <code>a[j]</code> 并递增 i。重复元素全部落入右半，所以全等数组会退化为深度 n——这是随机化也救不了的场景，因为主元无论选哪个都相同；工程上应改用三路划分（<code>&lt; / == / &gt;</code>）。演示里全等数组仍返回 true，只是性能不佳，正确性没问题。</p>
+<p>期望复杂度的直觉可以写成递推：设 T(n) 是随机主元快排的期望时间，主元落在第 k 个位置的概率均为 1/n，于是 T(n) = (n-1) + (1/n)·Σ(T(k)+T(n-1-k))。用归纳法可解出 T(n) ≤ 2n·ln n，即 O(n log n)。这个推导同时说明递归深度的期望也是 O(log n)：随机主元把数组大致对半分，层数约为 log₂n。深度不只是性能指标——每层递归消耗栈帧，n=2000 的固定主元版本深度 1999，接近栈上限；若 n 再大一个数量级就会栈溢出，这是随机化在工程上的额外收益。生产环境的 <code>sort_unstable</code> 还会在递归深度超限时切换到堆排序（introsort），彻底消除栈溢出风险。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">46 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">/// 随机化快排：随机选主元，Lomuto 划分。</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">/// 不变量：划分后 a[..i] 的元素都 &lt; pivot，a[i+1..] 的元素都 &gt;= pivot。</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn quicksort(a: &amp;mut [i64], rng: &amp;mut Rng) {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    if a.len() &lt; 2 { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let p = rng.below(a.len() as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    a.swap(p, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let pivot = a[a.len() - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    for j in 0..a.len() - 1 {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        if a[j] &lt; pivot { a.swap(i, j); i += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    a.swap(i, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    quicksort(&amp;mut a[..i], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    quicksort(&amp;mut a[i + 1..], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let mut rng = Rng::new(7);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let v: Vec&lt;i64&gt; = (0..20).map(|_| rng.below(50) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut a = v.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    quicksort(&amp;mut a, &amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let mut b = v.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    b.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    println!(&quot;input  = {:?}&quot;, v);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    println!(&quot;sorted = {:?}&quot;, a);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    println!(&quot;matches std::sort_unstable = {}&quot;, a == b);</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    let mut c = vec![5i64; 20];</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    quicksort(&amp;mut c, &amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    println!(&quot;all-equal case ok = {}&quot;, c == vec![5i64; 20]);</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    let mut e: Vec&lt;i64&gt; = Vec::new();</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    quicksort(&amp;mut e, &amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    println!(&quot;empty case ok = {}&quot;, e.is_empty());</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v34_quicksort.rs -o v34_quicksort &amp;&amp; ./v34_quicksort</span></div>
+<div class="cl is-text"><span class="code">input  = [27, 2, 43, 7, 0, 25, 15, 48, 41, 17, 33, 12, 42, 5, 38, 10, 39, 2, 17, 27]</span></div>
+<div class="cl is-text"><span class="code">sorted = [0, 2, 2, 5, 7, 10, 12, 15, 17, 17, 25, 27, 27, 33, 38, 39, 41, 42, 43, 48]</span></div>
+<div class="cl is-text"><span class="code">matches std::sort_unstable = true</span></div>
+<div class="cl is-text"><span class="code">all-equal case ok = true</span></div>
+<div class="cl is-text"><span class="code">empty case ok = true</span></div></div></div>
+<p>输入里有两个 2、两个 17、两个 27，排序结果完整保留这些重复值，说明划分的 <code>&gt;=</code> 分支没有丢元素。空数组与全等数组都正确返回，覆盖了两个最容易写错的边界。</p>
+<h2 id="rust-ch03-randomized-and-stress-34-4-性质测试-用不变量代替正确答案">34.4 性质测试：用不变量代替正确答案</h2>
+<p>性质测试的关键转变是：不再问&quot;排序结果是否等于某个预先算好的数组&quot;，而是问&quot;结果是否满足排序应有的性质&quot;。本单元为排序定义三个性质：<strong>有序性</strong>（相邻元素非降）、<strong>保多重集</strong>（输入输出排序后逐项相等）、<strong>幂等性</strong>（对输出再排一次不变）。三者合起来足以排除绝大多数排序 bug，而且不需要手写任何预期输出。</p>
+<p>这三条性质各自堵住一类错误：只检查有序性，一个&quot;把所有元素改成 0&quot;的函数会蒙混过关；加上保多重集，就能抓住丢元素或凭空造元素的 bug；加上幂等性，能抓住&quot;输出局部有序但再排一次又变&quot;的不稳定实现。保多重集的判定方式是把输入输出各自 <code>sort_unstable</code> 再比较——这里用标准库排序作为裁判，是刻意选择的独立实现：若被测函数就是标准库排序，则应换用哈希表计数，避免裁判与被测同源。性质的选择没有万能公式，原则是&quot;每条性质独立排除一类错误，且实现比被测函数更简单&quot;。写性质时还要防止性质本身过弱：例如只检查首尾有序就无法发现中间乱序，<code>windows(2)</code> 全对检查才是正确写法。</p>
+<p>程序用种子 20261125 跑 1000 组随机数组（长度 0..59，元素 0..29，大量重复），正确实现失败 0 次；故意植入的 bug 版（只排序前半段）失败 955 次。注意不是 1000 次：当数组本来就有序，或后半段恰好不需要调整时，bug 版也能蒙混过关——这正是随机测试的现实：它给出的是<strong>高概率发现bug</strong>，不是形式化证明。报告里要如实写出 955 而非 1000，否则就是在伪造覆盖率。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">内存图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">栈：input[n], output[n], a[n], b[n], once_more[n]  ← 每组用例的临时数组
+堆：无额外分配（Vec 本身在堆，但每组复用同名变量）
+常量：seed=20261125, cases=1000, 长度上限 60, 值域 0..29</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">68 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">fn quicksort(a: &amp;mut [i64], rng: &amp;mut Rng) {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    if a.len() &lt; 2 { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let p = rng.below(a.len() as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    a.swap(p, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let pivot = a[a.len() - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    for j in 0..a.len() - 1 { if a[j] &lt; pivot { a.swap(i, j); i += 1; } }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    a.swap(i, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    quicksort(&amp;mut a[..i], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    quicksort(&amp;mut a[i + 1..], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">/// 故意有 bug 的排序：只排序前半段。用来展示性质测试如何抓 bug。</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">fn buggy_sort(a: &amp;mut [i64]) {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    let h = a.len() / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">    a[..h].sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">fn properties_ok(input: &amp;[i64], output: &amp;[i64]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    if input.len() != output.len() { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let sorted = output.windows(2).all(|w| w[0] &lt;= w[1]);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut a = input.to_vec(); a.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    let mut b = output.to_vec(); b.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    let same_multiset = a == b;</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let mut once_more = output.to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    once_more.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    let idempotent = once_more == output;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    sorted &amp;&amp; same_multiset &amp;&amp; idempotent</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    let seed = 20261125u64;</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    let mut rng = Rng::new(seed);</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    let (mut good_fail, mut bad_fail) = (0u32, 0u32);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let mut first_bad: Option&lt;Vec&lt;i64&gt;&gt; = None;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    for _ in 0..1000 {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        let n = rng.below(60) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let data: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(30) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let mut g = data.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        quicksort(&amp;mut g, &amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        if !properties_ok(&amp;data, &amp;g) { good_fail += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let mut b = data.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        buggy_sort(&amp;mut b);</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        if !properties_ok(&amp;data, &amp;b) {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            bad_fail += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">            if first_bad.is_none() { first_bad = Some(data.clone()); }</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    println!(&quot;[property] seed={} cases=1000 correct_impl_failures={}&quot;, seed, good_fail);</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    println!(&quot;[property] buggy_impl_failures={}&quot;, bad_fail);</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    if let Some(v) = first_bad {</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">        println!(&quot;[property] first failing input = {:?}&quot;, v);</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let mut out = v.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        buggy_sort(&amp;mut out);</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        println!(&quot;[property] buggy output = {:?}&quot;, out);</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v34_property.rs -o v34_property &amp;&amp; ./v34_property</span></div>
+<div class="cl is-text"><span class="code">[property] seed=20261125 cases=1000 correct_impl_failures=0</span></div>
+<div class="cl is-text"><span class="code">[property] buggy_impl_failures=955</span></div>
+<div class="cl is-text"><span class="code">[property] first failing input = [25, 26, 26, 9, 21, 23, 29, 0, 4, 22, 18, 23, 18, 20, 21, 26, 19, 1, 3, 16, 13, 6, 10, 11, 11, 23, 14, 22, 29, 8, 7, 21, 28, 16, 17, 10, 9, 4, 20, 25, 17, 20, 24, 27, 1, 7, 22]</span></div>
+<div class="cl is-text"><span class="code">[property] buggy output = [0, 1, 3, 4, 6, 9, 10, 13, 16, 18, 18, 19, 20, 21, 21, 22, 23, 23, 25, 26, 26, 26, 29, 11, 11, 23, 14, 22, 29, 8, 7, 21, 28, 16, 17, 10, 9, 4, 20, 25, 17, 20, 24, 27, 1, 7, 22]</span></div></div></div>
+<p>对比 buggy output 的前 23 项与后 23 项：前半段升序，后半段仍是原始顺序，正是&quot;只排序前半段&quot;的特征。性质测试不需要知道正确排序长什么样，仅凭&quot;整体是否非降&quot;就抓住了它。</p>
+<h2 id="rust-ch03-randomized-and-stress-34-5-缩小失败用例-delta-debugging-实战">34.5 缩小失败用例：delta debugging 实战</h2>
+<p>第一个失败用例往往很长，直接打印出来难以分析。缩小器的目标是删掉尽可能多的元素，同时保持失败。本程序实现的是简化版 delta debugging：按 8、4、2、1 的块大小从数组中删除连续片段，只要删除后 <code>fails</code> 仍为真就接受，任何删除都失败时停止。判据 <code>fails(v)</code> 定义为&quot;buggy_sort 后数组不非降&quot;。</p>
+<p>块大小从大到小是有讲究的：先用大块快速砍掉无关部分，再用小块精细修剪；若一上来就逐个删除，遇到&quot;必须同时删掉相隔较远的两个元素才仍失败&quot;的情况就会卡在局部最小。完整的 ddmin 算法会在无法删除时把块进一步二分，本程序的 8→4→2→1 序列近似了这一过程，对排序这类失败判据单调的问题足够。所谓单调，是指&quot;失败用例的任意超集也失败&quot;——对 buggy_sort 而言，往一个降序对里加元素不会让它突然变有序，所以单调性成立，缩小才有意义。若失败判据不单调（例如&quot;数组长度恰好为 7 时才失败&quot;），缩小器会把你引向完全无关的用例，此时应先改造判据而不是迷信工具。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">目录树</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">缩小过程（示例）
+原始 12 项 [25,26,26,9,21,23,29,0,4,22,18,23]
+  ├─ 尝试删 8 项连续块 → 仍失败 → 接受，长度骤减
+  ├─ 尝试删 4 项连续块 → 仍失败 → 接受
+  ├─ 尝试删 2 项连续块 → 仍失败 → 接受
+  └─ 尝试删 1 项 → [22,18] 已无法再删
+极小反例 [22,18]：buggy_sort 只排序长度为 1 的前半段，输出不变</pre></figure>
+<p>程序实测从 12 项缩到 2 项 <code>[22,18]</code>，并且验证极小性：对这个 2 项数组分别删除任一元素后，<code>fails</code> 都不再成立，<code>removals_that_still_fail = 0</code>。这个验证步骤不能省——很多&quot;缩小器&quot;只做到局部最小就停手，却误称&quot;最小反例&quot;。有了最小反例，bug 原因一目了然：buggy_sort 取 <code>h = len/2 = 1</code>，只排序第一个元素，于是降序对永远无法被纠正。</p>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">72 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn buggy_sort(a: &amp;mut [i64]) {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    let h = a.len() / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    a[..h].sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="18"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">/// 失败判据：有 bug 的排序不能把数组排好序。</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn fails(v: &amp;[i64]) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut out = v.to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    buggy_sort(&amp;mut out);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    !out.windows(2).all(|w| w[0] &lt;= w[1])</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="25"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">/// delta debugging：按从大到小的块尝试删除，只要删除后仍失败就接受。</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">fn shrink(mut v: Vec&lt;i64&gt;) -&gt; Vec&lt;i64&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    loop {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let mut changed = false;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        for chunk in [8usize, 4, 2, 1] {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            while i &lt; v.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                let end = (i + chunk).min(v.len());</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                let mut cand = v.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                cand.drain(i..end);</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                if fails(&amp;cand) {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                    v = cand;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">                    changed = true;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">                } else {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                    i += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        if !changed { break; }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    v</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="48"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    let mut rng = Rng::new(20261125);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    let mut found: Option&lt;Vec&lt;i64&gt;&gt; = None;</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    for _ in 0..1000 {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        let n = 5 + rng.below(20) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">        let data: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(30) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">        if fails(&amp;data) { found = Some(data); break; }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    let original = found.expect(&quot;未找到失败用例&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    println!(&quot;[shrink] original len={} case={:?}&quot;, original.len(), original);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    let minimal = shrink(original.clone());</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    println!(&quot;[shrink] minimal len={} case={:?}&quot;, minimal.len(), minimal);</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    // 验证极小性：再删任意一个元素都不再失败。</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    let mut still_fails_on_removal = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    for i in 0..minimal.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let mut cand = minimal.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        cand.remove(i);</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        if fails(&amp;cand) { still_fails_on_removal += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">    println!(&quot;[shrink] removals_that_still_fail = {}&quot;, still_fails_on_removal);</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    let mut out = minimal.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    buggy_sort(&amp;mut out);</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    println!(&quot;[shrink] buggy output of minimal case = {:?}&quot;, out);</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v34_shrink.rs -o v34_shrink &amp;&amp; ./v34_shrink</span></div>
+<div class="cl is-text"><span class="code">[shrink] original len=12 case=[25, 26, 26, 9, 21, 23, 29, 0, 4, 22, 18, 23]</span></div>
+<div class="cl is-text"><span class="code">[shrink] minimal len=2 case=[22, 18]</span></div>
+<div class="cl is-text"><span class="code">[shrink] removals_that_still_fail = 0</span></div>
+<div class="cl is-text"><span class="code">[shrink] buggy output of minimal case = [22, 18]</span></div></div></div>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：缩小器必须把&quot;失败判据&quot;与&quot;被测函数&quot;严格分开。若 <code>fails</code> 里复用了被测代码的内部逻辑（比如直接调用同一个划分函数），一个 bug 会让两边同时失效，缩小过程可能永远停在原地或缩出一个与 bug 无关的反例。本单元的 <code>fails</code> 只用&quot;输出是否非降&quot;这个外部可观察性质，与 buggy_sort 的实现细节无关，所以结果可信。另一个坑是用 <code>Option&lt;Vec&lt;i64&gt;&gt;</code> 而不是 <code>unwrap()</code> 直接取第一个失败用例：若随机数据恰好没触发 bug，程序会 panic 而不是给出&quot;未发现失败&quot;的明确结论；显式处理让自动化流水线能区分&quot;通过&quot;与&quot;没跑到&quot;。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-randomized-and-stress-34-6-计时与剖析-instant-black_box-与-o">34.6 计时与剖析：Instant、black_box 与 -O</h2>
+<p>正确性过关后，性能数字必须真测。<code>std::time::Instant</code> 提供单调时钟，<code>elapsed()</code> 返回 <code>Duration</code>，打印时保留实际精度，不要自己四舍五入成&quot;大约 50 毫秒&quot;。<code>std::hint::black_box(&amp;a)</code> 告诉编译器&quot;这个值真的被使用了&quot;，防止它把整段计算当成无用代码优化掉。编译必须加 <code>-O</code>（等价于 release 优化级别），否则测到的是未优化代码，数字没有参考价值。</p>
+<p>程序对 n=1000000 的随机数组分别跑随机快排与 <code>sort_unstable</code>，并把 <code>results identical</code> 打印出来——性能比较必须建立在结果一致的前提上，否则&quot;快 10 倍&quot;可能只是&quot;算错了所以快&quot;。实测随机快排 54.7907ms、标准库 12.526ms、比值 4.37。这个比值只在本机本次运行有效，换个 CPU 或换批数据会变；把它写进笔记时要注明&quot;实测于本机、-O 编译、n=1000000、种子 99&quot;，不能当成普适真理。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
+<div class="box-b">
+<p>计时最容易骗自己的地方有两个——调试编译下慢得离谱，以及编译器发现&quot;结果没用到&quot;干脆把计算删了。<code>-O</code> 与 <code>black_box</code> 就是专门治这两样的。打印时把真实耗时原样贴出来，别写&quot;大约&quot;，因为数字一旦被四舍五入，读者就无法判断它是否来自真跑。</p>
+
+</div>
+</section>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">53 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::hint::black_box;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">use std::time::Instant;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">fn quicksort(a: &amp;mut [i64], rng: &amp;mut Rng) {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    if a.len() &lt; 2 { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let p = rng.below(a.len() as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    a.swap(p, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let pivot = a[a.len() - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    for j in 0..a.len() - 1 { if a[j] &lt; pivot { a.swap(i, j); i += 1; } }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    a.swap(i, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    quicksort(&amp;mut a[..i], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    quicksort(&amp;mut a[i + 1..], rng);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="27"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">    let n = 1_000_000usize;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    let mut rng = Rng::new(99);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    let base: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(1_000_000) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    // 预热：让代码路径进入指令缓存，避免测量到首次加载开销。</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut warm = base[..1000].to_vec();</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    quicksort(&amp;mut warm, &amp;mut rng);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="35"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let t0 = Instant::now();</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    let mut a = base.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    quicksort(&amp;mut a, &amp;mut rng);</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    black_box(&amp;a);</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    let t_rand = t0.elapsed();</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="41"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    let t1 = Instant::now();</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    let mut b = base.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    b.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    black_box(&amp;b);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    let t_std = t1.elapsed();</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    println!(&quot;n = {}&quot;, n);</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">    println!(&quot;randomized quicksort = {:?}&quot;, t_rand);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    println!(&quot;std sort_unstable    = {:?}&quot;, t_std);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">    println!(&quot;ratio (rand/std)     = {:.2}&quot;, t_rand.as_secs_f64() / t_std.as_secs_f64());</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    println!(&quot;results identical    = {}&quot;, a == b);</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 -O v34_timing.rs -o v34_timing &amp;&amp; ./v34_timing</span></div>
+<div class="cl is-text"><span class="code">n = 1000000</span></div>
+<div class="cl is-text"><span class="code">randomized quicksort = 54.7907ms</span></div>
+<div class="cl is-text"><span class="code">std sort_unstable    = 12.526ms</span></div>
+<div class="cl is-text"><span class="code">ratio (rand/std)     = 4.37</span></div>
+<div class="cl is-text"><span class="code">results identical    = true</span></div></div></div>
+<p>标准差库快排经过多年优化（introsort、插入排序小数组特化、模式防御），手写的教学版慢 4.37 倍完全正常。这里的意义不是&quot;比标准库快&quot;，而是建立一个可重复的测量方法：固定输入、固定种子、预热、black_box、真实输出。</p>
+<p>测量方法本身也要写进笔记：本次编译命令是 <code>rustc --edition 2021 -O</code>，输入是种子 99 生成的 100 万个 0..999999 的整数，先对前 1000 个元素预热再开始计时，两次测量各自 <code>clone</code> 一份相同输入，最后校验结果一致。缺了其中任何一项，数字都可能失真——不预热会把首次页缺失算进去，不 clone 会测到已排序数组，不校验一致性则可能把错误结果当成快速结果。若要把这组数字用于正式对比，还应重复多次取中位数；本单元为保持终端记录简洁只跑一次，读者须清楚它的统计意义有限。</p>
+<h2 id="rust-ch03-randomized-and-stress-34-7-综合对拍-把随机化收益量化">34.7 综合对拍：把随机化收益量化</h2>
+<p>前面的性质测试验证了&quot;对不对&quot;，还需要一个实验回答&quot;随机化到底防住了什么&quot;。程序做两件事：第一，1000 组随机数组（含大量重复）加 4 组对抗输入（升序、降序、全等、锯齿），把随机主元快排与 <code>sort_unstable</code> 逐项比较，结果 1004 组、0 处不一致；第二，对 n=2000 的升序输入，分别记录随机主元版与固定主元版的最大递归深度。</p>
+<p>四组对抗输入各有针对性：升序触发固定主元的最坏划分，降序触发另一种单调退化，全等检验 Lomuto 对重复值的处理，锯齿（0/1 交替）检验大量重复下的划分平衡性。它们都是几行代码就能构造的确定性用例，却比随机数据更容易击中特定分支——这也是&quot;随机测试之外必须保留手写对抗样例&quot;的理由。程序最后打印 <code>both sorted = true / true</code>，强调深度差异不是以正确性为代价换来的：两个版本都排好了，只是路径长短不同。若只比较深度而不校验结果，一个&quot;直接返回空数组&quot;的函数也能得到深度 0 的漂亮数字。</p>
+<p>实测随机主元最大深度 21，固定主元 1999。两者都把数组排好了，但固定主元版本几乎退化成一条链：每层只排掉一个元素，递归深度与 n 同阶，既慢又有栈溢出风险。随机主元的深度约为 2·log₂2000≈22，与 21 吻合。这个数字把&quot;期望 O(n log n)&quot;从公式变成可观察的事实，也说明随机化不是玄学——它把对手构造最坏输入的难度从&quot;给个有序数组&quot;提升到&quot;猜中每一步的随机下标&quot;。若把 n 加大到 20000，固定主元版很可能耗尽栈空间，而随机版深度只增长到约 29；这种&quot;同样正确但资源曲线完全不同&quot;的差异，正是算法分析要量化的东西。</p>
+<figure class="rust-figure"><figcaption><span class="rust-fig-kind">示意图</span>结构示意 · 逐步看变化</figcaption><pre class="rust-diagram">n=2000 升序输入的递归深度对比
+随机主元：21 层  ≈ 2·log₂2000   → 时间 O(n log n)
+固定主元：1999 层 ≈ n            → 时间 O(n²)</pre></figure>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">82 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">struct Rng { s: u64 }</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Rng {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn new(seed: u64) -&gt; Self { Self { s: if seed == 0 { 1 } else { seed } } }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn next(&amp;mut self) -&gt; u64 {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let mut x = self.s;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        x ^= x &lt;&lt; 13; x ^= x &gt;&gt; 7; x ^= x &lt;&lt; 17;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        self.s = x; x</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    fn below(&amp;mut self, n: u64) -&gt; u64 { self.next() % n }</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">/// 随机主元快排，同时记录最大递归深度。</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">fn quicksort(a: &amp;mut [i64], rng: &amp;mut Rng, depth: usize, max_depth: &amp;mut usize) {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    *max_depth = (*max_depth).max(depth);</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    if a.len() &lt; 2 { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    let p = rng.below(a.len() as u64) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    a.swap(p, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    let pivot = a[a.len() - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    for j in 0..a.len() - 1 { if a[j] &lt; pivot { a.swap(i, j); i += 1; } }</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    a.swap(i, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    quicksort(&amp;mut a[..i], rng, depth + 1, max_depth);</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    quicksort(&amp;mut a[i + 1..], rng, depth + 1, max_depth);</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="27"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">/// 固定主元（总取最后一个）快排：有序输入会退化成 O(n^2)。</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">fn fixed_quicksort(a: &amp;mut [i64], depth: usize, max_depth: &amp;mut usize) {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    *max_depth = (*max_depth).max(depth);</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">    if a.len() &lt; 2 { return; }</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    let pivot = a[a.len() - 1];</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    let mut i = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">    for j in 0..a.len() - 1 { if a[j] &lt; pivot { a.swap(i, j); i += 1; } }</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">    a.swap(i, a.len() - 1);</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    fixed_quicksort(&amp;mut a[..i], depth + 1, max_depth);</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    fixed_quicksort(&amp;mut a[i + 1..], depth + 1, max_depth);</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="39"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let mut rng = Rng::new(20261126);</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    let mut bad = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">    let mut cases = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">    // 随机用例：大量重复值，覆盖 Lomuto 划分的等值分支。</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">    for _ in 0..1000 {</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">        let n = rng.below(200) as usize;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">        let data: Vec&lt;i64&gt; = (0..n).map(|_| rng.below(100) as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        let mut a = data.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let mut md = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        quicksort(&amp;mut a, &amp;mut rng, 0, &amp;mut md);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        let mut b = data.clone(); b.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">        cases += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        if a != b { bad += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">    // 对抗用例：升序、降序、全等、锯齿。</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let n = 200usize;</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    let patterns: Vec&lt;Vec&lt;i64&gt;&gt; = vec![</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        (0..n as i64).collect(),</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">        (0..n as i64).rev().collect(),</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        vec![7i64; n],</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        (0..n as i64).map(|i| if i % 2 == 0 { 0 } else { 1 }).collect(),</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    for data in &amp;patterns {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        let mut a = data.clone(); let mut md = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">        quicksort(&amp;mut a, &amp;mut rng, 0, &amp;mut md);</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">        let mut b = data.clone(); b.sort_unstable();</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">        cases += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        if a != b { bad += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    println!(&quot;[cross] cases={} mismatches={}&quot;, cases, bad);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="71"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    // 深度对比：有序输入，随机主元 vs 固定主元。</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    let n2 = 2000usize;</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">    let asc: Vec&lt;i64&gt; = (0..n2 as i64).collect();</span></div>
+<div class="cl"><span class="ln" data-ln="75"></span><span class="code">    let mut a = asc.clone(); let mut md_rand = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="76"></span><span class="code">    quicksort(&amp;mut a, &amp;mut rng, 0, &amp;mut md_rand);</span></div>
+<div class="cl"><span class="ln" data-ln="77"></span><span class="code">    let mut b = asc.clone(); let mut md_fixed = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="78"></span><span class="code">    fixed_quicksort(&amp;mut b, 0, &amp;mut md_fixed);</span></div>
+<div class="cl"><span class="ln" data-ln="79"></span><span class="code">    println!(&quot;[depth] n={} random_pivot_max_depth={} fixed_pivot_max_depth={}&quot;,</span></div>
+<div class="cl"><span class="ln" data-ln="80"></span><span class="code">        n2, md_rand, md_fixed);</span></div>
+<div class="cl"><span class="ln" data-ln="81"></span><span class="code">    println!(&quot;[depth] both sorted = {} / {}&quot;, a == asc, b == asc);</span></div>
+<div class="cl"><span class="ln" data-ln="82"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 v34_cross.rs -o v34_cross &amp;&amp; ./v34_cross</span></div>
+<div class="cl is-text"><span class="code">[cross] cases=1004 mismatches=0</span></div>
+<div class="cl is-text"><span class="code">[depth] n=2000 random_pivot_max_depth=21 fixed_pivot_max_depth=1999</span></div>
+<div class="cl is-text"><span class="code">[depth] both sorted = true / true</span></div></div></div>
+<h2 id="rust-ch03-randomized-and-stress-34-8-工程约定与取舍">34.8 工程约定与取舍</h2>
+<p>把五段程序放在一起看，能提炼出一套可复用的测试工程约定：种子写在常量里、每组用例打印实际计数、裁判与被测代码不共享内部逻辑、失败样本要能缩小到最小、性能数字要注明编译选项与输入规模。这些约定不依赖任何外部 crate，std-only 就能落地。</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>做法</th>
+<th>为什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>随机源</td>
+<td>固定种子 xorshift64</td>
+<td>失败可复现，无外部依赖</td>
+</tr>
+<tr>
+<td>性质测试</td>
+<td>有序/保多重集/幂等</td>
+<td>无需预先知道正确答案</td>
+</tr>
+<tr>
+<td>缩小</td>
+<td>按 8/4/2/1 块删除 + 极小性验证</td>
+<td>把长反例砍成可一眼看懂的短反例</td>
+</tr>
+<tr>
+<td>计时</td>
+<td>-O + black_box + Instant</td>
+<td>避免未优化与死代码消除</td>
+</tr>
+<tr>
+<td>对照</td>
+<td>独立朴素实现 + 对抗用例</td>
+<td>防止两边共享同一个 bug</td>
+</tr>
+</tbody></table>
+
+<p>这张表里的每一行都对应本单元一个可运行的程序，而不是抽象建议。例如&quot;种子写在常量里&quot;在五段程序里分别体现为 42、20261123、7、20261125、99 与 20261126；它们不是随意选的幸运数字，而是固定下来便于读者逐字复现输出。若把种子改成环境变量或命令行参数，记得同时把实际使用的值打印进日志，否则终端记录将失去可核对性。同理，对抗用例（升序、降序、全等、锯齿）应作为常量表长期保留，而不是每次临时手写——它们是一次性成本、长期收益的回归资产。</p>
+<section class="box box-trap" data-box-type="warn"><header class="box-h"><span class="box-kind">坑</span><span class="box-t">这里最容易踩</span></header>
+<div class="box-b">
+<p>这里是坑：不要把&quot;跑了多少次&quot;当成&quot;覆盖了多少情况&quot;。本单元属性测试跑 1000 次、buggy 版失败 955 次，说明仍有 45 次漏网；综合对拍的 1004 组里也包含大量相似的随机数组。真正提高覆盖的是<strong>输入模式的多样性</strong>：随机数组之外要显式加入升序、降序、全等、空、单元素、锯齿等对抗模式，34.7 的四组对抗输入就是为此。另一个坑是计时只跑一次：机器负载、缓存状态都会带来波动，正式基准应重复多次取中位数，本单元为保持输出简洁只跑一次，读者在真实项目里应改用 criterion 等工具（见工程编第 11、16 单元）。</p>
+
+</div>
+</section>
+<h2 id="rust-ch03-randomized-and-stress-34-9-自检与练习">34.9 自检与练习</h2>
+<p>把五段程序串起来看，随机化与对拍工程的本质是把&quot;我希望它是对的&quot;变成&quot;机器反复检验后仍找不到反例&quot;。随机源提供可复现的输入，性质断言提供不依赖标准答案的裁判，缩小器把反例压缩到人类可理解的规模，计时器把性能主张变成可核查的数字。这四者都不需要额外依赖，std-only 就能完整实现；理解其机制后，再引入 proptest、criterion 只是工程便利，而非能力上的跃迁。本单元也是整套算法编的收尾：前 33 个单元里每一篇的对拍，用的都是这里系统化的方法。</p>
+<section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
+<div class="box-b">
+<ul>
+<li>为什么对拍要用固定种子？&quot;每次换随机种子覆盖更广&quot;的说法错在哪里？</li>
+<li>随机主元快排的最坏情况仍是 O(n²)，那随机化带来的收益究竟是什么？</li>
+<li>性质测试为什么能替代&quot;与标准答案比对&quot;？它的盲区是什么？</li>
+<li>缩小器为什么要单独验证&quot;再删任一元素都不再失败&quot;？</li>
+<li>计时为什么必须加 <code>-O</code> 并使用 <code>black_box</code>？只跑一次有什么风险？</li>
+</ul>
+
+</div>
+</section>
+<div class="rust-exercise"><p class="rust-exercise-h">动手动脑</p><div class="rust-exercise-b">
+<ul>
+<li>练习 1：把快排改成三路划分（<code>&lt; pivot</code>、<code>== pivot</code>、<code>&gt; pivot</code> 三段），在全等数组 n=2000 上记录递归深度，与 34.3 的两路版对比；用 1000 组随机数组与 <code>sort_unstable</code> 对拍，确认 mismatch 为 0。</li>
+<li>练习 2：把 xorshift64 换成线性同余生成器 <code>s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)</code>，用同样的 10000 次取模桶测试比较均匀性，并用两个种子各跑 1000 组性质测试，报告各自的失败计数。</li>
+<li>练习 3：给缩小器再加一种&quot;按元素值去重&quot;的缩小策略（删除重复值而保留不同值），观察 <code>[22,18]</code> 这类反例是否还能进一步缩小；若不能，解释原因。</li>
+<li>练习 4：把计时程序改成重复运行 7 次并取中位数，打印七次原始耗时与中位数；说明为什么中位数比平均值更抗偶发负载尖峰。所有数字必须是真跑结果，不要写&quot;示意输出&quot;。</li>
+</ul>
+
+</div></div>
+</article>
+<footer class="doc-foot" id="doc-foot"><nav class="unit-nav" aria-label="单元导航"><a href="rust__chapters__ch03__geometry.md.html">← 计算几何：叉积、凸包与扫描线</a></nav><p class="foot-note">本单元所有 Rust 代码均由 rustc --edition 2021 真编译校验；终端记录取自实际运行结果。</p></footer>
+</main>
+</body>
+</html>
