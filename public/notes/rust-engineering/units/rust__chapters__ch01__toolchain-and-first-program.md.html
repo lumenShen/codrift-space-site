@@ -41,17 +41,17 @@
 <h2 id="rust-ch01-toolchain-and-first-program-1-2-rustc-把源码变成可执行文件">1.2 rustc：把源码变成可执行文件</h2>
 <p>rustc 是 Rust 的编译器，它接收一个 <code>.rs</code> 文件，输出可执行文件或库。最小的一段程序只需要一个 <code>main</code> 函数——它是程序执行的入口，程序从这里开始、在这里结束。注意 Rust 用 <code>println!</code> 结尾的感叹号表示这是一个宏（macro），而不是普通函数。宏在编译期展开，能做一些函数做不到的事，比如接受可变数量的参数、对格式字符串做静态检查。</p>
 <p>下面这段代码不依赖任何外部库，只用标准库 std，可以直接交给 rustc 编译。试着把它存成 <code>main.rs</code>，然后编译运行。标准库是随语言一起分发的，任何符合规范的 Rust 环境都自带它，不需要额外下载。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">6 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    println!(&quot;Hello, Rust!&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let a = 7;</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let b = 9;</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    println!(&quot;{a} + {b} = {}&quot;, a + b);</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">6 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    println!(&quot;Hello, Rust!&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let a = 7;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let b = 9;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    println!(&quot;{a} + {b} = {}&quot;, a + b);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div></div></div>
 <p>编译和运行的过程如下。这里显式写 <code>--edition 2021</code>，是为了锁定语言版本；<code>-o hello</code> 指定输出文件名。如果不写 edition，rustc 会用默认的 edition（新版本工具链通常是 2021 或更高），显式声明能让行为更可预期。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o hello</code></div>
-<div class="cl is-text is-cmd"><code class="code">$ ./hello</code></div>
-<div class="cl is-text"><code class="code">Hello, Rust!</code></div>
-<div class="cl is-text"><code class="code">7 + 9 = 16</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o hello</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ ./hello</span></div>
+<div class="cl is-text"><span class="code">Hello, Rust!</span></div>
+<div class="cl is-text"><span class="code">7 + 9 = 16</span></div></div></div>
 <p><code>{a}</code> 这种写法叫「格式化参数隐式捕获」，编译器会从当前作用域里找同名变量填进去，从 Rust 1.58 起就稳定可用。它比 <code>println!(&quot;{} {}&quot;, a, b)</code> 更好读，因为变量名直接写在字符串里，改代码时不容易对错位置。还有一个细节：格式字符串里的 <code>{}</code> 会在编译期被检查，如果占位符数量和传入参数对不上，编译器直接报错，而不是等到运行时才打出奇怪的结果。这种「把错误挡在编译期」的思路，是 Rust 一贯的风格。</p>
 <p>编译器的错误信息也值得专门提一句。Rust 的错误提示以详细著称，它不仅告诉你哪一行出错，还常常给出修改建议，甚至用彩色箭头标出问题位置。初学时不要害怕报错，把报错当成一对一的辅导老师：读懂它、按它说的改，往往比到处搜答案更快的提升方式。</p>
 <h2 id="rust-ch01-toolchain-and-first-program-1-3-cargo-项目管家与构建系统">1.3 cargo：项目管家与构建系统</h2>
@@ -88,34 +88,34 @@
 </tbody></table>
 
 <p>用 <code>cargo new</code> 创建项目，cargo 会帮你生成目录和一个能跑的「Hello, world!」。注意项目名里如果带连字符，例如 <code>hello-rust</code>，生成的目标名会换成下划线 <code>hello_rust</code>，这是 Rust 标识符的规则所致。如果是在已有目录里初始化，用 <code>cargo init</code> 而不是 <code>cargo new</code>，区别只在于是否新建一层文件夹。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo new hello_rust</code></div>
-<div class="cl is-text"><code class="code">     Created binary (application) `hello_rust` package</code></div>
-<div class="cl is-text is-cmd"><code class="code">$ cd hello_rust</code></div>
-<div class="cl is-text is-cmd"><code class="code">$ cargo run</code></div>
-<div class="cl is-text"><code class="code">   Compiling hello_rust v0.1.0 (.../hello_rust)</code></div>
-<div class="cl is-text"><code class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s</code></div>
-<div class="cl is-text"><code class="code">     Running `target/debug/hello_rust`</code></div>
-<div class="cl is-text"><code class="code">Hello, world!</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo new hello_rust</span></div>
+<div class="cl is-text"><span class="code">     Created binary (application) `hello_rust` package</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ cd hello_rust</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ cargo run</span></div>
+<div class="cl is-text"><span class="code">   Compiling hello_rust v0.1.0 (.../hello_rust)</span></div>
+<div class="cl is-text"><span class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s</span></div>
+<div class="cl is-text"><span class="code">     Running `target/debug/hello_rust`</span></div>
+<div class="cl is-text"><span class="code">Hello, world!</span></div></div></div>
 <p>上面 <code>cargo run</code> 的输出里，编译耗时和具体路径因机器而异，属于示意输出。目录结构里，<code>Cargo.toml</code> 是清单文件，记录项目名、版本和依赖；<code>Cargo.lock</code> 锁定依赖的具体版本，保证每次构建拿到同样的依赖树；<code>src/main.rs</code> 是二进制入口；<code>target/</code> 放编译产物，通常不用手动碰，也能随时删掉让 cargo 重新生成。<code>cargo check</code> 只做类型检查不生成二进制，日常开发里它比 <code>cargo build</code> 快得多，适合频繁调用；确认无误后再用 <code>cargo build</code> 或 <code>cargo run</code> 生成程序。</p>
 <p>依赖写在 <code>Cargo.toml</code> 的 <code>[dependencies]</code> 段落里，cargo 会从官方仓库拉取并解析版本。版本号遵循语义化版本规范，cargo 在兼容范围内选择最新可用版本，而 <code>Cargo.lock</code> 把最终选择固定下来。这套机制让「升级一个依赖可能悄悄破坏构建」的概率大大降低。</p>
 <h2 id="rust-ch01-toolchain-and-first-program-1-4-rustfmt-与-clippy-让代码更地道">1.4 rustfmt 与 clippy：让代码更地道</h2>
 <p>能编译不代表写得好。rustfmt 会按社区统一风格重排代码，clippy 则在上百条规则上给你建议，比如提醒你某个手写循环其实有更惯用的写法。两者都不改变语义，可以放心当作「免费体检」。统一风格的意义在团队里尤其明显：当所有人都用同一套排版，代码评审就能把注意力放在逻辑上，而不是花时间争论缩进和大括号位置。</p>
 <p>rustfmt 的开箱即用配置已经覆盖绝大多数场景，你几乎不需要调参数。运行 <code>cargo fmt</code> 会格式化整个包，运行 <code>cargo fmt --check</code> 则只检查不修改，常用于 CI 里强制风格。如果确实要定制，可以在项目根目录放一个 <code>rustfmt.toml</code>，但初学阶段不建议急着改——先接受社区默认值，往往比「我觉得这样更好看」更靠谱。</p>
 <p>clippy 的建议分等级：有些是 <code>warning</code>，不阻碍编译；有些在严格模式下会成为 <code>error</code>。初学阶段不必追求清零所有警告，但每条警告都值得读一遍，因为它往往对应着一个真实存在的坏习惯。比如下面这段程序用 <code>iter().sum()</code> 求和，而不是手写累加循环——这正是 clippy 会「建议你考虑」的惯用写法，它更短，也不容易在边界条件上出错。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn add(a: i32, b: i32) -&gt; i32 {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    a + b</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let numbers = [1, 2, 3, 4, 5];</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let sum: i32 = numbers.iter().sum();</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;{} + {} = {}&quot;, 7, 9, add(7, 9));</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    println!(&quot;数组 {:?} 的和是 {}&quot;, numbers, sum);</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">}</code></div></div></div>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo fmt</code></div>
-<div class="cl is-text is-cmd"><code class="code">$ cargo clippy</code></div>
-<div class="cl is-text"><code class="code">    Checking hello_rust v0.1.0 (.../hello_rust)</code></div>
-<div class="cl is-text"><code class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn add(a: i32, b: i32) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    a + b</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let numbers = [1, 2, 3, 4, 5];</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let sum: i32 = numbers.iter().sum();</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;{} + {} = {}&quot;, 7, 9, add(7, 9));</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;数组 {:?} 的和是 {}&quot;, numbers, sum);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo fmt</span></div>
+<div class="cl is-text is-cmd"><span class="code">$ cargo clippy</span></div>
+<div class="cl is-text"><span class="code">    Checking hello_rust v0.1.0 (.../hello_rust)</span></div>
+<div class="cl is-text"><span class="code">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s</span></div></div></div>
 <p>一个实用的节奏是：写完一段就用 <code>cargo check</code> 快速确认类型没问题，阶段性完成后跑 <code>cargo clippy</code> 看看有没有更地道的写法，提交前用 <code>cargo fmt</code> 统一排版。把工具用成习惯，而不是等到「代码丑得看不下去」才想起来，收益会大得多。</p>
 <h2 id="rust-ch01-toolchain-and-first-program-1-5-workspace-初见">1.5 workspace 初见</h2>
 <p>当项目变大，你可能需要把代码拆成多个包（crate）。cargo 的 workspace 机制允许一组包共享同一个 <code>Cargo.lock</code> 和目标目录，统一构建。你不必现在就掌握它，只要知道长什么样：根 <code>Cargo.toml</code> 里列出 <code>members</code>，每个成员是独立的包，有自己的 <code>Cargo.toml</code> 和 <code>src/</code>。</p>

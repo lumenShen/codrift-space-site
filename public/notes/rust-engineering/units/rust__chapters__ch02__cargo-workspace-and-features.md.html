@@ -32,23 +32,23 @@
 <p><code>dependencies</code> 只声明「我需要什么」，并不声明「最终用哪个具体版本」——后者由解析器和 Cargo.lock 共同决定。<code>version = &quot;1.2&quot;</code> 表示兼容 1.x 的最新版本，<code>~1.2</code> 表示限定在 1.2.x，<code>=1.2.3</code> 才是精确锁定。只在测试里用到的依赖写进 <code>[dev-dependencies]</code>，它不会进入发布产物；可选能力写进 <code>[dependencies]</code> 并标记 <code>optional = true</code>，再由 feature 决定是否真正编译。</p>
 <p>下面的片段把这几类字段放在一起。<code>dep:serde</code> 是 1.60 之后推荐的写法，它明确告诉 Cargo「这里的 feature 只是开关依赖，不要额外生成一个同名的隐式 feature」，这是多年踩坑后形成的约定。</p>
 <p>还有几个容易忽略的字段值得提前认识：<code>[[bin]]</code> 用于声明额外的可执行文件，<code>[lib]</code> 可以改名或关闭库目标，<code>build = &quot;build.rs&quot;</code> 指定构建脚本，而 <code>[package.metadata]</code> 留给第三方工具存放自己的配置，Cargo 本身并不解读它。一个包同时拥有库目标和二进制目标是完全正常的，库接口才是复用的正确入口，<code>main.rs</code> 应当尽可能薄。字段记不全并不可怕，关键是知道「哪一类信息该写进清单」，而不是把配置散落在脚本和文档里。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">[package]</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">name = &quot;notes-cli&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">version = &quot;0.3.0&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">edition = &quot;2021&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">license = &quot;MIT&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">description = &quot;工程笔记配套的命令行工具&quot;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">[dependencies]</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">serde = { version = &quot;1&quot;, features = [&quot;derive&quot;], optional = true }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">[features]</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">default = [&quot;json&quot;]</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">json = [&quot;dep:serde&quot;]</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">minimal = []</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="15"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">[dev-dependencies]</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code"># 仅供测试使用，不会进入发布产物</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[package]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">name = &quot;notes-cli&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">version = &quot;0.3.0&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">edition = &quot;2021&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">license = &quot;MIT&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">description = &quot;工程笔记配套的命令行工具&quot;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">[dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">serde = { version = &quot;1&quot;, features = [&quot;derive&quot;], optional = true }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">[features]</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">default = [&quot;json&quot;]</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">json = [&quot;dep:serde&quot;]</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">minimal = []</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">[dev-dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code"># 仅供测试使用，不会进入发布产物</span></div></div></div>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
 <p>把 Cargo.toml 想成一张快递单。package 写「我是谁、送到哪」，workspace 写「这几个包裹一起发货」，dependencies 写「我需要哪些零件」，而 Cargo.lock 是当天真正装车的零件清单。你声明的是需求，锁文件记录的是结果，两者各司其职，谁也替代不了谁。</p>
@@ -56,44 +56,44 @@
 </div>
 </section>
 <p>Rust 代码里读取特性有两种方式，它们的时机完全不同：<code>cfg!</code> 是布尔表达式，两个分支都要通过类型检查；<code>#[cfg]</code> 则在编译前直接删除条目，未选中的代码甚至不会被解析成有效实现。需要「同一接口、两套实现」时，应当用后者，让不相关依赖彻底不进入编译单元。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code, unexpected_cfgs)]</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">/// 根据编译时特性选择后端名称。</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn backend_name() -&gt; &amp;'static str {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    if cfg!(feature = &quot;json&quot;) { &quot;json&quot; } else { &quot;minimal&quot; }</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">#[cfg(feature = &quot;json&quot;)]</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">fn parse_hint() -&gt; &amp;'static str { &quot;启用结构化解析，支持嵌套输入&quot; }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">#[cfg(not(feature = &quot;json&quot;))]</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">fn parse_hint() -&gt; &amp;'static str { &quot;仅内置格式，产物更小&quot; }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="13"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    println!(&quot;backend = {}&quot;, backend_name());</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    println!(&quot;hint = {}&quot;, parse_hint());</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">17 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code, unexpected_cfgs)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">/// 根据编译时特性选择后端名称。</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn backend_name() -&gt; &amp;'static str {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    if cfg!(feature = &quot;json&quot;) { &quot;json&quot; } else { &quot;minimal&quot; }</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">#[cfg(feature = &quot;json&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">fn parse_hint() -&gt; &amp;'static str { &quot;启用结构化解析，支持嵌套输入&quot; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">#[cfg(not(feature = &quot;json&quot;))]</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">fn parse_hint() -&gt; &amp;'static str { &quot;仅内置格式，产物更小&quot; }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="13"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    println!(&quot;backend = {}&quot;, backend_name());</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    println!(&quot;hint = {}&quot;, parse_hint());</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">}</span></div></div></div>
 <p>用 rustc 直接编译时没有 Cargo 注入的 feature，因此走 <code>minimal</code> 分支；用 cargo 编译时默认特性 <code>json</code> 被打开，走另一条分支。这种「编译期分叉、运行期零成本」是 Rust 处理平台差异和功能裁剪的基本手段，但代价是组合数量会膨胀，必须有意识地收敛。</p>
 <h2 id="rust-ch02-cargo-workspace-and-features-8-2-workspace-拆分与目录约定">8.2 workspace 拆分与目录约定</h2>
 <p>当仓库里出现多个互相依赖的包时，workspace 让它们共享一份 lockfile 和一个 <code>target</code> 目录。根 Cargo.toml 用 <code>[workspace]</code> 列出成员，每个成员自身仍是完整的 package，可以独立测试与发布。拆分的判据不是「代码行数到了多少」，而是「能否用一条清晰的依赖方向描述它们」：底层库不认识上层应用，上层应用可以组合若干底层库，过程宏单独成包。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">[workspace]</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">resolver = &quot;2&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">members = [&quot;crates/core&quot;, &quot;crates/cli&quot;, &quot;crates/e2e&quot;]</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">[workspace.package]</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">edition = &quot;2021&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">license = &quot;MIT&quot;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="8"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">[workspace.dependencies]</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">core = { path = &quot;crates/core&quot;, version = &quot;0.3.0&quot; }</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[workspace]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">resolver = &quot;2&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">members = [&quot;crates/core&quot;, &quot;crates/cli&quot;, &quot;crates/e2e&quot;]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">[workspace.package]</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">edition = &quot;2021&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">license = &quot;MIT&quot;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="8"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">[workspace.dependencies]</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">core = { path = &quot;crates/core&quot;, version = &quot;0.3.0&quot; }</span></div></div></div>
 <p>成员通过 <code>version.workspace = true</code>、<code>edition.workspace = true</code> 继承公共字段，避免十几个包各自漂移。典型目录如下，注意跨包测试应当放在专门的 e2e 包里，而不是工作区根目录——根目录不是任何 crate 的源目录，放在那里的测试不会被 cargo 自动发现。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><code class="code">rust-notes/</code></div>
-<div class="cl is-text"><code class="code">├── Cargo.toml          # [workspace] + [workspace.dependencies]</code></div>
-<div class="cl is-text"><code class="code">├── Cargo.lock</code></div>
-<div class="cl is-text"><code class="code">└── crates/</code></div>
-<div class="cl is-text"><code class="code">    ├── core/           # 领域逻辑，src/lib.rs</code></div>
-<div class="cl is-text"><code class="code">    ├── cli/            # 可执行文件，src/main.rs</code></div>
-<div class="cl is-text"><code class="code">    └── e2e/            # 跨包集成测试，tests/</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text"><span class="code">rust-notes/</span></div>
+<div class="cl is-text"><span class="code">├── Cargo.toml          # [workspace] + [workspace.dependencies]</span></div>
+<div class="cl is-text"><span class="code">├── Cargo.lock</span></div>
+<div class="cl is-text"><span class="code">└── crates/</span></div>
+<div class="cl is-text"><span class="code">    ├── core/           # 领域逻辑，src/lib.rs</span></div>
+<div class="cl is-text"><span class="code">    ├── cli/            # 可执行文件，src/main.rs</span></div>
+<div class="cl is-text"><span class="code">    └── e2e/            # 跨包集成测试，tests/</span></div></div></div>
 <p>目录约定的价值在于让「在哪写代码」成为不需要讨论的问题：<code>src/lib.rs</code> 放可复用的库接口，<code>src/main.rs</code> 只做参数解析与装配，<code>tests/</code> 放从外部视角调用的集成测试，<code>examples/</code> 放可运行示例，<code>benches/</code> 放基准测试。一个常见反模式是把业务实现写在 <code>main.rs</code> 里，等需要被第二个二进制复用时再大规模搬运。</p>
 <p><code>resolver = &quot;2&quot;</code> 也值得单独说明：它改变了 feature 的统一方式，让构建依赖与开发依赖的 feature 不再污染正常依赖，同时让目标平台相关的依赖只在对应平台启用。老项目保留第一版解析器往往是为了兼容历史行为，新项目没有理由不选第二版。日常检查整个工作区用 <code>cargo check --workspace</code>，它比逐个进入成员目录构建更快，也更能暴露跨成员的链接问题。</p>
 <h2 id="rust-ch02-cargo-workspace-and-features-8-3-feature-组合与默认特性">8.3 feature 组合与默认特性</h2>
@@ -134,43 +134,43 @@
 </tbody></table>
 
 <p>如果两个 feature 在语义上互斥，不要让它们悄悄覆盖对方的实现。更稳妥的做法是在代码入口用 <code>compile_error!</code> 显式报错，把问题挡在编译期，而不是留到线上出现诡异行为。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">6 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code, unexpected_cfgs)]</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">#[cfg(all(feature = &quot;json&quot;, feature = &quot;minimal&quot;))]</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">compile_error!(&quot;json 与 minimal 互斥，请只启用其中一个&quot;);</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="5"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">fn main() {}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">6 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code, unexpected_cfgs)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">#[cfg(all(feature = &quot;json&quot;, feature = &quot;minimal&quot;))]</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">compile_error!(&quot;json 与 minimal 互斥，请只启用其中一个&quot;);</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">fn main() {}</span></div></div></div>
 <h2 id="rust-ch02-cargo-workspace-and-features-8-4-依赖版本与-lockfile">8.4 依赖版本与 lockfile</h2>
 <p>语义化版本把变更分成三类：主版本号变化意味着不兼容的 API 改动，次版本号变化意味着向后兼容的新增，修订号变化意味着向后兼容的修复。Cargo 的默认 <code>^</code> 策略允许次版本与修订号自动升级，这让你能拿到安全修复，也意味着两台机器在不同时间构建可能得到不同结果。Cargo.lock 记录每个依赖的精确版本与校验和，正是为了消除这种不确定性。</p>
 <p>应用仓库必须提交 lockfile；库仓库如今也建议提交，并用 <code>cargo update -p &lt;name&gt;</code> 显式升级，而不是让每个使用者各自解析。CI 中使用 <code>cargo build --locked</code>，可以在锁文件与清单不一致时直接失败，防止有人改了 Cargo.toml 却忘记更新锁文件。需要定点回退时用 <code>cargo update -p serde --precise 1.0.188</code>，它只动一个包，比全量 <code>cargo update</code> 可控得多。</p>
 <p>还有一个容易踩的坑是「最低版本」与「实际版本」的差别。清单写 <code>serde = &quot;1&quot;</code> 只约束了下界，真正在锁文件里的可能是 1.0.219； CI 若想验证声明的下界是否真的可用，需要单独用最小版本解析跑一遍。反过来，锁文件里的版本不会因为清单放宽而自动变化，必须显式 <code>cargo update</code> 才会移动。理解这一点，就能解释「为什么我改了版本号但构建结果没变」以及「为什么同事拉代码后依赖突然升级了」这两类经典疑问。</p>
 <p>版本字符串的处理看着简单，却是很多工具的隐藏 bug 来源。下面这个小例子只演示 std 下的手写解析思路：真实项目应当使用专门的版本解析库，而不是自己拼字符串，因为预发布标签、构建元数据与比较规则远比这里复杂。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#[derive(Debug, PartialEq, Eq)]</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">struct Ver { major: u64, minor: u64, patch: u64 }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">impl Ver {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    fn parse(s: &amp;str) -&gt; Option&lt;Ver&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        let mut it = s.split('.');</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        let major = it.next()?.parse().ok()?;</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        let minor = it.next()?.parse().ok()?;</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        let patch = it.next()?.parse().ok()?;</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        if it.next().is_some() { return None; }</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        Some(Ver { major, minor, patch })</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="14"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    let a = Ver::parse(&quot;1.2.3&quot;).unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    let b = Ver::parse(&quot;1.3.0&quot;).unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    println!(&quot;a={:?} b={:?}&quot;, a, b);</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    println!(&quot;跨次版本: {}&quot;, a.minor != b.minor);</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div></div></div>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo tree -e features -p notes-cli</code></div>
-<div class="cl is-text"><code class="code">notes-cli v0.3.0</code></div>
-<div class="cl is-text"><code class="code">└── serde v1.0.x</code></div>
-<div class="cl is-text"><code class="code">    ├── derive (feature)</code></div>
-<div class="cl is-text"><code class="code">    └── std (feature)</code></div>
-<div class="cl is-text"><code class="code">（示意输出，实际版本与树形结构随 Cargo.lock 变化）</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">20 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#[derive(Debug, PartialEq, Eq)]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">struct Ver { major: u64, minor: u64, patch: u64 }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">impl Ver {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    fn parse(s: &amp;str) -&gt; Option&lt;Ver&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        let mut it = s.split('.');</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        let major = it.next()?.parse().ok()?;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        let minor = it.next()?.parse().ok()?;</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        let patch = it.next()?.parse().ok()?;</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if it.next().is_some() { return None; }</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        Some(Ver { major, minor, patch })</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    let a = Ver::parse(&quot;1.2.3&quot;).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    let b = Ver::parse(&quot;1.3.0&quot;).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    println!(&quot;a={:?} b={:?}&quot;, a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    println!(&quot;跨次版本: {}&quot;, a.minor != b.minor);</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">}</span></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo tree -e features -p notes-cli</span></div>
+<div class="cl is-text"><span class="code">notes-cli v0.3.0</span></div>
+<div class="cl is-text"><span class="code">└── serde v1.0.x</span></div>
+<div class="cl is-text"><span class="code">    ├── derive (feature)</span></div>
+<div class="cl is-text"><span class="code">    └── std (feature)</span></div>
+<div class="cl is-text"><span class="code">（示意输出，实际版本与树形结构随 Cargo.lock 变化）</span></div></div></div>
 <p>排查依赖膨胀时，优先看 <code>cargo tree -e features</code> 而不是猜测：同一个库被两条路径以不同 feature 引入，最终会按并集编译，这正是 feature 必须可叠加的实际原因。</p>
 <h2 id="rust-ch02-cargo-workspace-and-features-8-5-工程边界与迁移策略">8.5 工程边界与迁移策略</h2>
 <p>workspace 的边界应当与团队的代码所有权边界大致对齐。把十几个小包塞进一个 workspace 会让编译图难以理解；把强耦合的模块拆成五个互相引用的包则会让每次改动都触发连锁发布。一个实用的判据是：如果两个模块永远一起改、一起发布，它们就属于同一个包。</p>

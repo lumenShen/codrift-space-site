@@ -40,25 +40,25 @@
 <h2 id="rust-ch01-borrowing-and-references-3-2-不可变引用与可变引用">3.2 不可变引用与可变引用</h2>
 <p>引用分两种，区别全在一个 <code>mut</code> 上。不可变引用写 <code>&amp;T</code>，表示「我只读，不改」；可变引用写 <code>&amp;mut T</code>，表示「我要改」。函数参数里用哪种，直接决定了调用方能不能同时做别的事。</p>
 <p>先看只读的写法。<code>length(&amp;name)</code> 把 <code>name</code> 的引用传进去，函数签名写 <code>&amp;String</code>，函数体内 <code>s.len()</code> 只是读取长度。调用结束后 <code>name</code> 依然完好，还能照常打印。这里的 <code>&amp;</code> 是「取引用」操作符，<code>println!</code> 里直接用 <code>name</code> 而不是 <code>&amp;name</code>，是因为格式化宏会自动按引用捕获——不过写清楚 <code>&amp;name</code> 也不会错。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn length(s: &amp;String) -&gt; usize {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    s.len()</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let name = String::from(&quot;Rust&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let n = length(&amp;name);</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;name={name}, 长度={n}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn length(s: &amp;String) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    s.len()</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let name = String::from(&quot;Rust&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let n = length(&amp;name);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;name={name}, 长度={n}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div></div></div>
 <p>再看可变引用。函数参数写 <code>&amp;mut String</code>，函数体里就能调用 <code>push</code> 修改内容；调用方必须把变量声明成 <code>mut</code>，并用 <code>&amp;mut msg</code> 传参。两处的 <code>mut</code> 缺一不可——这是 Rust 在提醒你「修改的权力」需要双方共同确认，而不是某个函数偷偷获得。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn push_exclaim(s: &amp;mut String) {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    s.push('!');</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let mut msg = String::from(&quot;hello&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    push_exclaim(&amp;mut msg);</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;{msg}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn push_exclaim(s: &amp;mut String) {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    s.push('!');</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut msg = String::from(&quot;hello&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    push_exclaim(&amp;mut msg);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;{msg}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div></div></div>
 <p>写函数签名时，你可能纠结参数该写 <code>&amp;String</code> 还是 <code>&amp;str</code>。经验法则是：如果函数不需要调用 <code>String</code> 独有的能力，优先写 <code>&amp;str</code>。因为 <code>&amp;String</code> 会自动解引用（deref coercion）成 <code>&amp;str</code>，所以传 <code>&amp;name</code> 给一个接受 <code>&amp;str</code> 的函数完全没问题；反过来接受 <code>&amp;String</code> 的函数却没法接收字符串字面量。参数越宽泛，函数越通用。</p>
 <p>一个小建议：写函数时优先考虑 <code>&amp;T</code>，只在确实需要修改时才升级到 <code>&amp;mut T</code>。因为不可变引用更「宽容」，调用方更容易满足借用规则，函数的适用范围也更广。方法调用时也有自动借用：对 <code>String</code> 调用 <code>len()</code>，实际等价于编译器自动帮你取了引用，所以你不需要手动写 <code>(&amp;s).len()</code>。</p>
 <h2 id="rust-ch01-borrowing-and-references-3-3-借用规则-编译器是你的图书管理员">3.3 借用规则：编译器是你的图书管理员</h2>
@@ -100,47 +100,47 @@
 </tbody></table>
 
 <p>试着同时持有一个不可变引用和一个可变引用，编译器会给出类似下面的报错（示意输出，行号因文件而异）：</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main</code></div>
-<div class="cl is-text"><code class="code">error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable</code></div>
-<div class="cl is-text"><code class="code"> --&gt; main.rs:4:5</code></div>
-<div class="cl is-text"><code class="code">  |</code></div>
-<div class="cl is-text"><code class="code">3 | let first = &amp;v[0];</code></div>
-<div class="cl is-text"><code class="code">  |             - immutable borrow occurs here</code></div>
-<div class="cl is-text"><code class="code">4 | v.push(4);</code></div>
-<div class="cl is-text"><code class="code">  | ^^^^^^^^^ mutable borrow occurs here</code></div>
-<div class="cl is-text"><code class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main</span></div>
+<div class="cl is-text"><span class="code">error[E0502]: cannot borrow `v` as mutable because it is also borrowed as immutable</span></div>
+<div class="cl is-text"><span class="code"> --&gt; main.rs:4:5</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">3 | let first = &amp;v[0];</span></div>
+<div class="cl is-text"><span class="code">  |             - immutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">4 | v.push(4);</span></div>
+<div class="cl is-text"><span class="code">  | ^^^^^^^^^ mutable borrow occurs here</span></div>
+<div class="cl is-text"><span class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</span></div></div></div>
 <p>初学者常被这条规则「卡住」，但它其实是好事：这类并发与内存错误在其他语言里往往要等到线上偶发崩溃才暴露，而 Rust 让你在敲代码时就撞上它。</p>
 <p>这条规则还是 Rust 并发安全的基础。所谓数据竞争，指的是两个线程同时访问同一份数据，其中至少一个在写，且没有同步措施。借用规则在编译期就排除了「同时有多个写入者」或「一边读一边写」的可能，于是 Rust 敢说「如果代码能编译通过，共享可变状态就受到约束」。这正是它不靠垃圾回收也能保证安全的另一半答案：所有权管释放，借用规则管并发与别名。</p>
 <h2 id="rust-ch01-borrowing-and-references-3-4-nll-借用没你想的那么长">3.4 NLL：借用没你想的那么长</h2>
 <p>早期的 Rust 里，借用的有效期严格跟随变量的作用域（从声明到花括号结束）。这带来了一些反直觉的失败：明明最后一次使用引用之后你已经不再碰它了，编译器却认为借用还活着。后来的改进叫 NLL（Non-Lexical Lifetimes，非词法作用域生命周期）：借用的有效期从「变量作用域」缩短为「最后一次使用引用之前」。</p>
 <p>下面的例子就是 NLL 的典型受益者。<code>first</code> 引用了 <code>v</code> 的第一个元素，打印一次之后就不再使用；紧接着 <code>v.push(4)</code> 取得可变借用。按老规则这会冲突，但在 NLL 下，编译器看到 <code>first</code> 之后没再用，就判定不可变借用已经结束，于是放行。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">7 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    let mut v = vec![1, 2, 3];</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    let first = &amp;v[0];</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    println!(&quot;first={first}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    v.push(4); // first 不再使用，借用到此结束</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    println!(&quot;v={v:?}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">7 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    let mut v = vec![1, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    let first = &amp;v[0];</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    println!(&quot;first={first}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    v.push(4); // first 不再使用，借用到此结束</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;v={v:?}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">}</span></div></div></div>
 <p>理解 NLL 的一个实用技巧是：把借用的有效期想象成「从取引用到最后一次使用这段区间」，而不是整个大括号。写代码时如果遭遇借用冲突，先看看能不能把某次使用提前，或者把引用的作用域用一对额外的小括号缩紧，很多问题就迎刃而解。</p>
 <p>要注意，NLL 只看「引用有没有被使用」，不看变量是否还在作用域里。所以像 <code>let r = &amp;mut v; println!(&quot;{r}&quot;); v.push(1);</code> 这种顺序能过编译，因为 <code>r</code> 在 <code>push</code> 之前就最后一次出现了。但如果你在 <code>push</code> 之后又用了 <code>r</code>，借用就重新「活」到了那里，冲突立刻出现。把这点想清楚，大部分借用报错都能自己推断出原因。</p>
 <h2 id="rust-ch01-borrowing-and-references-3-5-as_ref-与-as_mut-从容器里借出引用">3.5 as_ref 与 as_mut：从容器里借出引用</h2>
 <p>有些类型既持有所有权，又需要「借用里面的内容」，<code>Option&lt;T&gt;</code> 是最常见的例子。<code>Option&lt;String&gt;</code> 里的字符串是被 <code>Some</code> 包着的，直接 <code>map</code> 会把所有权 consume 掉；如果你只是想读长度、还想保留原来的 <code>Option</code>，就该用 <code>as_ref()</code>——它把 <code>Option&lt;T&gt;</code> 变成 <code>Option&lt;&amp;T&gt;</code>，借用里面的值而不是拿走它。</p>
 <p>对应的 <code>as_mut()</code> 把 <code>Option&lt;T&gt;</code> 变成 <code>Option&lt;&amp;mut T&gt;</code>，让你在 <code>Some</code> 里修改内容。下面这段程序同时演示了两者：<code>show</code> 用 <code>as_ref().map(...)</code> 读长度而不消耗参数；<code>main</code> 里用 <code>as_mut()</code> 拿到可变引用，往字符串后面追加一个字符。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn show(opt: Option&lt;String&gt;) -&gt; Option&lt;usize&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    opt.as_ref().map(|s| s.len())</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let a = Some(String::from(&quot;hi&quot;));</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let b: Option&lt;String&gt; = None;</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    println!(&quot;{:?}, {:?}&quot;, show(a), show(b));</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    let mut c = Some(String::from(&quot;x&quot;));</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    if let Some(s) = c.as_mut() {</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        s.push('y');</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    println!(&quot;{c:?}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn show(opt: Option&lt;String&gt;) -&gt; Option&lt;usize&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    opt.as_ref().map(|s| s.len())</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let a = Some(String::from(&quot;hi&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let b: Option&lt;String&gt; = None;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    println!(&quot;{:?}, {:?}&quot;, show(a), show(b));</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    let mut c = Some(String::from(&quot;x&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    if let Some(s) = c.as_mut() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        s.push('y');</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;{c:?}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
 <p><code>as_ref</code> / <code>as_mut</code> 不是 <code>Option</code> 的专利，<code>Box</code>、<code>Rc</code> 等智能指针也提供类似方法，套路是一致的：当你手上有「拥有者」，但下游只需要「借用」时，就找找有没有 <code>as_ref</code> 这类转换。养成这个习惯，能省掉大量不必要的 clone。</p>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">

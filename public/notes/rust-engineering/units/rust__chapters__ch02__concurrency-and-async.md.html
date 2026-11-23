@@ -30,24 +30,24 @@
 <h2 id="rust-ch02-concurrency-and-async-11-1-线程与-move-闭包-所有权就是安全边界">11.1 线程与 move 闭包：所有权就是安全边界</h2>
 <p><code>thread::spawn</code> 要求传入的闭包满足 <code>Send + &#39;static</code>。前者表示「这个类型的值可以跨线程转移」，后者表示「它不借用任何比线程寿命更短的栈数据」。这两条约束把数据竞争最常见的来源挡在编译期：你不可能不小心把一个指向局部变量的引用交给新线程。</p>
 <p>满足约束的直接方式是 <code>move</code> 闭包：它把捕获的变量按值搬进闭包。需要注意 <code>move</code> 移动的是变量本身，对于 <code>Vec</code> 这类所有权类型意味着整个缓冲区被转移；对于 <code>&amp;T</code> 这类引用类型，移动的只是引用，仍然受生命周期约束。下面每个线程各拿一份克隆的数据，因此互不干扰。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::thread;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    let data = vec![1, 2, 3];</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let handles: Vec&lt;_&gt; = (0..3)</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        .map(|i| {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">            let owned = data.clone();</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">            thread::spawn(move || {</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">                let sum: i32 = owned.iter().sum();</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">                println!(&quot;worker {} sees sum={}&quot;, i, sum);</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">            })</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        })</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        .collect();</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="14"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    for handle in handles {</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">        handle.join().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">18 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::thread;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    let data = vec![1, 2, 3];</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let handles: Vec&lt;_&gt; = (0..3)</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        .map(|i| {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">            let owned = data.clone();</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">            thread::spawn(move || {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">                let sum: i32 = owned.iter().sum();</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">                println!(&quot;worker {} sees sum={}&quot;, i, sum);</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            })</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        })</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        .collect();</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="14"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    for handle in handles {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">        handle.join().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div></div></div>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
 <p>把线程想成外包团队。你交给它的资料必须是一份完整的复印件（move 转移所有权），不能是一张写着「去我办公桌上拿」的便条（借用局部变量）。等团队干完活要签收（<code>join</code>），否则主程序可能先收工走人。</p>
@@ -58,49 +58,49 @@
 <h2 id="rust-ch02-concurrency-and-async-11-2-arc-mutex-t-共享可变状态">11.2 Arc&lt;Mutex<T>&gt;：共享可变状态</h2>
 <p>当确实需要多个线程改动同一份数据时，<code>Arc&lt;Mutex&lt;T&gt;&gt;</code> 是标准库给出的基本组合：<code>Arc</code> 提供原子引用计数，让同一个值有多个所有者；<code>Mutex</code> 保证同一时刻只有一个线程能拿到内部数据的可变访问。锁的获取返回 <code>Guard</code>，它在离开作用域时自动释放，因此不会因为忘记解锁而死锁——但「拿着锁调用可能等待的操作」仍然会造成死锁或长时间阻塞。</p>
 <p>计数器是最典型的例子。循环内每次只锁住极短的临界区，累加后立刻释放；用 <code>Arc::clone</code> 而不是直接克隆数据，确保共享的是同一个计数器。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::sync::{Arc, Mutex};</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::thread;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let counter = Arc::new(Mutex::new(0u64));</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let mut handles = Vec::new();</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    for _ in 0..8 {</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        let shared = Arc::clone(&amp;counter);</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        handles.push(thread::spawn(move || {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">            for _ in 0..1000 {</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">                let mut guard = shared.lock().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">                *guard += 1;</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">            }</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        }));</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="17"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">    for handle in handles {</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        handle.join().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    println!(&quot;counter = {}&quot;, *counter.lock().unwrap());</code></div>
-<div class="cl"><span class="ln" data-ln="22"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">22 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::sync::{Arc, Mutex};</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::thread;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let counter = Arc::new(Mutex::new(0u64));</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let mut handles = Vec::new();</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    for _ in 0..8 {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        let shared = Arc::clone(&amp;counter);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        handles.push(thread::spawn(move || {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            for _ in 0..1000 {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">                let mut guard = shared.lock().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">                *guard += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        }));</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="17"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">    for handle in handles {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        handle.join().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    println!(&quot;counter = {}&quot;, *counter.lock().unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">}</span></div></div></div>
 <p><code>lock()</code> 返回 <code>Result</code>，因为持锁线程 panic 后锁会处于「中毒」状态。示例里用 <code>unwrap()</code> 是假设工作线程不会 panic；生产代码应当根据业务决定是恢复中毒锁、记录错误还是终止流程。还要警惕锁的粒度：锁太少导致竞争，锁太细导致逻辑碎片化，两者都要靠实际数据判断。</p>
 <p>另一个实用细节是 <code>try_lock</code>：它不等待，拿不到锁立即返回，适合「能做就做、不能就跳过」的刷新类任务。死锁的经典成因是多个线程以不同顺序获取两把锁；约定全局加锁顺序，或干脆把两把锁合成一把保护同一个结构体，通常比事后排查更省事。还要避免跨 <code>await</code> 持有标准库的锁：wait 期间线程可能被运行时切换去执行别的任务，而 <code>MutexGuard</code> 并不适合跨任务传递，应改用异步运行时提供的锁。</p>
 <h2 id="rust-ch02-concurrency-and-async-11-3-mpsc-channel-以通信代替共享">11.3 mpsc channel：以通信代替共享</h2>
 <p>共享内存不是并发的唯一答案。mpsc channel 让发送端持有 <code>Sender</code>、接收端持有 <code>Receiver</code>，数据通过队列传递，所有权随之转移。当所有发送端都被丢弃时，通道关闭，<code>for msg in rx</code> 自然结束——这个特性让「工作线程完成即退出」的协作变得非常简洁。</p>
 <p>选择经验：需要多方修改同一份状态时用 <code>Arc&lt;Mutex&lt;T&gt;&gt;</code>；需要把任务或数据从生产者交给消费者时用 channel。后者把同步点集中在消息传递上，通常更容易推理，也更容易改成多消费者或加缓冲。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::sync::mpsc;</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::thread;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    let (tx, rx) = mpsc::channel::&lt;String&gt;();</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let producer = thread::spawn(move || {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        for word in [&quot;alpha&quot;, &quot;beta&quot;, &quot;gamma&quot;] {</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">            tx.send(word.to_string()).unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    });</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="11"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    for msg in rx {</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        println!(&quot;received: {}&quot;, msg);</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">    producer.join().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">16 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::sync::mpsc;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::thread;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    let (tx, rx) = mpsc::channel::&lt;String&gt;();</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let producer = thread::spawn(move || {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        for word in [&quot;alpha&quot;, &quot;beta&quot;, &quot;gamma&quot;] {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">            tx.send(word.to_string()).unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    });</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="11"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    for msg in rx {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        println!(&quot;received: {}&quot;, msg);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">    producer.join().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">}</span></div></div></div>
 <p>同步通道与异步通道是两个概念：这里的 <code>mpsc::channel</code> 是同步的，<code>send</code> 会阻塞直到接收端准备好；异步运行时提供的通道则把等待交给调度器，不应混用。</p>
 <p>标准库还提供 <code>sync_channel</code>，它可以设置有限容量，让发送方在队列满时阻塞，从而形成天然的反压；<code>try_recv</code> 则让接收方在没有消息时立即返回，适合轮询式的工作循环。错误类型 <code>SendError</code> 会带回没能发出的消息，这对「队列关闭后如何回收数据」很有用。设计数据流时，先明确「消息丢了能不能接受」「生产者会不会比消费者快很多」，再决定用无界通道还是有界通道。</p>
 <h2 id="rust-ch02-concurrency-and-async-11-4-send-sync-的直觉与边界">11.4 Send / Sync 的直觉与边界</h2>
@@ -142,54 +142,54 @@
 
 <p>这些 trait 大多是自动派生的：一个类型若所有字段都 Send，它自身就自动是 Send。手写 <code>unsafe impl Send</code> 属于高级操作，只有在你能证明类型内部的不变量在跨线程时依然成立才可做，例如某些自带同步机制的自制容器。错误的手动实现会把数据竞争带进安全代码，责任完全由实现者承担，因此任何这样的 impl 都应附带详细的安全论证。</p>
 <p>把约束写进函数签名能让错误出现在调用点，而不是深处的某个 spawn：</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::thread::JoinHandle;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">fn run_on_thread&lt;F&gt;(f: F) -&gt; JoinHandle&lt;()&gt;</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">where</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    F: FnOnce() + Send + 'static,</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">{</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    std::thread::spawn(f)</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    let name = String::from(&quot;worker&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let handle = run_on_thread(move || println!(&quot;{} 满足 Send + 'static&quot;, name));</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    handle.join().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::thread::JoinHandle;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">fn run_on_thread&lt;F&gt;(f: F) -&gt; JoinHandle&lt;()&gt;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">where</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    F: FnOnce() + Send + 'static,</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">{</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    std::thread::spawn(f)</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let name = String::from(&quot;worker&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let handle = run_on_thread(move || println!(&quot;{} 满足 Send + 'static&quot;, name));</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    handle.join().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div></div></div>
 <h2 id="rust-ch02-concurrency-and-async-11-5-async-await-状态机与运行时概念">11.5 async/await 状态机与运行时概念</h2>
 <p><code>async fn</code> 并不会直接创建一个线程。编译器把它改写成一个实现 <code>Future</code> 的匿名状态机：每次遇到 <code>.await</code>，若被等待的 Future 返回 <code>Pending</code>，状态机保存当前进度并让出；恢复时从断点继续。所以 <code>Future</code> 本身是惰性的，没有任何轮询就不会前进。</p>
 <p>轮询由执行器驱动，而真正处理「何时可继续」的是反应器与任务调度器，这些合起来就是运行时。运行时负责把就绪的唤醒投回队列、管理定时器与 IO，它的取舍直接决定吞吐量与延迟。下面用 std 手写一个最小的轮询器，目的不是替代运行时，而是让「Future 需要被 poll 才会动」这件事变得可见。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">26 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::future::Future;</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::sync::Arc;</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">use std::task::{Context, Poll, Wake, Waker};</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">struct NoopWaker;</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">impl Wake for NoopWaker {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    fn wake(self: Arc&lt;Self&gt;) {}</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">fn block_on&lt;F: Future&gt;(fut: F) -&gt; F::Output {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">    let waker = Waker::from(Arc::new(NoopWaker));</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let mut cx = Context::from_waker(&amp;waker);</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    let mut fut = Box::pin(fut);</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    loop {</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        match fut.as_mut().poll(&amp;mut cx) {</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">            Poll::Ready(value) =&gt; return value,</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">            Poll::Pending =&gt; std::thread::yield_now(),</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="21"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="22"></span><code class="code">async fn answer() -&gt; i32 { 40 + 2 }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="23"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="24"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    println!(&quot;answer = {}&quot;, block_on(answer()));</code></div>
-<div class="cl"><span class="ln" data-ln="26"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">26 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::future::Future;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::sync::Arc;</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">use std::task::{Context, Poll, Wake, Waker};</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">struct NoopWaker;</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">impl Wake for NoopWaker {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn wake(self: Arc&lt;Self&gt;) {}</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">fn block_on&lt;F: Future&gt;(fut: F) -&gt; F::Output {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">    let waker = Waker::from(Arc::new(NoopWaker));</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let mut cx = Context::from_waker(&amp;waker);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let mut fut = Box::pin(fut);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    loop {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        match fut.as_mut().poll(&amp;mut cx) {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            Poll::Ready(value) =&gt; return value,</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            Poll::Pending =&gt; std::thread::yield_now(),</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="21"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">async fn answer() -&gt; i32 { 40 + 2 }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="23"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    println!(&quot;answer = {}&quot;, block_on(answer()));</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">}</span></div></div></div>
 <p>这里的 <code>NoopWaker</code> 什么也不做，因此真正会 <code>Pending</code> 的 Future 会一直空转。这恰恰说明了运行时的价值：它实现复杂的唤醒机制，让等待中的任务在条件满足时才被重新调度。不要在生产代码中手工轮询 Future，也不要在 async 代码里执行长时间阻塞调用，那会卡住整个工作线程。</p>
 <p><code>Pin</code> 之所以出现，是因为自引用的状态机在被移动后可能让内部指针失效；它保证 Future 一旦被轮询就不会再被搬走，而 <code>Box::pin</code> 是最简单的固定方式。另一个常被忽略的概念是取消：丢弃一个 Future 就等于取消它，析构函数仍会运行，但「操作是否已生效」必须由业务层设计，例如写入前先生成幂等键。至于运行时选择，单线程运行时适合大量 IO 且任务轻量的场景，多线程运行时能利用多核但要处理共享状态，两者都应通过压测决定。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo run</code></div>
-<div class="cl is-text"><code class="code">answer = 42</code></div>
-<div class="cl is-text"><code class="code">（示意输出）</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo run</span></div>
+<div class="cl is-text"><span class="code">answer = 42</span></div>
+<div class="cl is-text"><span class="code">（示意输出）</span></div></div></div>
 <p>并发代码的审查重点与单线程代码不同：先找共享点，再确认每个共享点由谁负责同步，最后检查等待路径是否会形成环。<code>join</code> 的 panic 传播、<code>lock</code> 的中毒状态、通道关闭后的收尾逻辑，都是极易遗漏的环节。测试方面，并发问题往往只在调度交错时暴露，因此需要在 CI 中多次重复运行关键用例，并结合压力测试观察，而不是指望一次绿灯就万事大吉。</p>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
 <div class="box-b">

@@ -30,24 +30,24 @@
 <h2 id="rust-ch02-shipping-and-ci-13-1-release-profile-与产物取舍">13.1 release profile 与产物取舍</h2>
 <p>同一个 crate 在 <code>cargo build</code> 与 <code>cargo build --release</code> 下会产生截然不同的二进制。debug 配置追求编译速度和调试体验：优化级别低、保留符号与调试信息、打开溢出检查。release 配置追求运行效率：默认 <code>opt-level = 3</code>、剥离部分调试信息、关闭 debug_assertions。把「只在开发时检查」的逻辑挂到 <code>debug_assertions</code> 上，可以让发布版省掉开销而不丢失开发期保护。</p>
 <p>下面的片段展示最常见的自定义 profile。<code>lto</code> 做跨 crate 内联，能减小体积并提升速度，代价是链接时间显著变长；<code>codegen-units = 1</code> 让优化器看到更大的整体，同样以编译时间为代价；<code>panic = &quot;abort&quot;</code> 让 panic 直接终止进程，可以去掉展开表，但会跳过析构函数，不能随便打开。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">[profile.release]</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">opt-level = 3</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">lto = &quot;thin&quot;</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">codegen-units = 1</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">strip = true</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code"># panic = &quot;abort&quot;  # 只在确认不需要展开时用</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">[profile.dev.package.&quot;*&quot;]</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">opt-level = 2       # 只优化依赖，提升开发期运行速度</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">toml</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">9 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">[profile.release]</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">opt-level = 3</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">lto = &quot;thin&quot;</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">codegen-units = 1</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">strip = true</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code"># panic = &quot;abort&quot;  # 只在确认不需要展开时用</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">[profile.dev.package.&quot;*&quot;]</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">opt-level = 2       # 只优化依赖，提升开发期运行速度</span></div></div></div>
 <p>代码侧也能感知构建配置。<code>cfg!(debug_assertions)</code> 在 cargo 的 debug 构建中为真、release 构建中为假；<code>option_env!</code> 读取的环境变量若不存在则返回 <code>None</code>，因此在 rustc 直接编译时也安全。下面这个小程序演示了如何让同一份源码输出不同的渠道标识。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn build_channel() -&gt; &amp;'static str {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    if cfg!(debug_assertions) { &quot;debug&quot; } else { &quot;release&quot; }</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    println!(&quot;channel = {}&quot;, build_channel());</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    println!(&quot;version = {:?}&quot;, option_env!(&quot;CARGO_PKG_VERSION&quot;));</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn build_channel() -&gt; &amp;'static str {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    if cfg!(debug_assertions) { &quot;debug&quot; } else { &quot;release&quot; }</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    println!(&quot;channel = {}&quot;, build_channel());</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    println!(&quot;version = {:?}&quot;, option_env!(&quot;CARGO_PKG_VERSION&quot;));</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div></div></div>
 <p>在 cargo 构建中，<code>CARGO_PKG_VERSION</code>、<code>CARGO_PKG_NAME</code> 等变量由 Cargo 自动注入；用 <code>env!</code> 读取则会在变量缺失时直接编译失败，适合「必须存在」的元数据。<code>option_env!</code> 适合可选信息。</p>
 <p><code>strip = true</code> 会去掉符号表，让产物明显变小，但线上崩溃时的回溯信息也会变得难读。折中方案是保留符号、在发布流水线里单独生成并归档调试符号文件，排查时再用它还原栈帧。profile 还可以按包细分：<code>[profile.release.package.&quot;*&quot;]</code> 单独控制依赖的优化级别，让项目代码保持激进优化而依赖不至于拖慢构建。改动这些配置后要用真实负载复测，体积数字好看不代表性能一定更好。</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
@@ -59,31 +59,31 @@
 <h2 id="rust-ch02-shipping-and-ci-13-2-feature-开关与发布渠道">13.2 feature 开关与发布渠道</h2>
 <p>给不同渠道发布不同产物时，最忌讳复制整份代码库。更好的做法是把差异表达成 feature：默认关闭重型能力，发布时按渠道显式开启。这样所有渠道共享同一套测试与代码审查，差异集中在 Cargo.toml 的几行配置里。</p>
 <p>feature 应当保持可叠加，且不要在打开时改变已有函数的语义。展示层的能力（遥测、实验性开关）很适合用 feature 控制；会改变数据格式的能力则应谨慎，因为它可能让两个渠道产生互不兼容的产物。下面的模板用 feature 决定是否编译遥测上报，<code>report</code> 在未启用时退化成空函数，调用方代码完全不用改。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">#![allow(dead_code, unexpected_cfgs)]</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="2"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">#[cfg(feature = &quot;telemetry&quot;)]</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn report(event: &amp;str) {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    println!(&quot;[telemetry] {}&quot;, event);</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="7"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">#[cfg(not(feature = &quot;telemetry&quot;))]</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">fn report(_event: &amp;str) {}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    report(&quot;startup&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    println!(&quot;startup done&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">14 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">#![allow(dead_code, unexpected_cfgs)]</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="2"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">#[cfg(feature = &quot;telemetry&quot;)]</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn report(event: &amp;str) {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    println!(&quot;[telemetry] {}&quot;, event);</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="7"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">#[cfg(not(feature = &quot;telemetry&quot;))]</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">fn report(_event: &amp;str) {}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    report(&quot;startup&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    println!(&quot;startup done&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">}</span></div></div></div>
 <p>CI 至少验证三种组合：默认特性、<code>--no-default-features</code>、<code>--all-features</code>。若某些特性互斥，还需显式列出合法组合。<code>--all-features</code> 全绿不代表默认配置可用，反过来也一样，这两个方向不能互相替代。把每个组合的用途写进 README 也很重要：使用者最常问的不是「有哪些 feature」，而是「我该开哪个」。给出两三条典型命令，比罗列全部开关更有效。feature 命名要表达能力而非实现细节，例如 <code>json</code> 比 <code>use_serde_v1</code> 更耐久，因为实现可以被替换而能力通常不会。</p>
 <h2 id="rust-ch02-shipping-and-ci-13-3-cargo-publish-流程概念">13.3 cargo publish 流程概念</h2>
 <p>发布到 crates.io 前有几项硬约束：包必须有唯一的 name、合法的 <code>license</code> 或 <code>license-file</code>、<code>description</code>，以及能找到源码的 <code>repository</code>。<code>cargo publish --dry-run</code> 会执行打包、校验清单并做一次试构建，但不会真正上传，是发布前必做的一步；它能抓到「本地能编译但漏提交了文件」这类问题。</p>
 <p>发布流程通常是：确认 semver 版本号变更 → 更新变更日志 → 本地跑通全部测试与文档测试 → <code>cargo publish --dry-run</code> → 打 git tag → <code>cargo publish</code>。发布是不可撤销的，crates.io 不允许用相同版本号重新上传，即使 yank 也只是让新项目不再选用它，已锁定的使用者不受影响。工作区里发布多个相互依赖的包时，还要注意顺序：被依赖的包先发布，发布期间路径依赖要临时切换到版本依赖，否则 crates.io 会拒绝带有未发布路径依赖的包。这个过程机械但容易出错，最好在流水线里固化成脚本，而不是每次手工改动清单。&lt;arg_key:6124c78e&gt;replace_all</arg_key:6124c78e>&lt;arg_value:6124c78e&gt;false</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ cargo publish --dry-run</code></div>
-<div class="cl is-text"><code class="code">   Packaging notes-cli v0.3.0</code></div>
-<div class="cl is-text"><code class="code">   Verifying notes-cli v0.3.0</code></div>
-<div class="cl is-text"><code class="code">   Compiling notes-cli v0.3.0</code></div>
-<div class="cl is-text"><code class="code">    Finished release target(s)</code></div>
-<div class="cl is-text"><code class="code">   Uploading notes-cli v0.3.0 (skipped during dry run)</code></div>
-<div class="cl is-text"><code class="code">（示意输出，实际步骤随 Cargo 版本变化）</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ cargo publish --dry-run</span></div>
+<div class="cl is-text"><span class="code">   Packaging notes-cli v0.3.0</span></div>
+<div class="cl is-text"><span class="code">   Verifying notes-cli v0.3.0</span></div>
+<div class="cl is-text"><span class="code">   Compiling notes-cli v0.3.0</span></div>
+<div class="cl is-text"><span class="code">    Finished release target(s)</span></div>
+<div class="cl is-text"><span class="code">   Uploading notes-cli v0.3.0 (skipped during dry run)</span></div>
+<div class="cl is-text"><span class="code">（示意输出，实际步骤随 Cargo 版本变化）</span></div></div></div>
 <p>发布内部库时不一定上传到公共仓库，可以用路径依赖、git 依赖或私有注册中心。但「内部库也要有版本号和变更日志」这条纪律应当保留，否则依赖方无法判断升级是否安全。</p>
 <h2 id="rust-ch02-shipping-and-ci-13-4-github-actions-ci-要素">13.4 GitHub Actions CI 要素</h2>
 <p>CI 的价值在于把「记得做」变成「做不到就合不进去」。一条最小可用的流水线包含四个环节：格式检查、静态检查、测试矩阵、文档构建。它们应当按成本从低到高排列，让最廉价的反馈最先到达开发者。</p>

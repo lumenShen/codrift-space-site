@@ -30,15 +30,15 @@
 <h2 id="rust-ch01-lifetimes-4-1-动机-引用也可能悬垂">4.1 动机：引用也可能悬垂</h2>
 <p>所有权保证「谁负责释放」，借用规则保证「不能乱改」，但还缺一块拼图：引用本身可能比它指向的数据活得更久。想象一个函数在函数体内部创建一个字符串，然后返回它的引用。函数一结束，那个字符串就被 drop 了，返回的引用却指向一块已经失效的内存——这就是悬垂引用（dangling reference），在 C/C++ 里是经典的 use-after-free 漏洞。</p>
 <p>Rust 不允许这种情况发生。下面这段「坏代码」会在编译期被拦下，这里只展示它的报错（它不是可编译代码，不要照着写）：</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main</code></div>
-<div class="cl is-text"><code class="code">error[E0515]: cannot return value referencing local variable `s`</code></div>
-<div class="cl is-text"><code class="code"> --&gt; main.rs:2:9</code></div>
-<div class="cl is-text"><code class="code">  |</code></div>
-<div class="cl is-text"><code class="code">2 |     let s = String::from(&quot;hi&quot;);</code></div>
-<div class="cl is-text"><code class="code">  |             ----------------- `s` is borrowed here</code></div>
-<div class="cl is-text"><code class="code">3 |     &amp;s</code></div>
-<div class="cl is-text"><code class="code">  |     ^^ returns a value referencing data owned by the current function</code></div>
-<div class="cl is-text"><code class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main</span></div>
+<div class="cl is-text"><span class="code">error[E0515]: cannot return value referencing local variable `s`</span></div>
+<div class="cl is-text"><span class="code"> --&gt; main.rs:2:9</span></div>
+<div class="cl is-text"><span class="code">  |</span></div>
+<div class="cl is-text"><span class="code">2 |     let s = String::from(&quot;hi&quot;);</span></div>
+<div class="cl is-text"><span class="code">  |             ----------------- `s` is borrowed here</span></div>
+<div class="cl is-text"><span class="code">3 |     &amp;s</span></div>
+<div class="cl is-text"><span class="code">  |     ^^ returns a value referencing data owned by the current function</span></div>
+<div class="cl is-text"><span class="code">error: could not compile `main` (bin &quot;main&quot;) due to 1 previous error</span></div></div></div>
 <p>（示意输出，具体行号与格式因 rustc 版本而异。）编译器是怎么知道 <code>&amp;s</code> 会出问题的？靠的是生命周期检查：它会比较引用的生命周期和被引用数据的生命周期，只有当前者不超过后者时才放行。大多数时候编译器能自己推断，不需要你写任何标注——这也是为什么很多人写了很久 Rust 都没碰过 <code>&#39;a</code>。</p>
 <p>这种自动推断不仅发生在函数签名上，也发生在局部变量上。你写 <code>let r = &amp;s;</code>，编译器会根据 <code>s</code> 的作用域给 <code>r</code> 安排一个合适的有效期，并保证 <code>r</code> 不会在 <code>s</code> 之后还被使用。换句话说，生命周期检查是无处不在的，标注只是你在少数「编译器猜不出来」的场合主动提供的提示。把这件事想通，就不难理解为什么生命周期被称作零成本抽象：它不产生运行时代码，只是编译期的一道校验。</p>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
@@ -50,16 +50,16 @@
 <h2 id="rust-ch01-lifetimes-4-2-标注语法-a-到底标的是什么">4.2 标注语法：&#39;a 到底标的是什么</h2>
 <p>生命周期标注长这样：<code>&#39;a</code>、<code>&#39;b</code>、<code>&#39;static</code>，读作「撇 a」「撇 static」。它出现的位置是引用类型上，比如 <code>&amp;&#39;a str</code> 表示「这个引用的生命周期是 &#39;a」。关键要理解：生命周期标注描述的是多个引用之间的相对关系，而不是让某个值活得更久。写 <code>&#39;a</code> 不会延长任何东西的寿命，它只是给编译器一张「关系图」。</p>
 <p>下面的 <code>longest</code> 函数演示了最典型的场景：两个输入引用，返回一个引用。编译器必须知道返回值借用的是哪一个——如果两个输入的生命周期各不相同，就可能返回 shorter 的那个，导致悬垂。写成 <code>&lt;&#39;a&gt;(x: &amp;&#39;a str, y: &amp;&#39;a str) -&gt; &amp;&#39;a str</code>，意思是「两个参数和返回值共享同一个生命周期 &#39;a，返回值的有效范围不会超过两个输入中较短的那个」。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    if x.len() &gt;= y.len() { x } else { y }</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let a = String::from(&quot;abcd&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    let b = &quot;xy&quot;;</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    let result = longest(a.as_str(), b);</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    println!(&quot;最长的是 {result}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">10 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn longest&lt;'a&gt;(x: &amp;'a str, y: &amp;'a str) -&gt; &amp;'a str {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    if x.len() &gt;= y.len() { x } else { y }</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let a = String::from(&quot;abcd&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    let b = &quot;xy&quot;;</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let result = longest(a.as_str(), b);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    println!(&quot;最长的是 {result}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">}</span></div></div></div>
 <p>这里有一个常见困惑：既然 <code>&#39;a</code> 是两个参数生命周期中较短的那个，那函数返回后还能用 <code>result</code> 吗？可以，只要 <code>result</code> 的使用发生在 <code>a</code> 和 <code>b</code> 都还活着的作用域内。借用检查器会把 <code>result</code> 的有效期限制在较短的那个输入之内，超出就报错。<code>&#39;a</code> 不是某个具体的秒数，而是一段由调用点决定的作用域区间。</p>
 <p>如果把两个参数写成不同的生命周期，比如 <code>&lt;&#39;a, &#39;b&gt;(x: &amp;&#39;a str, y: &amp;&#39;b str)</code>，返回值就必须明确说自己跟谁走。通常做法是加一个约束 <code>-&gt; &amp;&#39;a str</code>，再在代码里保证只返回 <code>x</code>（或者要求 <code>&#39;b: &#39;a</code>，即 <code>b</code> 活得至少和 <code>a</code> 一样久）。编译器不会替你做这种「选哪个」的决定，因为这是程序逻辑的一部分——它只负责检查你的承诺有没有兑现。</p>
 <h2 id="rust-ch01-lifetimes-4-3-省略规则-为什么你很少写生命周期">4.3 省略规则：为什么你很少写生命周期</h2>
@@ -103,32 +103,32 @@
 <h2 id="rust-ch01-lifetimes-4-4-结构体与-impl-上的生命周期">4.4 结构体与 impl 上的生命周期</h2>
 <p>当结构体字段是引用时，结构体本身也要带生命周期参数，否则编译器不知道这个字段借的是谁。写法是 <code>struct Excerpt&lt;&#39;a&gt; { text: &amp;&#39;a str }</code>，表示 <code>Excerpt</code> 实例不能比 <code>text</code> 引用的数据活得久。注意生命周期参数写在尖括号里、名字前面带撇号，和泛型参数并列出现。</p>
 <p>在 <code>impl</code> 块里也要写出 <code>&lt;&#39;a&gt;</code>，否则编译器不认识这个参数。下面这个例子里，<code>first_word</code> 用 <code>&amp;self</code> 借用结构体，并返回 <code>&amp;&#39;a str</code>——因为字段 <code>text</code> 本身就是 <code>&amp;&#39;a str</code>，从它切出来的子串自然也带着 <code>&#39;a</code>。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">struct Excerpt&lt;'a&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    text: &amp;'a str,</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">impl&lt;'a&gt; Excerpt&lt;'a&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    fn first_word(&amp;self) -&gt; &amp;'a str {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        self.text.split_whitespace().next().unwrap_or(&quot;&quot;)</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="10"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">    let story = String::from(&quot;rust lifetime basics&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">    let ex = Excerpt { text: story.as_str() };</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    println!(&quot;第一个词是 {}&quot;, ex.first_word());</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">15 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct Excerpt&lt;'a&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    text: &amp;'a str,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl&lt;'a&gt; Excerpt&lt;'a&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn first_word(&amp;self) -&gt; &amp;'a str {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        self.text.split_whitespace().next().unwrap_or(&quot;&quot;)</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="10"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">    let story = String::from(&quot;rust lifetime basics&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">    let ex = Excerpt { text: story.as_str() };</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    println!(&quot;第一个词是 {}&quot;, ex.first_word());</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">}</span></div></div></div>
 <p>如果你把方法签名改成返回 <code>&amp;str</code>（不带 <code>&#39;a</code>），生命周期会按省略规则绑定到 <code>&amp;self</code>，表达的是「返回值的有效期不超过这个 Excerpt 实例」。两种写法都能编译，但语义不同：前者强调「和原始文本同寿」，后者强调「和结构体实例同寿」。实际项目里，只要你想清楚返回值实际借用的是谁，选对应的那个即可。</p>
 <h2 id="rust-ch01-lifetimes-4-5-static-最长但常被误解">4.5 &#39;static：最长但常被误解</h2>
 <p><code>&#39;static</code> 表示「整个程序运行期间都有效」。最常见的例子是字符串字面量：它们被编译进二进制文件，从程序启动到退出都存在，所以类型是 <code>&amp;&#39;static str</code>。下面的函数只接受 <code>&#39;static</code> 引用，传入字面量完全没问题。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">fn print_static(s: &amp;'static str) {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    println!(&quot;{s}&quot;);</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    let literal = &quot;我是字符串字面量&quot;;</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    print_static(literal);</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">8 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">fn print_static(s: &amp;'static str) {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    println!(&quot;{s}&quot;);</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    let literal = &quot;我是字符串字面量&quot;;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    print_static(literal);</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">}</span></div></div></div>
 <p>但 <code>&#39;static</code> 不等于「永远不变」，也不等于「必须写成字面量」。通过 <code>Box::leak</code> 把堆数据泄露出去，也能得到 <code>&amp;&#39;static mut T</code>——代价是这块内存直到程序结束都不会被释放。所以 <code>&#39;static</code> 更像一个承诺：「我保证这份数据活得比任何借用都久」。在函数签名里要求 <code>&amp;&#39;static str</code>，会让函数拒绝一切指向局部变量的引用，只接受真正长命的数据；写之前要想清楚自己是否真的需要这么强的约束。</p>
 <p>生命周期还会出现在泛型约束里。写 <code>T: &#39;a</code> 的意思是「类型 <code>T</code> 内部包含的所有引用都至少活到 <code>&#39;a</code>」。这在写泛型容器时很重要：如果你把 <code>T</code> 存进一个活得很长的结构体，就必须保证 <code>T</code> 里没有「短命」的引用，否则整个结构体会变成悬垂的。初学阶段遇到这种约束，先把它读成「T 里不能藏短命引用」就够了。</p>
 <p>一个实用的判断顺序是：先什么都不写，让编译器推断；只有当它明确报错、或你发现省略规则的表达能力不够时，再引入 <code>&#39;a</code>。生命周期不是用来「炫技」的，它是你向编译器解释引用关系的工具——能把关系讲清楚就够了，不必给每个引用都起名字。</p>

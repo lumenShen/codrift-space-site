@@ -31,75 +31,75 @@
 <p>并查集维护一组<strong>不相交集合</strong>，支持两个操作：判断两个元素是否属于同一集合，以及把两个集合合并。实现方式是给每个元素一个 <code>parent</code> 指针，每棵树的根代表整个集合。核心不变量很简单：<strong>沿着 parent 一路向上走必然到达根，同集合元素的根相同</strong>；合并时只改一个根的 parent，不碰其他节点。</p>
 <p>裸的 find 在链状树上可能退化成 O(n)，所以必须加两个优化。<strong>路径压缩</strong>：find 过程中把沿途所有节点直接挂到根下，使树高度趋近于 1。<strong>按秩合并</strong>：始终让节点数少（或高度小）的树挂到另一棵下面，避免长链。两者叠加后，单次操作的摊还复杂度是反阿克曼函数 α(n)，在实际数据规模下可以当作常数。</p>
 <p>Rust 里要把 find 写成<strong>迭代</strong>而不是递归。递归版在深链上会占用大量栈帧，虽然路径压缩后链很短，但在压缩发生之前仍可能很深；迭代版用两个 while 循环，第一趟找根，第二趟把沿途节点改挂到根，完全不碰调用栈。注意第二趟里要先用 <code>let next = self.parent[cur];</code> 把下一个节点存到局部变量，再写 <code>self.parent[cur] = root</code>，否则既读又写同一个 <code>Vec</code> 的位置，虽然编译器未必报错，逻辑上也容易把链路改乱。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">63 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">struct UnionFind {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    parent: Vec&lt;usize&gt;,</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    rank: Vec&lt;u32&gt;,</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">    comps: usize,</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="6"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">impl UnionFind {</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    fn new(n: usize) -&gt; Self {</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">        UnionFind {</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">            parent: (0..n).collect(),</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">            rank: vec![0; n],</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">            comps: n,</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="15"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">        let mut root = x;</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        while self.parent[root] != root {</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">            root = self.parent[root];</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="21"></span><code class="code">        let mut cur = x;</code></div>
-<div class="cl"><span class="ln" data-ln="22"></span><code class="code">        while self.parent[cur] != cur {</code></div>
-<div class="cl"><span class="ln" data-ln="23"></span><code class="code">            let next = self.parent[cur];</code></div>
-<div class="cl"><span class="ln" data-ln="24"></span><code class="code">            self.parent[cur] = root;</code></div>
-<div class="cl"><span class="ln" data-ln="25"></span><code class="code">            cur = next;</code></div>
-<div class="cl"><span class="ln" data-ln="26"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        root</code></div>
-<div class="cl"><span class="ln" data-ln="28"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="29"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="30"></span><code class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</code></div>
-<div class="cl"><span class="ln" data-ln="31"></span><code class="code">        let ra = self.find(a);</code></div>
-<div class="cl"><span class="ln" data-ln="32"></span><code class="code">        let rb = self.find(b);</code></div>
-<div class="cl"><span class="ln" data-ln="33"></span><code class="code">        if ra == rb {</code></div>
-<div class="cl"><span class="ln" data-ln="34"></span><code class="code">            return false;</code></div>
-<div class="cl"><span class="ln" data-ln="35"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="36"></span><code class="code">        if self.rank[ra] &lt; self.rank[rb] {</code></div>
-<div class="cl"><span class="ln" data-ln="37"></span><code class="code">            self.parent[ra] = rb;</code></div>
-<div class="cl"><span class="ln" data-ln="38"></span><code class="code">        } else if self.rank[ra] &gt; self.rank[rb] {</code></div>
-<div class="cl"><span class="ln" data-ln="39"></span><code class="code">            self.parent[rb] = ra;</code></div>
-<div class="cl"><span class="ln" data-ln="40"></span><code class="code">        } else {</code></div>
-<div class="cl"><span class="ln" data-ln="41"></span><code class="code">            self.parent[rb] = ra;</code></div>
-<div class="cl"><span class="ln" data-ln="42"></span><code class="code">            self.rank[ra] += 1;</code></div>
-<div class="cl"><span class="ln" data-ln="43"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="44"></span><code class="code">        self.comps -= 1;</code></div>
-<div class="cl"><span class="ln" data-ln="45"></span><code class="code">        true</code></div>
-<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="47"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="48"></span><code class="code">    fn connected(&amp;mut self, a: usize, b: usize) -&gt; bool {</code></div>
-<div class="cl"><span class="ln" data-ln="49"></span><code class="code">        let ra = self.find(a);</code></div>
-<div class="cl"><span class="ln" data-ln="50"></span><code class="code">        let rb = self.find(b);</code></div>
-<div class="cl"><span class="ln" data-ln="51"></span><code class="code">        ra == rb</code></div>
-<div class="cl"><span class="ln" data-ln="52"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="53"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="54"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="55"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="56"></span><code class="code">    let mut uf = UnionFind::new(6);</code></div>
-<div class="cl"><span class="ln" data-ln="57"></span><code class="code">    for (a, b) in [(0usize, 1usize), (1, 2), (3, 4), (4, 5)] {</code></div>
-<div class="cl"><span class="ln" data-ln="58"></span><code class="code">        uf.union(a, b);</code></div>
-<div class="cl"><span class="ln" data-ln="59"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="60"></span><code class="code">    println!(&quot;components = {}&quot;, uf.comps);</code></div>
-<div class="cl"><span class="ln" data-ln="61"></span><code class="code">    println!(&quot;0~2 connected = {}&quot;, uf.connected(0, 2));</code></div>
-<div class="cl"><span class="ln" data-ln="62"></span><code class="code">    println!(&quot;0~5 connected = {}&quot;, uf.connected(0, 5));</code></div>
-<div class="cl"><span class="ln" data-ln="63"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">63 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct UnionFind {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    rank: Vec&lt;u32&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">    comps: usize,</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="6"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">impl UnionFind {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    fn new(n: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">        UnionFind {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">            parent: (0..n).collect(),</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            rank: vec![0; n],</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">            comps: n,</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="15"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">        let mut root = x;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        while self.parent[root] != root {</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            root = self.parent[root];</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">        let mut cur = x;</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        while self.parent[cur] != cur {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">            let next = self.parent[cur];</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">            self.parent[cur] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            cur = next;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        root</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="29"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        let ra = self.find(a);</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">        let rb = self.find(b);</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">        if ra == rb {</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">            return false;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">        if self.rank[ra] &lt; self.rank[rb] {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">            self.parent[ra] = rb;</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">        } else if self.rank[ra] &gt; self.rank[rb] {</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">            self.parent[rb] = ra;</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">            self.parent[rb] = ra;</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">            self.rank[ra] += 1;</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">        self.comps -= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        true</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="47"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">    fn connected(&amp;mut self, a: usize, b: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        let ra = self.find(a);</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">        let rb = self.find(b);</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">        ra == rb</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="54"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">    let mut uf = UnionFind::new(6);</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">    for (a, b) in [(0usize, 1usize), (1, 2), (3, 4), (4, 5)] {</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">        uf.union(a, b);</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">    println!(&quot;components = {}&quot;, uf.comps);</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    println!(&quot;0~2 connected = {}&quot;, uf.connected(0, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    println!(&quot;0~5 connected = {}&quot;, uf.connected(0, 5));</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">}</span></div></div></div>
 <p><code>connected</code> 里刻意把两次 find 的结果先存进局部变量再比较。写成 <code>self.find(a) == self.find(b)</code> 通常也能编译，但拆开写能避免&quot;同一表达式里两次可变借用 self&quot;的隐患，意图也更清楚。<code>union</code> 返回 <code>bool</code> 表示这次合并是否真的发生——这个返回值非常有用，下一节就靠它统计连通块数量。</p>
 <p>选择并查集还是 DFS/BFS，取决于&quot;查询是静态的还是动态的&quot;。如果所有边一次性给定、只问一次连通性，DFS 或 BFS 更直接；如果边是逐条加入的、中间要随时回答&quot;这两个点是否已连通&quot;，并查集才是正解。<code>rank</code> 字段用 <code>u8</code> 就够了，因为树的高度最多 log₂(n)，即使 n 取 10⁹ 也不会超过 31，省下的内存对大规模节点很可观。另外务必统一编号约定：如果题目给的是 1 到 n 的编号，读入后要么整体减一转成 0 基，要么把数组开成 <code>n + 1</code> 并浪费 0 号位，两种做法都行，但绝不能混用。</p>
-<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><code class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</code></div>
-<div class="cl is-text"><code class="code">components = 2</code></div>
-<div class="cl is-text"><code class="code">0~2 connected = true</code></div>
-<div class="cl is-text"><code class="code">0~5 connected = false</code></div></div></div>
+<div class="term term-output"><header class="term-head"><span class="term-kind">终端</span><span class="term-title">真跑一遍</span></header><div class="term-body"><div class="cl is-text is-cmd"><span class="code">$ rustc --edition 2021 main.rs -o main &amp;&amp; ./main</span></div>
+<div class="cl is-text"><span class="code">components = 2</span></div>
+<div class="cl is-text"><span class="code">0~2 connected = true</span></div>
+<div class="cl is-text"><span class="code">0~5 connected = false</span></div></div></div>
 <section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="box-kind">大白话</span><span class="box-t">先用直觉把它讲通</span></header>
 <div class="box-b">
 <p>并查集就像给一堆人分小组，每组选一个组长。要问两个人是不是同组，就顺着&quot;我的组长是谁&quot;一路问上去，看最后是不是同一个组长；要合并两组，让人少的那组组长认人多的那组当组长。路径压缩就是问过一次之后直接把组长名字改掉，下次一秒出答案。</p>
@@ -109,80 +109,80 @@
 <h2 id="rust-ch03-union-find-and-heap-16-2-并查集的应用-连通块计数">16.2 并查集的应用：连通块计数</h2>
 <p>并查集最常见的使用场景是&quot;动态连通性&quot;：一开始每个元素自成一团，随着边或相邻关系不断加入，问最后剩几团。一个直接的做法是维护计数器 <code>count</code>，初值为元素个数；每次 <code>union</code> 返回 <code>true</code> 就把 <code>count</code> 减一，因为一次有效合并恰好消灭一个连通块。这比最后遍历所有元素收集不同的根更省事，也不依赖 <code>HashSet</code>。</p>
 <p>网格类题目需要把二维坐标 <code>(r, c)</code> 压成一维下标：<code>id = r * cols + c</code>。这样 <code>Vec</code> 只需一维，缓存局部性也更好。危险在于反推邻居时容易出现 <code>r - 1</code> 或 <code>c - 1</code>，而 <code>usize</code> 在 <code>r = 0</code> 或 <code>c = 0</code> 时会下溢 panic。务必把边界判断写在减法<strong>之前</strong>：先 <code>if r &gt; 0</code> 再算 <code>(r - 1) * cols + c</code>。Rust 不会像 C 那样悄悄回绕，这反而是好事——错误会当场暴露。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">74 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">struct UnionFind {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    parent: Vec&lt;usize&gt;,</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">    rank: Vec&lt;u8&gt;,</code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="5"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">impl UnionFind {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    fn new(n: usize) -&gt; Self {</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">        UnionFind { parent: (0..n).collect(), rank: vec![0; n] }</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        let mut root = x;</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        while self.parent[root] != root { root = self.parent[root]; }</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        let mut cur = x;</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">        while self.parent[cur] != cur {</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">            let next = self.parent[cur];</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">            self.parent[cur] = root;</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">            cur = next;</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">        root</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</code></div>
-<div class="cl"><span class="ln" data-ln="22"></span><code class="code">        let ra = self.find(a);</code></div>
-<div class="cl"><span class="ln" data-ln="23"></span><code class="code">        let rb = self.find(b);</code></div>
-<div class="cl"><span class="ln" data-ln="24"></span><code class="code">        if ra == rb { return false; }</code></div>
-<div class="cl"><span class="ln" data-ln="25"></span><code class="code">        if self.rank[ra] &lt; self.rank[rb] {</code></div>
-<div class="cl"><span class="ln" data-ln="26"></span><code class="code">            self.parent[ra] = rb;</code></div>
-<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        } else {</code></div>
-<div class="cl"><span class="ln" data-ln="28"></span><code class="code">            self.parent[rb] = ra;</code></div>
-<div class="cl"><span class="ln" data-ln="29"></span><code class="code">            if self.rank[ra] == self.rank[rb] { self.rank[ra] += 1; }</code></div>
-<div class="cl"><span class="ln" data-ln="30"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="31"></span><code class="code">        true</code></div>
-<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="33"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="34"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="35"></span><code class="code">fn num_islands(grid: &amp;[Vec&lt;char&gt;]) -&gt; usize {</code></div>
-<div class="cl"><span class="ln" data-ln="36"></span><code class="code">    let rows = grid.len();</code></div>
-<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    if rows == 0 { return 0; }</code></div>
-<div class="cl"><span class="ln" data-ln="38"></span><code class="code">    let cols = grid[0].len();</code></div>
-<div class="cl"><span class="ln" data-ln="39"></span><code class="code">    if cols == 0 { return 0; }</code></div>
-<div class="cl"><span class="ln" data-ln="40"></span><code class="code">    let mut uf = UnionFind::new(rows * cols);</code></div>
-<div class="cl"><span class="ln" data-ln="41"></span><code class="code">    let mut count = 0usize;</code></div>
-<div class="cl"><span class="ln" data-ln="42"></span><code class="code">    for r in 0..rows {</code></div>
-<div class="cl"><span class="ln" data-ln="43"></span><code class="code">        for c in 0..cols {</code></div>
-<div class="cl"><span class="ln" data-ln="44"></span><code class="code">            if grid[r][c] == '1' { count += 1; }</code></div>
-<div class="cl"><span class="ln" data-ln="45"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="46"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="47"></span><code class="code">    for r in 0..rows {</code></div>
-<div class="cl"><span class="ln" data-ln="48"></span><code class="code">        for c in 0..cols {</code></div>
-<div class="cl"><span class="ln" data-ln="49"></span><code class="code">            if grid[r][c] == '0' { continue; }</code></div>
-<div class="cl"><span class="ln" data-ln="50"></span><code class="code">            let id = r * cols + c;</code></div>
-<div class="cl"><span class="ln" data-ln="51"></span><code class="code">            if r &gt; 0 &amp;&amp; grid[r - 1][c] == '1'</code></div>
-<div class="cl"><span class="ln" data-ln="52"></span><code class="code">                &amp;&amp; uf.union(id, (r - 1) * cols + c)</code></div>
-<div class="cl"><span class="ln" data-ln="53"></span><code class="code">            {</code></div>
-<div class="cl"><span class="ln" data-ln="54"></span><code class="code">                count -= 1;</code></div>
-<div class="cl"><span class="ln" data-ln="55"></span><code class="code">            }</code></div>
-<div class="cl"><span class="ln" data-ln="56"></span><code class="code">            if c &gt; 0 &amp;&amp; grid[r][c - 1] == '1'</code></div>
-<div class="cl"><span class="ln" data-ln="57"></span><code class="code">                &amp;&amp; uf.union(id, r * cols + (c - 1))</code></div>
-<div class="cl"><span class="ln" data-ln="58"></span><code class="code">            {</code></div>
-<div class="cl"><span class="ln" data-ln="59"></span><code class="code">                count -= 1;</code></div>
-<div class="cl"><span class="ln" data-ln="60"></span><code class="code">            }</code></div>
-<div class="cl"><span class="ln" data-ln="61"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="62"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="63"></span><code class="code">    count</code></div>
-<div class="cl"><span class="ln" data-ln="64"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="65"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="66"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="67"></span><code class="code">    let g = vec![</code></div>
-<div class="cl"><span class="ln" data-ln="68"></span><code class="code">        vec!['1', '1', '0', '0', '0'],</code></div>
-<div class="cl"><span class="ln" data-ln="69"></span><code class="code">        vec!['1', '1', '0', '0', '0'],</code></div>
-<div class="cl"><span class="ln" data-ln="70"></span><code class="code">        vec!['0', '0', '1', '0', '0'],</code></div>
-<div class="cl"><span class="ln" data-ln="71"></span><code class="code">        vec!['0', '0', '0', '1', '1'],</code></div>
-<div class="cl"><span class="ln" data-ln="72"></span><code class="code">    ];</code></div>
-<div class="cl"><span class="ln" data-ln="73"></span><code class="code">    println!(&quot;{}&quot;, num_islands(&amp;g));</code></div>
-<div class="cl"><span class="ln" data-ln="74"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">74 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct UnionFind {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    parent: Vec&lt;usize&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">    rank: Vec&lt;u8&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="5"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">impl UnionFind {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    fn new(n: usize) -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">        UnionFind { parent: (0..n).collect(), rank: vec![0; n] }</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    fn find(&amp;mut self, x: usize) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        let mut root = x;</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        while self.parent[root] != root { root = self.parent[root]; }</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        let mut cur = x;</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">        while self.parent[cur] != cur {</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            let next = self.parent[cur];</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">            self.parent[cur] = root;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            cur = next;</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">        root</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    fn union(&amp;mut self, a: usize, b: usize) -&gt; bool {</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">        let ra = self.find(a);</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        let rb = self.find(b);</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        if ra == rb { return false; }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">        if self.rank[ra] &lt; self.rank[rb] {</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">            self.parent[ra] = rb;</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        } else {</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">            self.parent[rb] = ra;</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">            if self.rank[ra] == self.rank[rb] { self.rank[ra] += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        true</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="34"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">fn num_islands(grid: &amp;[Vec&lt;char&gt;]) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">    let rows = grid.len();</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    if rows == 0 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    let cols = grid[0].len();</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    if cols == 0 { return 0; }</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">    let mut uf = UnionFind::new(rows * cols);</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">    let mut count = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">    for r in 0..rows {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">        for c in 0..cols {</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">            if grid[r][c] == '1' { count += 1; }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">    for r in 0..rows {</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        for c in 0..cols {</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">            if grid[r][c] == '0' { continue; }</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">            let id = r * cols + c;</span></div>
+<div class="cl"><span class="ln" data-ln="51"></span><span class="code">            if r &gt; 0 &amp;&amp; grid[r - 1][c] == '1'</span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">                &amp;&amp; uf.union(id, (r - 1) * cols + c)</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">            {</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">                count -= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="56"></span><span class="code">            if c &gt; 0 &amp;&amp; grid[r][c - 1] == '1'</span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">                &amp;&amp; uf.union(id, r * cols + (c - 1))</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">            {</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">                count -= 1;</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    count</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="65"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">    let g = vec![</span></div>
+<div class="cl"><span class="ln" data-ln="68"></span><span class="code">        vec!['1', '1', '0', '0', '0'],</span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">        vec!['1', '1', '0', '0', '0'],</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">        vec!['0', '0', '1', '0', '0'],</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">        vec!['0', '0', '0', '1', '1'],</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">    ];</span></div>
+<div class="cl"><span class="ln" data-ln="73"></span><span class="code">    println!(&quot;{}&quot;, num_islands(&amp;g));</span></div>
+<div class="cl"><span class="ln" data-ln="74"></span><span class="code">}</span></div></div></div>
 <p>这里只检查上和左两个方向，而不是上下左右四个方向。因为并查集合并是对称操作，每对相邻陆地只会被访问一次；若同时检查四个方向，同一组相邻格会被重复合并，虽然结果不变，但多做了无用功。这个&quot;只向右和向下扩展&quot;的剪枝在很多网格搜索题里都成立。</p>
 <p>并查集还有个高频用法是<strong>检测环</strong>：按顺序加入无向图的每条边，如果它连接的两个端点已经在同一个集合里，说明这条边构成环。这能在不建完整邻接表的情况下找出&quot;多余的一条边&quot;，复杂度只需 O(m α(n))。相比之下，用 DFS 检测环要额外维护访问状态和父节点，代码更长。记住这个判别式——<code>union</code> 返回 <code>false</code> 即代表遇到环——很多看起来不同的题目（冗余连接、等式方程矛盾、最小生成树判环）都能归到它上面。</p>
 <h2 id="rust-ch03-union-find-and-heap-16-3-binaryheap-标准库的最大堆">16.3 BinaryHeap：标准库的最大堆</h2>
@@ -229,122 +229,122 @@
 </tr>
 </tbody></table>
 
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">40 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">use std::cmp::Reverse;</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">use std::collections::BinaryHeap;</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="3"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="4"></span><code class="code">fn kth_largest(a: &amp;[i32], k: usize) -&gt; Option&lt;i32&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">    if k == 0 || k &gt; a.len() {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">        return None;</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    let mut heap: BinaryHeap&lt;i32&gt; = BinaryHeap::with_capacity(k);</code></div>
-<div class="cl"><span class="ln" data-ln="9"></span><code class="code">    for &amp;x in a {</code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">        if heap.len() &lt; k {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">            heap.push(x);</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        } else if x &gt; *heap.peek().unwrap() {</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">            heap.pop();</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">            heap.push(x);</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">    heap.peek().copied()</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="19"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">fn merge_stones(stones: &amp;[i32]) -&gt; i32 {</code></div>
-<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    let mut heap: BinaryHeap&lt;Reverse&lt;i32&gt;&gt; = BinaryHeap::new();</code></div>
-<div class="cl"><span class="ln" data-ln="22"></span><code class="code">    for &amp;s in stones {</code></div>
-<div class="cl"><span class="ln" data-ln="23"></span><code class="code">        heap.push(Reverse(s));</code></div>
-<div class="cl"><span class="ln" data-ln="24"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="25"></span><code class="code">    let mut cost = 0;</code></div>
-<div class="cl"><span class="ln" data-ln="26"></span><code class="code">    while heap.len() &gt;= 2 {</code></div>
-<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        let Reverse(a) = heap.pop().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="28"></span><code class="code">        let Reverse(b) = heap.pop().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="29"></span><code class="code">        let merged = a + b;</code></div>
-<div class="cl"><span class="ln" data-ln="30"></span><code class="code">        cost += merged;</code></div>
-<div class="cl"><span class="ln" data-ln="31"></span><code class="code">        heap.push(Reverse(merged));</code></div>
-<div class="cl"><span class="ln" data-ln="32"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="33"></span><code class="code">    cost</code></div>
-<div class="cl"><span class="ln" data-ln="34"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="35"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="36"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="37"></span><code class="code">    let a = [3, 2, 1, 5, 6, 4];</code></div>
-<div class="cl"><span class="ln" data-ln="38"></span><code class="code">    println!(&quot;kth largest = {:?}&quot;, kth_largest(&amp;a, 2));</code></div>
-<div class="cl"><span class="ln" data-ln="39"></span><code class="code">    println!(&quot;merge cost = {}&quot;, merge_stones(&amp;[1, 2, 3, 4]));</code></div>
-<div class="cl"><span class="ln" data-ln="40"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">40 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">use std::cmp::Reverse;</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">use std::collections::BinaryHeap;</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="3"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="4"></span><span class="code">fn kth_largest(a: &amp;[i32], k: usize) -&gt; Option&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">    if k == 0 || k &gt; a.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">        return None;</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    let mut heap: BinaryHeap&lt;i32&gt; = BinaryHeap::with_capacity(k);</span></div>
+<div class="cl"><span class="ln" data-ln="9"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">        if heap.len() &lt; k {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">            heap.push(x);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        } else if x &gt; *heap.peek().unwrap() {</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">            heap.pop();</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            heap.push(x);</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">    heap.peek().copied()</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="19"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">fn merge_stones(stones: &amp;[i32]) -&gt; i32 {</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    let mut heap: BinaryHeap&lt;Reverse&lt;i32&gt;&gt; = BinaryHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="22"></span><span class="code">    for &amp;s in stones {</span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">        heap.push(Reverse(s));</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">    let mut cost = 0;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">    while heap.len() &gt;= 2 {</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        let Reverse(a) = heap.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        let Reverse(b) = heap.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        let merged = a + b;</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">        cost += merged;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">        heap.push(Reverse(merged));</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">    cost</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="35"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">    let a = [3, 2, 1, 5, 6, 4];</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">    println!(&quot;kth largest = {:?}&quot;, kth_largest(&amp;a, 2));</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">    println!(&quot;merge cost = {}&quot;, merge_stones(&amp;[1, 2, 3, 4]));</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">}</span></div></div></div>
 <p><code>merge_stones</code> 演示了堆的经典应用：每次取当前最小的两块合并，再把结果放回。用 <code>Reverse</code> 把最大堆翻成小根堆，循环里解构 <code>let Reverse(a) = heap.pop().unwrap();</code> 直接拿到内部值。这个&quot;反复合并最小两项&quot;的贪心结构是 Huffman 编码等问题的基础。</p>
 <p>关于 table 里的 <code>peek</code>：它返回 <code>Option&lt;&amp;T&gt;</code>，空堆时不要直接 <code>unwrap()</code>，除非你能用 <code>len</code> 或循环条件保证非空。上面的 top-k 代码里，<code>else</code> 分支能走到说明堆已经装了 k 个元素且 k &gt; 0，所以 <code>peek().unwrap()</code> 是安全的。另外 <code>BinaryHeap</code> 可以从 <code>Vec</code> 直接 <code>collect</code> 或用 <code>BinaryHeap::from(vec)</code> 构造，标准库会在 O(n) 时间内完成建堆，比逐个 push 的 O(n log n) 更高效。若要在堆里放自定义类型，注意 <code>Ord</code> 必须与 <code>PartialOrd</code> 的语义一致，否则标准库可能表现出违反直觉的行为。</p>
 <h2 id="rust-ch03-union-find-and-heap-16-4-手写二叉堆与复杂度小结">16.4 手写二叉堆与复杂度小结</h2>
 <p>手写堆的价值不在于替代标准库，而在于理解它的下标不变量。用数组按层序存放完全二叉树：下标 i 的左孩子是 <code>2i + 1</code>，右孩子是 <code>2i + 2</code>，父节点是 <code>(i - 1) / 2</code>。这些公式在 <code>i = 0</code> 时都会出问题，所以上浮循环必须写成 <code>while i &gt; 0</code>，先判断再算父节点。下沉时用 <code>l = 2i + 1</code>、<code>r = l + 1</code>，先检查 <code>l &lt; len</code> 再决定是否比较 r。</p>
-<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">72 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><code class="code">struct MinHeap {</code></div>
-<div class="cl"><span class="ln" data-ln="2"></span><code class="code">    data: Vec&lt;i32&gt;,</code></div>
-<div class="cl"><span class="ln" data-ln="3"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="4"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="5"></span><code class="code">impl MinHeap {</code></div>
-<div class="cl"><span class="ln" data-ln="6"></span><code class="code">    fn new() -&gt; Self {</code></div>
-<div class="cl"><span class="ln" data-ln="7"></span><code class="code">        MinHeap { data: Vec::new() }</code></div>
-<div class="cl"><span class="ln" data-ln="8"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="9"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="10"></span><code class="code">    fn push(&amp;mut self, v: i32) {</code></div>
-<div class="cl"><span class="ln" data-ln="11"></span><code class="code">        self.data.push(v);</code></div>
-<div class="cl"><span class="ln" data-ln="12"></span><code class="code">        let mut i = self.data.len() - 1;</code></div>
-<div class="cl"><span class="ln" data-ln="13"></span><code class="code">        while i &gt; 0 {</code></div>
-<div class="cl"><span class="ln" data-ln="14"></span><code class="code">            let p = (i - 1) / 2;</code></div>
-<div class="cl"><span class="ln" data-ln="15"></span><code class="code">            if self.data[p] &lt;= self.data[i] {</code></div>
-<div class="cl"><span class="ln" data-ln="16"></span><code class="code">                break;</code></div>
-<div class="cl"><span class="ln" data-ln="17"></span><code class="code">            }</code></div>
-<div class="cl"><span class="ln" data-ln="18"></span><code class="code">            self.data.swap(p, i);</code></div>
-<div class="cl"><span class="ln" data-ln="19"></span><code class="code">            i = p;</code></div>
-<div class="cl"><span class="ln" data-ln="20"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="21"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="22"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="23"></span><code class="code">    fn pop(&amp;mut self) -&gt; Option&lt;i32&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="24"></span><code class="code">        if self.data.is_empty() {</code></div>
-<div class="cl"><span class="ln" data-ln="25"></span><code class="code">            return None;</code></div>
-<div class="cl"><span class="ln" data-ln="26"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="27"></span><code class="code">        let ret = self.data[0];</code></div>
-<div class="cl"><span class="ln" data-ln="28"></span><code class="code">        let last = self.data.pop().unwrap();</code></div>
-<div class="cl"><span class="ln" data-ln="29"></span><code class="code">        if !self.data.is_empty() {</code></div>
-<div class="cl"><span class="ln" data-ln="30"></span><code class="code">            self.data[0] = last;</code></div>
-<div class="cl"><span class="ln" data-ln="31"></span><code class="code">            let mut i = 0usize;</code></div>
-<div class="cl"><span class="ln" data-ln="32"></span><code class="code">            loop {</code></div>
-<div class="cl"><span class="ln" data-ln="33"></span><code class="code">                let l = 2 * i + 1;</code></div>
-<div class="cl"><span class="ln" data-ln="34"></span><code class="code">                let r = l + 1;</code></div>
-<div class="cl"><span class="ln" data-ln="35"></span><code class="code">                if l &gt;= self.data.len() {</code></div>
-<div class="cl"><span class="ln" data-ln="36"></span><code class="code">                    break;</code></div>
-<div class="cl"><span class="ln" data-ln="37"></span><code class="code">                }</code></div>
-<div class="cl"><span class="ln" data-ln="38"></span><code class="code">                let mut smallest = l;</code></div>
-<div class="cl"><span class="ln" data-ln="39"></span><code class="code">                if r &lt; self.data.len() &amp;&amp; self.data[r] &lt; self.data[l] {</code></div>
-<div class="cl"><span class="ln" data-ln="40"></span><code class="code">                    smallest = r;</code></div>
-<div class="cl"><span class="ln" data-ln="41"></span><code class="code">                }</code></div>
-<div class="cl"><span class="ln" data-ln="42"></span><code class="code">                if self.data[i] &lt;= self.data[smallest] {</code></div>
-<div class="cl"><span class="ln" data-ln="43"></span><code class="code">                    break;</code></div>
-<div class="cl"><span class="ln" data-ln="44"></span><code class="code">                }</code></div>
-<div class="cl"><span class="ln" data-ln="45"></span><code class="code">                self.data.swap(i, smallest);</code></div>
-<div class="cl"><span class="ln" data-ln="46"></span><code class="code">                i = smallest;</code></div>
-<div class="cl"><span class="ln" data-ln="47"></span><code class="code">            }</code></div>
-<div class="cl"><span class="ln" data-ln="48"></span><code class="code">        }</code></div>
-<div class="cl"><span class="ln" data-ln="49"></span><code class="code">        Some(ret)</code></div>
-<div class="cl"><span class="ln" data-ln="50"></span><code class="code">    }</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="51"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="52"></span><code class="code">    fn len(&amp;self) -&gt; usize {</code></div>
-<div class="cl"><span class="ln" data-ln="53"></span><code class="code">        self.data.len()</code></div>
-<div class="cl"><span class="ln" data-ln="54"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="55"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="56"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="57"></span><code class="code">fn heap_sort(a: &amp;[i32]) -&gt; Vec&lt;i32&gt; {</code></div>
-<div class="cl"><span class="ln" data-ln="58"></span><code class="code">    let mut h = MinHeap::new();</code></div>
-<div class="cl"><span class="ln" data-ln="59"></span><code class="code">    for &amp;x in a {</code></div>
-<div class="cl"><span class="ln" data-ln="60"></span><code class="code">        h.push(x);</code></div>
-<div class="cl"><span class="ln" data-ln="61"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="62"></span><code class="code">    let mut out = Vec::with_capacity(a.len());</code></div>
-<div class="cl"><span class="ln" data-ln="63"></span><code class="code">    while h.len() &gt; 0 {</code></div>
-<div class="cl"><span class="ln" data-ln="64"></span><code class="code">        out.push(h.pop().unwrap());</code></div>
-<div class="cl"><span class="ln" data-ln="65"></span><code class="code">    }</code></div>
-<div class="cl"><span class="ln" data-ln="66"></span><code class="code">    out</code></div>
-<div class="cl"><span class="ln" data-ln="67"></span><code class="code">}</code></div>
-<div class="cl is-empty"><span class="ln" data-ln="68"></span><code class="code"> </code></div>
-<div class="cl"><span class="ln" data-ln="69"></span><code class="code">fn main() {</code></div>
-<div class="cl"><span class="ln" data-ln="70"></span><code class="code">    let a = [5, 3, 8, 1, 9, 2];</code></div>
-<div class="cl"><span class="ln" data-ln="71"></span><code class="code">    println!(&quot;{:?}&quot;, heap_sort(&amp;a));</code></div>
-<div class="cl"><span class="ln" data-ln="72"></span><code class="code">}</code></div></div></div>
+<div class="codeblock"><header class="cb-head"><span class="cb-lang">rust</span><span class="cb-file">Rust · 标准库</span><span class="cb-lines">72 行</span></header><div class="cb-body"><div class="cl"><span class="ln" data-ln="1"></span><span class="code">struct MinHeap {</span></div>
+<div class="cl"><span class="ln" data-ln="2"></span><span class="code">    data: Vec&lt;i32&gt;,</span></div>
+<div class="cl"><span class="ln" data-ln="3"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="4"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="5"></span><span class="code">impl MinHeap {</span></div>
+<div class="cl"><span class="ln" data-ln="6"></span><span class="code">    fn new() -&gt; Self {</span></div>
+<div class="cl"><span class="ln" data-ln="7"></span><span class="code">        MinHeap { data: Vec::new() }</span></div>
+<div class="cl"><span class="ln" data-ln="8"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="9"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="10"></span><span class="code">    fn push(&amp;mut self, v: i32) {</span></div>
+<div class="cl"><span class="ln" data-ln="11"></span><span class="code">        self.data.push(v);</span></div>
+<div class="cl"><span class="ln" data-ln="12"></span><span class="code">        let mut i = self.data.len() - 1;</span></div>
+<div class="cl"><span class="ln" data-ln="13"></span><span class="code">        while i &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="14"></span><span class="code">            let p = (i - 1) / 2;</span></div>
+<div class="cl"><span class="ln" data-ln="15"></span><span class="code">            if self.data[p] &lt;= self.data[i] {</span></div>
+<div class="cl"><span class="ln" data-ln="16"></span><span class="code">                break;</span></div>
+<div class="cl"><span class="ln" data-ln="17"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="18"></span><span class="code">            self.data.swap(p, i);</span></div>
+<div class="cl"><span class="ln" data-ln="19"></span><span class="code">            i = p;</span></div>
+<div class="cl"><span class="ln" data-ln="20"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="21"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="22"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="23"></span><span class="code">    fn pop(&amp;mut self) -&gt; Option&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="24"></span><span class="code">        if self.data.is_empty() {</span></div>
+<div class="cl"><span class="ln" data-ln="25"></span><span class="code">            return None;</span></div>
+<div class="cl"><span class="ln" data-ln="26"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="27"></span><span class="code">        let ret = self.data[0];</span></div>
+<div class="cl"><span class="ln" data-ln="28"></span><span class="code">        let last = self.data.pop().unwrap();</span></div>
+<div class="cl"><span class="ln" data-ln="29"></span><span class="code">        if !self.data.is_empty() {</span></div>
+<div class="cl"><span class="ln" data-ln="30"></span><span class="code">            self.data[0] = last;</span></div>
+<div class="cl"><span class="ln" data-ln="31"></span><span class="code">            let mut i = 0usize;</span></div>
+<div class="cl"><span class="ln" data-ln="32"></span><span class="code">            loop {</span></div>
+<div class="cl"><span class="ln" data-ln="33"></span><span class="code">                let l = 2 * i + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="34"></span><span class="code">                let r = l + 1;</span></div>
+<div class="cl"><span class="ln" data-ln="35"></span><span class="code">                if l &gt;= self.data.len() {</span></div>
+<div class="cl"><span class="ln" data-ln="36"></span><span class="code">                    break;</span></div>
+<div class="cl"><span class="ln" data-ln="37"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="38"></span><span class="code">                let mut smallest = l;</span></div>
+<div class="cl"><span class="ln" data-ln="39"></span><span class="code">                if r &lt; self.data.len() &amp;&amp; self.data[r] &lt; self.data[l] {</span></div>
+<div class="cl"><span class="ln" data-ln="40"></span><span class="code">                    smallest = r;</span></div>
+<div class="cl"><span class="ln" data-ln="41"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="42"></span><span class="code">                if self.data[i] &lt;= self.data[smallest] {</span></div>
+<div class="cl"><span class="ln" data-ln="43"></span><span class="code">                    break;</span></div>
+<div class="cl"><span class="ln" data-ln="44"></span><span class="code">                }</span></div>
+<div class="cl"><span class="ln" data-ln="45"></span><span class="code">                self.data.swap(i, smallest);</span></div>
+<div class="cl"><span class="ln" data-ln="46"></span><span class="code">                i = smallest;</span></div>
+<div class="cl"><span class="ln" data-ln="47"></span><span class="code">            }</span></div>
+<div class="cl"><span class="ln" data-ln="48"></span><span class="code">        }</span></div>
+<div class="cl"><span class="ln" data-ln="49"></span><span class="code">        Some(ret)</span></div>
+<div class="cl"><span class="ln" data-ln="50"></span><span class="code">    }</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="51"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="52"></span><span class="code">    fn len(&amp;self) -&gt; usize {</span></div>
+<div class="cl"><span class="ln" data-ln="53"></span><span class="code">        self.data.len()</span></div>
+<div class="cl"><span class="ln" data-ln="54"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="55"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="56"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="57"></span><span class="code">fn heap_sort(a: &amp;[i32]) -&gt; Vec&lt;i32&gt; {</span></div>
+<div class="cl"><span class="ln" data-ln="58"></span><span class="code">    let mut h = MinHeap::new();</span></div>
+<div class="cl"><span class="ln" data-ln="59"></span><span class="code">    for &amp;x in a {</span></div>
+<div class="cl"><span class="ln" data-ln="60"></span><span class="code">        h.push(x);</span></div>
+<div class="cl"><span class="ln" data-ln="61"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="62"></span><span class="code">    let mut out = Vec::with_capacity(a.len());</span></div>
+<div class="cl"><span class="ln" data-ln="63"></span><span class="code">    while h.len() &gt; 0 {</span></div>
+<div class="cl"><span class="ln" data-ln="64"></span><span class="code">        out.push(h.pop().unwrap());</span></div>
+<div class="cl"><span class="ln" data-ln="65"></span><span class="code">    }</span></div>
+<div class="cl"><span class="ln" data-ln="66"></span><span class="code">    out</span></div>
+<div class="cl"><span class="ln" data-ln="67"></span><span class="code">}</span></div>
+<div class="cl is-empty"><span class="ln" data-ln="68"></span><span class="code"> </span></div>
+<div class="cl"><span class="ln" data-ln="69"></span><span class="code">fn main() {</span></div>
+<div class="cl"><span class="ln" data-ln="70"></span><span class="code">    let a = [5, 3, 8, 1, 9, 2];</span></div>
+<div class="cl"><span class="ln" data-ln="71"></span><span class="code">    println!(&quot;{:?}&quot;, heap_sort(&amp;a));</span></div>
+<div class="cl"><span class="ln" data-ln="72"></span><span class="code">}</span></div></div></div>
 <p>把数组所有元素依次 push 进堆再逐个 pop，就得到升序序列，这是 O(n log n) 的堆排序。若改用原地建堆（从最后一个非叶节点开始下沉），建堆可以做到 O(n)，整体仍为 O(n log n)，但常数更小。堆最常见的用途是优先队列：Dijkstra 取当前距离最小的点、合并 K 路有序序列取最小头元素、以及在海量数据里维护 top-k。它们共同的模式都是&quot;插入一个候选、弹出一个最优&quot;，这正是堆擅长的事。</p>
 <p>上浮与下沉都用 <code>swap</code> 而不是逐个赋值，是因为 <code>Vec::swap</code> 一次完成两个位置的交换，不需要先克隆出临时值；对 <code>i32</code> 这类 <code>Copy</code> 类型差别不大，但换成 String 或自定义结构体时就能省下分配。正确性方面，上浮终止时父节点不大于当前节点，且原本的堆性质未被破坏；下沉终止时当前节点不大于两个孩子，两边子树递归地满足堆性质。这两个局部性质合起来就是全局不变量。写完代码后，用小数组跑一次堆排序并检查结果是否有序，是最省事的自检。</p>
 <section class="box box-quiz" data-box-type="check"><header class="box-h"><span class="box-kind">自检</span><span class="box-t">合上书之前问自己</span></header>
