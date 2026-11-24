@@ -92,15 +92,15 @@ const repos: Repo[] = [
     name: 'EffiBuddy',
     url: 'https://github.com/lumenShen/EffiBuddy',
     description:
-      '本地优先的 AI Agent 桌面应用：35+ 工具、BM25 + 向量混合检索记忆、技能市场、语音转写与局域网 P2P 协作，让 Agent 在桌面端真正动手。',
+      '从 Tauri + Vue 重写为 Rust + GPUI（无 WebView），为更优秀的 CPU 与内存性能更换前后端全栈；虚拟提供商压测 1000 路并发会话/子代理 × 单路 500 token/s，把资源占用压到极致。',
     language: 'Rust',
     stars: 1,
     flagship: false,
     showcase: true,
     image: '/portfolio/effibuddy.webp',
-    imageAlt: 'EffiBuddy 设置页：外观、主题模式、字体大小与跑马灯开关',
+    imageAlt: 'EffiBuddy GPUI 聊天界面：会话侧栏、计划面板与工具能力列表',
     lead: 'EffiBuddy。',
-    stack: 'Tauri 2 · Vue 3 · Rust · 35+ 工具',
+    stack: 'Rust · GPUI · Boa PTC · 12 内置工具',
   },
   {
     name: '摆烂处方笺',
