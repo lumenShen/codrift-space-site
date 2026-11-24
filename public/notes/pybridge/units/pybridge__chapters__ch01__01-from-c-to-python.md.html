@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从 C 到 Python：类型与执行方式</title>
+<meta name="description" content="零基础 · 第 1 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-pybridge-chapters-ch01-01-from-c-to-python-md { @top-right { content: "从 C 到 Python：类型与执行方式"; } }
+#content { page: p-u-pybridge-chapters-ch01-01-from-c-to-python-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/pybridge.html">《pybridge》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">从 C 到 Python：类型与执行方式</h1><p class="doc-sub">零基础 · 第 1 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/pybridge/chapters/ch01/01-from-c-to-python.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h1">1.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h2">1.2 一行代码背后：解释执行到底多了哪几步</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h3">1.3 动态类型：变量是便签，不是盒子</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h4">1.4 整数与浮点：两套完全不同的语义</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h5">1.5 缩进与作用域：花括号去哪了</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h6">1.6 真跑：把代码和 stdout 摆在一起</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h7">1.7 慢在哪里：把「解释器开销」落到具体数字</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h8">1.8 为什么科学计算仍然选 Python</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h9">1.9 三个常见坑，逐个拆开</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h10">1.10 从 C 的视角看：概念对照表</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h11">1.11 手算核对：四个数不用程序也能验</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h12">1.12 读图指引：四张图分别该盯什么</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h13">1.13 再看一眼字节码：解释器视角的证据</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h14">1.14 布尔、None 与整数：类型系统的三个边角</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch01-01-from-c-to-python-md-h15">1.15 把这一单元接到下一单元</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清解释执行与编译执行的分工，以及一行 Python 语句在真正运行前还多走了哪几步；</li>
+<li>解释变量、对象、引用三者的关系，不再把 <code>a = 3</code> 想象成「把 3 塞进一个固定盒子」；</li>
+<li>手算出 <code>2**64</code> 与 <code>0.1 + 0.2</code> 在 Python 里各打印什么，并说出两条路各自的原因；</li>
+<li>靠缩进判断一个变量属于哪一层作用域，知道 <code>nonlocal</code> 究竟解决了什么问题；</li>
+<li>读懂 <code>python src/main.py</code> 的真实 stdout，并说清闸门为什么只把 <code>key=value</code> 当数值证据。</li>
+</ul>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h1">1.1 先看工程长什么样</h2>
+<p>这个分册不再从零写数值库，而是把前几册手写的那些实验翻译成框架写法。第一步仍然是看清工程：每个例子都有自己的入口、本地模块和清单，三者缺一不可。入口负责把要展示的数打到屏幕上，模块负责提供可复用的函数，清单负责让流水线真跑一遍并把 stdout 对账。</p>
+<figure class="viz" data-kind="tree" data-frames="3" data-viz-id="vz-780c713c">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> py_basics 工程：从空目录到可被闸门对账的例子</figcaption>
+<div class="viz-screen" role="group" aria-label="py_basics 工程：从空目录到可被闸门对账的例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-780c713c" id="vz-780c713c-1" checked>
+<input class="vs-radio" type="radio" name="vz-780c713c" id="vz-780c713c-2">
+<input class="vs-radio" type="radio" name="vz-780c713c" id="vz-780c713c-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-780c713c-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-780c713c-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-780c713c-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">py_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">demo.py</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">py_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="3"><span class="vn-tree" aria-hidden="true">   │  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="3"><span class="vn-tree" aria-hidden="true">   │  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">demo.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb01-basics.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>这一节开始时的目录</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>新增两个源文件</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">py_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">demo.py</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>再新增清单，闸门才有证据</p><div class="viz-canvas" data-kind="tree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">py_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">src/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="3"><span class="vn-tree" aria-hidden="true">   │  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="3"><span class="vn-tree" aria-hidden="true">   │  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">demo.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb01-basics.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里新增的是两个 <code>.py</code> 文件：<code>src/main.py</code> 是入口，<code>src/demo.py</code> 是本地模块。第 3 帧再新增 <code>pb01-basics.json</code>，闸门才知道该跑哪个脚本、该去正文的哪个 <code>output</code> 块里对账。注意清单里 <code>sources</code> 的顺序：第一个必须是入口，其余是被 import 的模块；流水线会先对这两个文件做 <code>py_compile</code> 语法检查，再真正执行第一个文件。</p>
+<p>你可能会问：两个文件直接放在一个目录里不好吗，为什么非要 <code>src/</code>？这是工程惯例，不是语言规定。把入口和模块收进 <code>src/</code> 之后，命令仍然是干净的一条 <code>python src/main.py</code>；由于入口脚本所在目录会自动进入 <code>sys.path[0]</code>，同一目录下的 <code>demo.py</code> 就能被直接找到，不需要额外设置路径。代价是你得记住「相对谁解析」这件事——从别的目录运行时要写全路径，或者先把工作目录切到例子目录。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h2">1.2 一行代码背后：解释执行到底多了哪几步</h2>
+<p>先说结论：C 程序在运行之前已经被翻译成了机器指令，而 Python 程序每次运行都要先把自己翻译成一种中间形式再执行。这不是「Python 慢一点」这么轻描淡写，而是两套完全不同的执行路径。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用大白话先说清这件事</span></header>
+<div class="box-b">
+<p>你把同一句计算写在一张纸上。C 的做法是：先把整张纸交给一位翻译官，翻译官逐字读完、查好每个词的意思、把整张纸变成一份机器能直接照做的清单，然后机器拿着清单飞快地干活。Python 的做法是：每次运行时，先有人把这张纸匆匆扫一遍变成短一点的备忘条，然后另一个人拿着备忘条一条一条照做。第二个人每做一条都要再判断一次「这条是什么意思、要用哪个函数」。备忘条比原纸短，但「边看边做」这一步省不掉。严格说，Python 也做编译，只是编译的目标是字节码而不是机器码，而且这份字节码默认不落到你手里。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-c7d26128">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 同一行 print 背后：Python 与 C 各走了一遍什么</figcaption>
+<div class="viz-screen" role="group" aria-label="同一行 print 背后：Python 与 C 各走了一遍什么：逐步演示">
+<input class="vs-radio" type="radio" name="vz-c7d26128" id="vz-c7d26128-1" checked>
+<input class="vs-radio" type="radio" name="vz-c7d26128" id="vz-c7d26128-2">
+<input class="vs-radio" type="radio" name="vz-c7d26128" id="vz-c7d26128-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-c7d26128-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-c7d26128-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-c7d26128-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：一行源码文本</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：源码文本</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">parser ：切 token 建树</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">bytecode ：字节码待执行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">print_line</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">parser</span><span class="ve-lbl">源码交给解析器</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">parser</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">bytecode</span><span class="ve-lbl">语法树编译成字节码</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：只翻译一次</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">compiler ：编译期定类型</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">machine ：只剩机器指令</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">compiler</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">machine</span><span class="ve-lbl">编译一次，反复运行</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>源码里的这一行还只是文本</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：一行源码文本</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>Python 的解释路径每次运行都重来</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：源码文本</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">parser ：切 token 建树</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">bytecode ：字节码待执行</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">print_line</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">parser</span><span class="ve-lbl">源码交给解析器</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">parser</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">bytecode</span><span class="ve-lbl">语法树编译成字节码</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>C 的编译路径作为对照</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">print_line ：只翻译一次</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">compiler ：编译期定类型</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">machine ：只剩机器指令</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">compiler</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">machine</span><span class="ve-lbl">编译一次，反复运行</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧是 Python 这一侧：源码先被切成 token、建成语法树，再变成字节码，最后由虚拟机逐条取指执行。第 3 帧是 C 这一侧：类型检查、地址计算这些事在编译期就做完了，运行期基本只剩搬数据和算术。把两帧并排看，你就明白为什么同样是一行 <code>printf</code> 或 <code>print</code>，在 C 里是一次函数调用，在 Python 里却要穿过好几层间接。</p>
+<p>这里的「虚拟机」不是另一台机器，而是解释器里的一段程序，它模拟出一台执行字节码的机器。字节码也不是给真实 CPU 的指令，而是给这段模拟程序的指令。这一层抽象换来了好处：同一份字节码可以跑在不同平台上，运行时也能改变量的类型、动态的添加属性。代价就是每一次算术都要多做一次分派——先判断对象是什么类型，再决定调用哪段实现。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">本机实测：这一节的数字都来自哪一次运行</span></header>
+<div class="box-b">
+<ul>
+<li>解释器版本写作 <code>3.14.3</code>，由构建期从工具链事实里注入，正文不手写版本号；</li>
+<li>命令：在 <code>examples/ch01/py_basics/</code> 目录下执行 <code>python src/main.py</code>；</li>
+<li>结果：真实 stdout 有九行，其中八行是 <code>key=value</code> 数值行或带冒号的文字行，正文 <code>output</code> 块与它逐字一致，七个数另受清单黄金值约束；</li>
+<li>闸门：<code>python -m py_compile src/main.py src/demo.py</code> 先做语法检查，再跑入口；程序自己打印 <code>exec_mode:interpreted</code> 不算证据，闸门从 stdout 重新解析数值并判定。</li>
+</ul>
+</div>
+</section>
+<p>注意一个细节：语法检查只保证「写得对」，不保证「算得对」。<code>py_compile</code> 检查通过之后，程序仍然可能打印出错误的数。所以流水线分两段：编译阶段看语法，运行阶段看 stdout 与清单黄金值的差。把这两件事混为一谈，是初学时最常见的误判之一。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h3">1.3 动态类型：变量是便签，不是盒子</h2>
+<p>C 里写 <code>int x = 3;</code>，意思是在栈上划出四字节，把整数 3 的二进制填进去。这里 <code>x</code> 和那四字节是绑死的：盒子多大、里面能放什么，编译期就定了。Python 里写 <code>a = 3</code>，发生的是另一件事：先在堆上造出一个整数对象，再把名字 <code>a</code> 贴到这个对象上。名字不带类型，类型属于对象。</p>
+<figure class="viz" data-kind="memory" data-frames="3" data-viz-id="vz-8165c69d">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 变量与对象：a = 3 到底发生了什么</figcaption>
+<div class="viz-screen" role="group" aria-label="变量与对象：a = 3 到底发生了什么：逐步演示">
+<input class="vs-radio" type="radio" name="vz-8165c69d" id="vz-8165c69d-1" checked>
+<input class="vs-radio" type="radio" name="vz-8165c69d" id="vz-8165c69d-2">
+<input class="vs-radio" type="radio" name="vz-8165c69d" id="vz-8165c69d-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-8165c69d-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-8165c69d-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-8165c69d-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">int x ：栈上四字节，值 3</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">3 ：堆上对象，28 字节</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">a ：便签，指向对象</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">3</span><span class="ve-lbl">绑定关系，不是拷贝</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">3 ：老对象，无人引用</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">4 ：新造对象</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">4</span><span class="ve-lbl">便签改贴到新对象</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>C 的 int 变量就是四格内存</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">int x ：栈上四字节，值 3</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>Python 里变量是贴标签的便签</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">3 ：堆上对象，28 字节</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">a ：便签，指向对象</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">3</span><span class="ve-lbl">绑定关系，不是拷贝</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>再写 a = 4，便签换贴，对象不动</p><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">3 ：老对象，无人引用</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">4 ：新造对象</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">4</span><span class="ve-lbl">便签改贴到新对象</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里 <code>getsizeof</code> 报的 28 字节不是「整数 3 占多少空间」的普遍真理，而是本机 CPython 的一个实测读数：对象头、引用计数、类型指针这些固定开销加上一个机器字的数据，凑成了这个数。换一种实现、换一个大整数，读数会变。程序里 <code>int_bytes=28</code> 与 <code>big_bytes=36</code> 两行把这个差异摆在屏幕上：后者是 <code>2**64</code>，超过一个机器字，需要多存一位数据。</p>
+<p>这个模型解释了很多初看奇怪的现象。写 <code>a = 3; b = a</code>，在 C 里是把四字节复制到另一个盒子，在 Python 里是把同一张便签贴到同一个对象上——<code>a</code> 和 <code>b</code> 指向的是同一个东西。写一个可变对象（比如列表）时这个差别会咬人：<code>b.append(4)</code> 会同时改变 <code>a</code> 看到的内容，因为两者从头到尾只有一份列表。想真正复制一份，得显式调用 <code>copy()</code> 或切片，这不是「多余的一步」，而是你明确要求另造一个对象。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把可变对象当值传递，会被坑在哪</span></header>
+<div class="box-b">
+<p>你会看到：函数里对参数列表 <code>items.append(x)</code>，函数外面那个列表也跟着多了 <code>x</code>。你的第一反应往往是「参数不是按值传的吗，怎么被调用方改了」；再一想又觉得「Python 是引用传递吧」，于是把所有东西都当成引用去解释。真相是：传进去的是那份引用的副本，函数内外两张便签指向同一个对象；改便签本身（重新赋值）互不影响，改便签指向的对象则双方都看得见。判断的办法只有一条：看操作发生在「便签」上还是「对象」上。</p>
+</div>
+</section>
+<p>对象模型还带来一个实际后果：对象有生命周期。当最后一个便签被撕掉，对象就没人引用了，CPython 会用引用计数当场回收它。这意味着你可以随手创建临时对象而不必手写 <code>free</code>，但也意味着「看起来还活着」的对象可能随时消失——只要你没把它绑到任何名字上。后面用 NumPy 数组做切片时，这个「谁还引用着谁」的问题会以视图与拷贝的形式再次出现。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h4">1.4 整数与浮点：两套完全不同的语义</h2>
+<p>现在看这一节最有意思的两个数。第一个是 <code>int_max</code>：程序里写的是 <code>2 ** 64</code>，打印出来是 <code>18446744073709551616</code>。如果你带着 C 的习惯，会以为它该回绕成 0——毕竟 64 位无符号整数装不下更大的数。Python 的 <code>int</code> 不是定宽的，它按需扩展，理论上只受内存限制。所以这里没有溢出，也没有回绕，就是一个精确的大整数。</p>
+<p>第二个是 <code>float_sum</code>。程序把 <code>0.1</code> 和 <code>0.2</code> 累加，按六位小数打印是 <code>0.300000</code>；但旁边那行 <code>float_raw:0.30000000000000004</code> 把真面目露出来了。原因不在 Python，而在 IEEE 754 双精度：<code>0.1</code> 和 <code>0.2</code> 都不能被二进制浮点精确表示，它们各自被舍入成最接近的可表示数，相加之后再舍入一次，结果就比十进制的 0.3 多了一点点。这一点点误差在金额计算里会出事，在训练损失里通常被容差吸收。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">拿 == 直接比浮点求和，会被坑在哪</span></header>
+<div class="box-b">
+<p>你会看到：<code>0.1 + 0.2 == 0.3</code> 打印 <code>False</code>，而你刚刚手算明明等于 0.3。你可能会怀疑 Python 的加法实现有 bug，或者怀疑自己敲错了数字。真相是：等式两边根本不是同一个二进制数，0.3 这个字面量本身也被舍入过，两个舍入结果不同。正确做法是用容差比较，例如判断绝对值差是否小于一个很小的值——这正是闸门对账时 <code>atol</code> 的作用。注意也不要拿 <code>abs(diff) &lt; 0</code> 这种写法，它永远为假。</p>
+</div>
+</section>
+<p>这两套语义在深度学习里都有用武之地。任意精度整数让你写循环计数、索引、哈希时不必担心回绕；双精度浮点则是科学计算的主力，它的舍入误差可分析、可控制。真正要小心的是混用：把大整数转成浮点会丢精度，把浮点转成整数会截断而不是四舍五入。NumPy 的 <code>dtype</code> 会把这件事显式化——这是下一单元的主题。</p>
+<p>还有一点值得单独说：<code>type()</code> 和 <code>isinstance()</code> 回答的是不同问题。前者问「这个对象的确切类型是什么」，后者问「它是不是某个类型或子类的实例」。在 Python 里，<code>bool</code> 是 <code>int</code> 的子类，所以 <code>isinstance(True, int)</code> 为真，但 <code>type(True) is int</code> 为假。写数值代码时这类细节偶尔会露出来，比如某个布尔值被当成 1 参与算术。读别人的代码时看到这种写法，别急着改，先确认作者是不是有意利用了这个关系。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h5">1.5 缩进与作用域：花括号去哪了</h2>
+<p>C 用花括号划 block，Python 用缩进。这不是排版偏好，而是语法本身：缩进决定一条语句属于哪个 block，从而决定变量在哪一层可见。<code>demo.py</code> 里的 <code>scoped_count</code> 把这件事演示得很清楚。</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch01/py_basics/src/demo.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">缩进决定作用域：内层函数要改外层变量得声明 nonlocal</span><span class="cb-file">examples/ch01/py_basics/src/demo.py</span><span class="cb-lines">第 31–41 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="31" data-to="41"><span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">def</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">scoped_count</span><span class="tk" style="color:#24292E">(n):</span></span></span>
+<span class="cl" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#032F62">"""缩进决定作用域：内层函数用 nonlocal 改外层变量。"""</span></span></span>
+<span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    total </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span></span></span>
+<span class="cl is-empty" data-ln="34"><span class="ln" data-ln="34" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="35"><span class="ln" data-ln="35" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">def</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">tick</span><span class="tk" style="color:#24292E">():</span></span></span>
+<span class="cl" data-ln="36"><span class="ln" data-ln="36" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">nonlocal</span><span class="tk" style="color:#24292E"> total</span></span></span>
+<span class="cl" data-ln="37"><span class="ln" data-ln="37" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        total </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span></span></span>
+<span class="cl is-empty" data-ln="38"><span class="ln" data-ln="38" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="39"><span class="ln" data-ln="39" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> _ </span><span class="tk" style="color:#D73A49">in</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">range</span><span class="tk" style="color:#24292E">(n):</span></span></span>
+<span class="cl" data-ln="40"><span class="ln" data-ln="40" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        tick()</span></span></span>
+<span class="cl" data-ln="41"><span class="ln" data-ln="41" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> total</span></span></span></pre></div></figure>
+<figure class="viz" data-kind="calltree" data-frames="3" data-viz-id="vz-1a4647ef">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> 缩进与 nonlocal：total 到底住在哪一层</figcaption>
+<div class="viz-screen" role="group" aria-label="缩进与 nonlocal：total 到底住在哪一层：逐步演示">
+<input class="vs-radio" type="radio" name="vz-1a4647ef" id="vz-1a4647ef-1" checked>
+<input class="vs-radio" type="radio" name="vz-1a4647ef" id="vz-1a4647ef-2">
+<input class="vs-radio" type="radio" name="vz-1a4647ef" id="vz-1a4647ef-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-1a4647ef-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-1a4647ef-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-1a4647ef-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：传入 5</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：等结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">scoped() ：total=0</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">scoped()</span><span class="ve-lbl">函数调用</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">main() ：等结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">scoped() ：total=3</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">tick() ：改外层 total</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">scoped()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">tick()</span><span class="ve-lbl">内层调用</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>main 准备调用 scoped_count(5)</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：传入 5</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>进入 scoped_count，total 属于这一层</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：等结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">scoped() ：total=0</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">scoped()</span><span class="ve-lbl">函数调用</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>tick 每调用一次，就跨层改同一个 total</p><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">main() ：等结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">scoped() ：total=3</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">tick() ：改外层 total</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">scoped()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">tick()</span><span class="ve-lbl">内层调用</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里 <code>total</code> 属于 <code>scoped_count</code> 这一层；第 3 帧里 <code>tick</code> 想改它，就必须写 <code>nonlocal total</code>。如果不写，Python 会把 <code>total += 1</code> 里的 <code>total</code> 当成 <code>tick</code> 自己的局部变量，然后报「赋值前引用」。这是初学者几乎必踩的一次坑：读变量时可以向外层找，写变量时默认就在当前层新建。</p>
+<p><code>_</code> 这个名字也有讲究。它仍然是一个合法变量，只是约定俗成表示「这个值我不用」。在 <code>for _ in range(n)</code> 里，循环变量确实没有被使用，用 <code>_</code> 是给读者一个信号。别把它当成「丢弃」关键字——它照样绑定最后一个值，只是没人会去读。理解这一点，你就不会奇怪为什么后面写 <code>for _ in values:</code> 时缩进仍然算数。</p>
+<p>缩进还有一个实践后果：复制粘贴代码时如果混进了不同宽度的空白，语法检查会在你完全没料到的地方报错。本书一律用四个空格，不用 Tab；<code>ws=visible</code> 这类工具能把空白显示出来，遇到诡异的缩进错误时值得打开看一眼。混用 Tab 与空格在 Python 里是真正的语法错误，不是风格问题。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h6">1.6 真跑：把代码和 stdout 摆在一起</h2>
+<p>下面两段来自同一个入口文件。第一段是导入与准备，第二段是打印与 <code>main</code> 守卫。注意 <code>from demo import ...</code> 这一行：它从同目录的模块里取函数，因此 <code>main.py</code> 不需要自己实现任何数值逻辑。</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch01/py_basics/src/main.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">入口的前半段：导入本地模块，设定固定循环次数</span><span class="cb-file">examples/ch01/py_basics/src/main.py</span><span class="cb-lines">第 1–10 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="1" data-to="10"><span class="cl" data-ln="1"><span class="ln" data-ln="1" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#032F62">"""pb01 入口：从 demo 取函数，把真实读数打成 key=value。"""</span></span></span>
+<span class="cl" data-ln="2"><span class="ln" data-ln="2" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">from</span><span class="tk" style="color:#24292E"> demo </span><span class="tk" style="color:#D73A49">import</span><span class="tk" style="color:#24292E"> big_int, float_sum, loop_work, object_bytes, scoped_count</span></span></span>
+<span class="cl is-empty" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#005CC5">LIMIT</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">500000</span></span></span>
+<span class="cl is-empty" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-empty" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">def</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">():</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    huge </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> big_int()</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    s </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> float_sum([</span><span class="tk" style="color:#005CC5">0.1</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">0.2</span><span class="tk" style="color:#24292E">])</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    odd, n </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> loop_work(</span><span class="tk" style="color:#005CC5">LIMIT</span><span class="tk" style="color:#24292E">)</span></span></span></pre></div></figure>
+<p>接着看后半段。每一行打印都遵循同一条纪律：要被闸门对账的数写成 <code>key=value</code>，只是给人看的说明写成 <code>key:文字</code>。<code>float_raw</code> 与 <code>exec_mode</code> 用的是冒号，它们会被逐字比较，不会被当成数值。</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch01/py_basics/src/main.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">入口的后半段：数值行走等号，说明行走冒号</span><span class="cb-file">examples/ch01/py_basics/src/main.py</span><span class="cb-lines">第 11–23 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="11" data-to="23"><span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"int_max=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">huge</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"float_sum=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">s</span><span class="tk" style="color:#D73A49">:.6f</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"float_raw:</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">s</span><span class="tk" style="color:#D73A49">!r</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"loop_ops=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">n</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"loop_odd=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">odd</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"int_bytes=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">object_bytes(</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">)</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"big_bytes=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">object_bytes(huge)</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">f</span><span class="tk" style="color:#032F62">"scope_count=</span><span class="tk" style="color:#005CC5">{</span><span class="tk" style="color:#24292E">scoped_count(</span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">)</span><span class="tk" style="color:#005CC5">}</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"exec_mode:interpreted"</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl is-empty" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl is-empty" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">__name__</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">==</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#032F62">"__main__"</span><span class="tk" style="color:#24292E">:</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    main()</span></span></span></pre></div></figure>
+<p>真跑得到的 stdout：</p>
+<figure class="term term-output" data-id="pb01-basics-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">pb01-basics-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">int_max=18446744073709551616</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">float_sum=0.300000</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">float_raw:0.30000000000000004</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">loop_ops=500000</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">loop_odd=250000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">int_bytes=28</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">big_bytes=36</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">scope_count=5</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">exec_mode:interpreted</span></span></pre></figure>
+<p>八个数里，前七个受清单黄金值约束，<code>exec_mode</code> 那行是纯文字。注意数组与张量统一用冒号打印，例如后面单元里会出现的 <code>v:[1.000000,2.000000]</code>；千万别写成 <code>v=[...]</code>，因为等号左边会被解析成数值行的键，方括号不是合法数值，闸门会报 <code>numeric_value_invalid</code>。把冒号和等号分开，是我们这套证据纪律里最小也最要紧的一条约定。</p>
+<p><code>__main__</code> 守卫也值得说一句：当脚本被直接运行时，<code>__name__</code> 等于字符串 <code>&quot;__main__&quot;</code>，守卫里的语句才执行；当它被别的模块 import 时，守卫里的语句不执行。这样 <code>demo.py</code> 可以被安心导入，而 <code>main.py</code> 既能当入口又不会在导入时打印一屏幕数字。从 C 的角度看，它大约相当于「这个文件自带 main 函数，但只在自己被点时调用」。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h7">1.7 慢在哪里：把「解释器开销」落到具体数字</h2>
+<p>很多人学 Python 的第一印象是「慢」。慢是真的，但笼统地说「慢」没有任何用处，我们要指出慢在哪一层。程序里的 <code>loop_work</code> 做了五十万次极简循环：每次只取一个整数的最低两位并累加。打印出来 <code>loop_ops=500000</code>、<code>loop_odd=250000</code>，前者是循环次数，后者是奇数个数。这两个数是固定的，因此可以作为黄金值对账。</p>
+<p>为什么不打印毫秒？因为墙钟时间受机器负载、缓存、调度影响，同一份代码两次运行可能差出百分之几十。用 <code>atol=1e-2</code> 去对账几十毫秒的运行时间，等于什么都没对账；把噪声写进正文还违背了「数字必须可复现」的纪律。这里改用固定计数做证据：它精确、可复现，又足以说明「解释器要为每次循环做一次字节码分派」这个事实。</p>
+<p>真实的耗时差异可以从结构上推出来。C 的 <code>for (int i = 0; i &lt; n; ++i)</code> 编译后通常是几条机器指令加一个跳转，整数就放在寄存器里；Python 的 <code>for i in range(n)</code> 每次迭代都要取出下一个对象、判断类型、执行 <code>&amp;</code> 对应的方法、再把结果加到一个新对象上。对象创建与分派是主要开销，算术本身反而是小头。所以优化 Python 数值代码的第一原则不是「少写几层循环」，而是「把循环搬到用 C 或 Fortran 写好的库里去」——这正是 NumPy 存在的理由。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：为什么先固定计数再谈计时</span></header>
+<div class="box-b">
+<p>先把工作量固定成可复现的整数，再在需要性能结论时另做多次测量取中位数，这是数值实验的通行做法，不是语言规定。代价是你得维护两套数字：一套进闸门当黄金值，一套留在实验记录里当性能参考。好处是闸门永远稳定，不会因为某次机器繁忙就误报失败。本分册后续所有单元都遵循这条：耗时类指标一律不进 <code>expect.numbers</code>。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h8">1.8 为什么科学计算仍然选 Python</h2>
+<p>既然纯 Python 循环这么慢，为什么深度学习领域几乎人手一份 Python？答案不在解释器，而在它背后。NumPy、PyTorch 这类库把真正的大循环写成了编译好的 C、C++ 或 Fortran，Python 这一层只负责描述「做什么」：分配多大的数组、对哪两维做乘法、梯度要不要保留。描述一次，底层跑几亿次。</p>
+<p>这套分工的关键在于<strong>数据布局</strong>。当数据以连续的同类型数组存在时，底层代码可以用指针线性扫描，缓存命中率高，还能调用针对 CPU 指令集优化过的 BLAS。Python 的列表做不到这一点：列表里每个元素都是一个独立对象，类型可以不同，内存也不连续。所以从列表切到数组，不只是「换了个写法」，而是把数据从「一堆对象」变成「一块可以按字节算的内存」。</p>
+<p>下一单元会把这件事讲透：数组的 <code>shape</code>、<code>dtype</code>、<code>strides</code> 三个属性分别回答「几维每维多长」「每格是什么类型」「跨一格要走多少字节」。理解了这三个词，你就知道为什么 <code>A @ B</code> 比双层循环快，也知道视图和拷贝的区别从哪来。今天这一节的 <code>int_bytes</code> 与 <code>big_bytes</code> 是铺垫：先看到对象有开销，才容易接受「把数据打包成连续数组」是个重要优化。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h9">1.9 三个常见坑，逐个拆开</h2>
+<p>第一个坑是把 <code>is</code> 当成 <code>==</code>。<code>is</code> 比较的是两个名字是不是指向同一个对象，<code>==</code> 比较的是内容是否相等。小的整数在 CPython 里会被缓存，所以 <code>a is b</code> 在小数值上常常为真；大整数不会，于是同一段判断换个数字结果就变。判断数值相等一律用 <code>==</code>，判断是不是 <code>None</code> 才用 <code>is</code>。</p>
+<p>第二个坑是可变对象作为默认参数。写 <code>def f(items=[]):</code> 时，那个空列表在函数定义时就造好了，所有调用共享同一个对象；第一次调用往里加东西，第二次调用就带着旧东西进来。正确写法是默认 <code>None</code>，进函数再造新列表。这个坑之所以隐蔽，是因为它只在多次调用之间才显形，单次测试永远看不出来。</p>
+<p>第三个坑是以为异常会自己消失。除零、索引越界、类型不匹配都会抛异常；如果不捕获，程序就带着栈回溯结束，退出码非零，闸门会报 <code>exit_mismatch</code>。本书的例子刻意不捕获异常——让错误当场暴露比悄悄兜住更有利于建立证据纪律。真正要处理异常时，捕获的范围越窄越好，别用一个巨大的 <code>except</code> 把八种错误全吞掉。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把 print 当成调试终点，会被坑在哪</span></header>
+<div class="box-b">
+<p>你会看到：屏幕上打出了 <code>loop_odd=250000</code>，于是认定循环没问题。你的第一反应是「数值对上了，收工」。真相是：打印出来的数只是你让程序打印的数，它可能对，也可能因为索引写错而碰巧对。闸门的价值在于它拿同一份 stdout 与清单黄金值对账，并且用固定种子排除偶然。想真正建立信心，得再问一句「这个数能不能手算核对」——下一节就带你把四个数逐个手算一遍。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h10">1.10 从 C 的视角看：概念对照表</h2>
+<p>把熟悉的东西和不熟悉的东西并排放， Migration 成本会低很多。下表不是语法速查，而是「同一个意图在两种语言里各自落在哪一层」的对照。</p>
+<table>
+<thead>
+<tr>
+<th>C 里的东西</th>
+<th>Python 里的对应</th>
+<th>关键差别</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>int x = 3</code></td>
+<td><code>x = 3</code></td>
+<td>前者定长四字节，后者是对象加便签</td>
+</tr>
+<tr>
+<td><code>int a[8]</code></td>
+<td><code>a = [0]*8</code> 或 <code>np.zeros(8)</code></td>
+<td>列表存对象引用，数组才是连续数值</td>
+</tr>
+<tr>
+<td><code>printf(&quot;%.6f&quot;, v)</code></td>
+<td><code>print(f&quot;v={v:.6f}&quot;)</code></td>
+<td>格式化语法不同，输出纪律相同</td>
+</tr>
+<tr>
+<td><code>#include</code></td>
+<td><code>from module import name</code></td>
+<td>导入的是对象绑定，不是文本粘贴</td>
+</tr>
+<tr>
+<td>头文件声明 + 源文件定义</td>
+<td>模块里的函数定义</td>
+<td>Python 没有单独的声明文件</td>
+</tr>
+<tr>
+<td>编译期类型检查</td>
+<td>运行时动态分派</td>
+<td>错误出现的时间点从编译挪到运行</td>
+</tr>
+<tr>
+<td>栈上局部变量</td>
+<td>栈帧里的名字绑定</td>
+<td>名字没有类型，对象才有</td>
+</tr>
+<tr>
+<td><code>free</code></td>
+<td>引用计数与垃圾回收</td>
+<td>通常不用手写，但循环引用要留意</td>
+</tr>
+</tbody>
+</table>
+<p>表里最值得停一下的是第三行。<code>printf</code> 和 f-string 看起来只是语法不同，但本节强调的证据纪律完全一样：要被机器对账的数值行写成 <code>key=数值</code>，数组和说明写成 <code>key:文字</code>。换了语言，纪律不换，这也是整套书从 C 一路贯穿到 autograd 的主线。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h11">1.11 手算核对：四个数不用程序也能验</h2>
+<p>先看 <code>int_max</code>。<code>2 ** 64</code> 就是 2 自乘 64 次，十进制写开是 <code>18446744073709551616</code>。你可以在纸上用 <code>2**10=1024</code> 做分段：<code>2**60 = (2**10)**6 = 1024**6 = 1152921504606846976</code>，再乘 16 得到上数。过程繁琐但没有任何跳步，所以它是一个合格的黄金值。</p>
+<p>再看 <code>loop_odd</code>。<code>range(500000)</code> 产生从 0 到 499999 的整数，其中奇数正好一半，也就是 250000。<code>loop_ops</code> 就是循环次数 500000，两者相加是 500000 的一半与全体，比例刚好一半。<code>float_sum</code> 的手算稍微绕一点：把 <code>0.1</code> 与 <code>0.2</code> 的二进制展开写到足够多位，相加后再舍入，得到比 0.3 略大的那个数；用六位小数打印则两者都显示 <code>0.300000</code>。</p>
+<p><code>int_bytes</code> 与 <code>big_bytes</code> 不能纯手算，它们是 CPython 的实现细节，只能实测。但它们的差有道理：小整数用一个机器字存数据，<code>2**64</code> 需要两个，于是对象多出 8 字节。这个 8 与 28、36 的差正好吻合，说明我们对对象布局的理解没有跑偏。能解释实测数字的差异，比背住数字本身更有价值。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把黄金值改错一次，看闸门怎么报</span></header>
+<div class="box-b">
+<p>建议做一次受控破坏：把清单里 <code>float_sum</code> 的 <code>value</code> 从 <code>0.3</code> 改成 <code>0.5</code>，然后跑 <code>node build/run.js --unit pb01-basics</code>。你会看到 <code>numeric_value_mismatch</code>，日志里同时写出真实 stdout 的值和清单黄金值。再把正文 <code>output</code> 块里 <code>loop_odd=250000</code> 改成别的值，重跑同一条命令，会看到正文与实际对不上。做完记得改回来。这两次失败比十次通过更能说明「正文里的数受清单约束」。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h12">1.12 读图指引：四张图分别该盯什么</h2>
+<p>这一单元出现四种图元。<code>tree</code> 看带 <code>+</code> 的行，它们标出本节新增的两个源文件与清单；<code>graph</code> 逐帧比较状态差异，第 2 帧比第 1 帧多了解析器和字节码，第 3 帧换成编译路径；<code>memory</code> 看便签与对象的边界，第 3 帧里老对象还在但已经没人引用；<code>calltree</code> 看调用方向，第 3 帧多出的那条边对应 <code>tick</code> 里的 <code>nonlocal</code>。</p>
+<p>每一帧都是自包含的。渲染器不会把上一帧的节点自动带到下一帧，打印版里每一帧是独立的一张图，所以第 3 帧里照样把 <code>main()</code> 与 <code>scoped_count(5)</code> 重写一遍。节点文字也刻意压短，因为同一句话在几帧里要重复出现。把图当成分步动画的步骤看，而不是三张互不相干的插图，才能读出「变化」。</p>
+<p>最后强调一次证据的分工。正文里的解释负责回答「为什么」，清单和 stdout 负责回答「是多少」。程序自报的任何 <code>PASS</code> 都不算数；<code>exec_mode:interpreted</code> 这行也只是给人看的文字。下一单元我们会把同样的纪律搬到数组上：先看 <code>shape</code>、<code>dtype</code>、<code>strides</code>，再用循环版与向量化版对拍，残差进黄金值。工具变了，纪律没变。</p>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h13">1.13 再看一眼字节码：解释器视角的证据</h2>
+<p>前面说「源码先变成字节码」，这句话不能只停留在比喻上。本机自带 <code>dis</code> 模块，能把一个文件里的函数反汇编成人能读的字节码指令。在例子目录下执行 <code>python -m dis src/demo.py</code>，就会看到一份逐行对应的指令清单。</p>
+<section class="box box-compiler" data-box-type="compiler"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-machine" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.2 5.6h9.6v7.2H3.2z"/><path d="M5.6 3.2h4.8v2.4H5.6z"/><circle cx="6" cy="9.2" r="0.85"/><circle cx="10" cy="9.2" r="0.85"/></svg></span><span class="box-kind">编译器视角</span><span class="box-t">解释器视角：字节码到底长什么样</span></header>
+<div class="box-b">
+<ul>
+<li>命令：在 <code>examples/ch01/py_basics/</code> 下执行 <code>python -m dis src/demo.py</code>；</li>
+<li>观察：文件级代码以 <code>RESUME</code> 开头，紧接着 <code>LOAD_CONST</code> 取出文档字符串、<code>STORE_NAME</code> 把它绑到 <code>__doc__</code>；<code>import sys</code> 被拆成 <code>LOAD_SMALL_INT</code>、<code>LOAD_CONST</code>、<code>IMPORT_NAME</code>、<code>STORE_NAME</code> 四条指令；</li>
+<li>每个函数体单独成为一个代码对象，<code>MAKE_FUNCTION</code> 把它变成函数对象再 <code>STORE_NAME</code> 绑到名字上；这就是「函数也是一等对象」在字节码层面的样子；</li>
+<li>这段反汇编是解释器生成出来的中间表示，不是机器码；它证明了 1.2 节第 2 帧里「先翻译再执行」这一步真的存在。</li>
+</ul>
+</div>
+</section>
+<p>把这份清单和 C 的汇编对照，会看到一个有趣的区别：<code>LOAD_SMALL_INT 0</code> 这种指令带着「小整数常量」的语义，而机器码里只有寄存器和立即数。解释器每条指令都要查一遍对象的类型信息，才能知道该怎么解释操作数。这正是 1.7 节说的分派开销的来源——它不是某一行代码的错，而是这套执行模型的固有成本。</p>
+<p>你不需要记住任何一条字节码助记符。这里给出命令和观察结果，目的只有一个：让「解释执行」四个字落到一条可复现的命令上，而不是停留在课堂上的示意图。以后看到别人说「Python 慢」，你可以追问一句「慢在字节码分派还是慢在算法复杂度」，这个问题比笼统的快慢有用得多。</p>
+<section class="box box-syntax" data-box-type="syntax"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-braces" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.3 2.6c-1.5 0-1.7.8-1.7 1.7v2c0 .9-.4 1.5-1.4 1.7 1 .2 1.4.8 1.4 1.7v2c0 .9.2 1.7 1.7 1.7"/><path d="M9.7 2.6c1.5 0 1.7.8 1.7 1.7v2c0 .9.4 1.5 1.4 1.7-1 .2-1.4.8-1.4 1.7v2c0 .9-.2 1.7-1.7 1.7"/></svg></span><span class="box-kind">语法规则</span><span class="box-t">f-string 的取值格式只记这一处</span></header>
+<div class="box-b">
+<p>形式：<code>f&quot;标签={值:.6f}&quot;</code> 生成数值行，<code>f&quot;标签:{值!r}&quot;</code> 生成说明行。前者按六位小数格式化，适合进闸门对账；后者调用 <code>repr</code> 保留完整精度，适合给人看精确打印值。花括号内还能写表达式，例如 <code>f&quot;a_shape:[{a.shape[0]},{a.shape[1]}]&quot;</code>，会在打印时求值。整行不带等号时就是普通文字，不会被当成数值行解析。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h14">1.14 布尔、None 与整数：类型系统的三个边角</h2>
+<p>第一处边角是布尔值。Python 的 <code>bool</code> 是 <code>int</code> 的子类，<code>True</code> 和 <code>False</code> 在算术里分别表现成 1 和 0。所以 <code>True + True</code> 等于 2，<code>sum([True, False, True])</code> 等于 2。这不是 bug，而是有意的设计：布尔判断常常和计数混在一起用。写数值代码时如果你不确定某个变量到底是布尔还是整数，用 <code>type()</code> 看一眼，比猜更可靠。</p>
+<p>第二处边角是 <code>None</code>。它表示「没有值」，<code>is None</code> 是判断它的标准写法。不要用 <code>== None</code>——自定义类型可以重载相等判断，让一个并非 <code>None</code> 的对象和 <code>None</code> 比出相等。<code>None</code> 在布尔上下文里被当成假，但「被当成假」和「就是假」不是一回事：<code>0</code>、空字符串、空列表同样被当成假，它们彼此之间并不相等。把「是否为 None」和「真值真假」混为一谈，是读代码时容易看漏的一层。</p>
+<p>第三处边角是整数除法的分裂。<code>/</code> 永远返回浮点数，<code>//</code> 才做向下取整的整数除法，<code>%</code> 给出余数。三个数满足 <code>a == (a // b) * b + a % b</code>，对负数也成立，因为 <code>//</code> 是向下取整而不是向零截断。从 C 迁移过来的人最容易在这里踩空：C 里两个 <code>int</code> 相除得到 <code>int</code>，Python 里得到 <code>float</code>。写循环步长或数组索引时，这个差别会让下标变成浮点数，进而在索引时才报错。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">工程惯例：把类型意图写在变量名和注释里</span></header>
+<div class="box-b">
+<p>Python 不要求声明类型，但读者需要知道一个变量大致是什么。给变量起名 <code>n_rows</code>、<code>loss_sum</code>、<code>is_training</code>，比起名 <code>n</code>、<code>s</code>、<code>flag</code> 更能说明意图；关键函数用一行文档字符串写清输入输出，本书的例子都这么做。这是惯例而非语言规定，代价是多敲几个字符，收益是别人（包括几周后的你自己）不用把整个函数读完才能猜出类型。后面用 Tensor 时，<code>shape</code> 与 <code>dtype</code> 会把一部分类型意图显式化，但命名习惯仍然管用。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch01-01-from-c-to-python-md-h15">1.15 把这一单元接到下一单元</h2>
+<p>这一单元的主线是「同样的数值程序，Python 慢在哪、快在哪」。慢在解释器的逐条分派，快在它能把真正的大循环交给底层库。今天看到的 <code>loop_odd</code> 是一个纯 Python 循环的结果，下一单元会把同一类计算写成数组运算：循环版依旧保留， NumPy 版用 <code>@</code> 一次算完，两份结果相减得到残差。残差进黄金值，循环次数只作说明。</p>
+<p>在读下一单元之前，先带着三个问题：第一，为什么列表里的元素必须各带一个对象头，而数组可以把数据紧紧挨着放？第二，<code>shape</code> 与 <code>strides</code> 之间是什么关系，为什么同一个数组转置之后 <code>strides</code> 会变而数据没动？第三，切片得到的视图和 <code>copy()</code> 得到的副本，改哪一个会动到原数组？这三个问题都能在本节的便签模型和对象开销里找到根：把数据从「一堆对象」变成「一块连续内存」，再让名字以不同方式指向它。</p>
+<p>证据纪律也会一起带过去。下一单元的输出里，数组照样用冒号打印成 <code>v:[...]</code>，残差、求和、元素个数这些可复现的量写成 <code>key=value</code> 并进清单；毫秒数仍然不进黄金值。种子固定、真跑取数、黄金值对账这三件事，从 C 分册一路延续到 autograd，只是被对账的对象从点积换成了梯度。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>Python 每次运行都要先把源码变成字节码再交给虚拟机执行，C 的翻译工作大部分在编译期完成；</li>
+<li>变量是贴到对象上的便签，类型属于对象；可变对象被多个名字引用时，改对象大家都看见；</li>
+<li><code>int</code> 任意精度不会回绕，<code>float</code> 仍是 IEEE 754，<code>0.1 + 0.2</code> 的精确打印值不是 <code>0.3</code>；</li>
+<li>缩进决定作用域，读变量向外找、写变量默认在当前层，<code>nonlocal</code> 用来跨层修改；</li>
+<li>数值行走 <code>key=value</code>，数组与说明行走 <code>key:文字</code>，黄金值和容差只写在清单。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li><code>a = 3; b = a; b = 4</code> 之后，<code>a</code> 是多少？请分别用「便签」和「对象」两个词解释这两次赋值。</li>
+<li><code>0.1 + 0.2 == 0.3</code> 为什么是假？如果程序必须用浮点，正确的相等判断应该怎么写？</li>
+<li><code>scoped_count</code> 里的 <code>tick</code> 如果不写 <code>nonlocal total</code>，会发生什么？为什么读变量时不需要类似的声明？</li>
+<li>程序里 <code>float_raw:0.30000000000000004</code> 这行为什么用冒号而不是等号？如果改成等号，闸门会报什么码？</li>
+<li>为什么本单元用 <code>loop_ops=500000</code> 这种固定计数，而不把 <code>loop_ms</code> 写进清单黄金值？</li>
+<li><code>from demo import big_int</code> 能找到模块，依赖的是哪一条路径规则？把入口挪到别的目录后还能这样写吗？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>a</code> 仍然是 3。第一次赋值把 <code>a</code> 和 <code>b</code> 两张便签贴到同一个整数 3 上；第二次赋值只把 <code>b</code> 这张便签改贴到新造的 4 上，并没有改动对象 3，所以 <code>a</code> 的指向不变。这正是「便签」与「对象」分离的好处：重新绑定不会误伤别人。</li>
+<li>因为两个字面量各自被舍入成最接近的二进制近似值，相加后再次舍入，结果与字面量 0.3 的近似值不同。正确写法是判断绝对差是否小于容差，例如 <code>abs((0.1 + 0.2) - 0.3) &lt; 1e-9</code>；闸门用的是同样的思路，只是把容差写在清单的 <code>atol</code> 里。</li>
+<li>不写 <code>nonlocal</code> 时，<code>total += 1</code> 里的 <code>total</code> 会被当成 <code>tick</code> 的局部变量，赋值前读取它就会抛 <code>UnboundLocalError</code>。读变量不需要声明，是因为 Python 的作用域查找规则会沿着外层一路向外找名字；而赋值规则默认在当前层新建绑定，两条规则不对称，<code>nonlocal</code> 就是用来显式改写这条规则的。</li>
+<li>因为那行是给人看的精确打印值，不是要被数值对账的项；冒号让它成为普通文字行，逐字比较即可。若写成 <code>float_raw=0.30000000000000004</code>，等号左边会被当成数值行的键，而右侧虽然也是合法十进制数，这行就会被当成第二个数值项参与对账；若右侧换成带方括号的内容，则会报 <code>numeric_value_invalid</code>。本单元统一把说明与数组写成冒号行，就是为了避免这类歧义。</li>
+<li>墙钟时间受机器负载、缓存和调度影响，同一份代码两次运行的毫秒数可能差出百分之几十；把它写成黄金值，闸门会频繁误报，正文里的数也无法复现。固定计数精确、可复现，又足以说明解释器每层分派的工作量，所以更适合当证据。要谈性能时另做多次测量取中位数，那份数字不进闸门。</li>
+<li>依赖的是「入口脚本所在目录自动进入 <code>sys.path[0]</code>」这条规则，所以同目录的 <code>demo.py</code> 能被直接找到。把入口挪到别的目录后，除非把模块也一起挪过去，或者显式把模块所在目录加进 <code>sys.path</code>，否则 <code>import</code> 会失败；更稳妥的做法是保持入口与模块同目录，并且始终在例子目录里执行 <code>python src/main.py</code>。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

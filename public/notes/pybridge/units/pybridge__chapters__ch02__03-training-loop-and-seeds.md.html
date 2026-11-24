@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>训练循环与固定种子复现：把 autograd 接上数据流</title>
+<meta name="description" content="零基础 · 第 6 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-pybridge-chapters-ch02-03-training-loop-and-seed { @top-right { content: "训练循环与固定种子复现：把 autograd 接上数据流"; } }
+#content { page: p-u-pybridge-chapters-ch02-03-training-loop-and-seed; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/pybridge.html">《pybridge》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">训练循环与固定种子复现：把 autograd 接上数据流</h1><p class="doc-sub">零基础 · 第 6 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/pybridge/chapters/ch02/03-training-loop-and-seeds.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h1">4.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h2">4.2 三种种子一起固定</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h3">4.2.1 三条随机流的边界</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h4">4.3 数据集、DataLoader 与小批量</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h5">4.3.1 小批量的噪声既是麻烦也是资源</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h6">4.4 训练循环四步：取数、前向、反向、更新</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h7">4.4.1 opt.step() 替你做了哪一行</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h8">4.5 zero_grad 为什么必须</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h9">4.5.1 累加不是缺陷，是一种接口</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h10">4.6 eval 模式：本例里没差别，但必须写</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h11">4.7 真跑：12 行轨迹与 train 闸门</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h12">4.7.1 阈值为什么按真值取，而不是取整</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h13">4.8 种子复现：为什么要跑三次</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h14">4.8.1 为什么对照种子是必需的</a></li><li class="toc-l2"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h15">4.9 图元怎么读，以及这一节的新增</a></li><li class="toc-l3"><a href="#pybridge-chapters-ch02-03-training-loop-and-seeds-md-h16">4.9.1 训练前的六项检查</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清 Dataset、DataLoader、小批量三者各自负责什么，以及 <code>shuffle=True</code> 的随机来自哪条随机流；</li>
+<li>背出训练循环的四步，并解释为什么 <code>zero_grad()</code> 漏掉会让梯度悄悄累加；</li>
+<li>解释为什么打印的是整套数据上的 loss，而不是当前小批量的 loss；</li>
+<li>说明 <code>model.eval()</code> 与 <code>model.train()</code> 在本例里为何数值上没差别、却仍然必须写；</li>
+<li>读懂 train 闸门的三次运行：同种子复现、对照种子必须改变输出、轨迹必须真的下降。</li>
+</ul>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h1">4.1 先看工程长什么样</h2>
+<p>前两个单元都是「跑一次前向、求一次梯度」。真正的训练不一样：同一组运算要重复几十次、几百次、几百万次，每次喂进去的数据可能还不一样。这一节把 autograd 接上数据流，凑出一个完整的训练循环。</p>
+<p>工程上多了一个 <code>loop.py</code>：三种种子的固定、数据集与小批量的构造、网络类、整套数据上的 loss 都在里面。<code>main.py</code> 只剩入口与四步循环。种子仍然不写死在源码里，而是由闸门通过环境变量 <code>PY_SEED</code> 注入——写在源码里叫硬编码，写在清单里叫实验条件，后者才能被对照实验改变。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>把训练想成一条流水线。最左边是数据集，像一摞打好标签的卡片；DataLoader 负责每次抽几张递给工人；工人是网络，拿到卡片算出预测；预测和答案一比得到误差；误差沿原路倒着传回去，告诉每个旋钮该往哪拧一点。拧完一轮，再抽下一摞卡片。</p>
+<p>四个动作——取数、前向、反向、更新——构成训练循环的四步。第四步之前还有个不起眼的清账动作：把上一轮留下的梯度擦干净。忘掉它，工人就会拿着两轮的账一起拧，步子越迈越大。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-0c4fa0ed">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：训练循环、种子与清单</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：训练循环、种子与清单：逐步演示">
+<input class="vs-radio" type="radio" name="vz-0c4fa0ed" id="vz-0c4fa0ed-1" checked>
+<input class="vs-radio" type="radio" name="vz-0c4fa0ed" id="vz-0c4fa0ed-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-0c4fa0ed-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-0c4fa0ed-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/pybridge/examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_twolayer/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/net.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb05-twolayer.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/pybridge/examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_twolayer/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/net.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb05-twolayer.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_train_loop/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/loop.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb06-trainloop.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>上一节留下的 torch_twolayer</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/pybridge/examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_twolayer/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/net.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb05-twolayer.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元新增的训练循环例子</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/pybridge/examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_twolayer/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/net.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">│  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb05-twolayer.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">torch_train_loop/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/loop.py</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">pb06-trainloop.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里带 <code>+</code> 的三行是这一节的全部新增。<code>loop.py</code> 管「实验条件是什么」——种子、数据、网络、评估用的 loss；<code>main.py</code> 管「实验流程怎么走」——读种子、循环、打印；<code>pb06-trainloop.json</code> 则是实验记录：用哪个环境变量、主种子和对照种子各是多少、怎样的轨迹才算收敛。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么把种子与数据放进同一个模块</span></header>
+<div class="box-b">
+<p>种子决定网络初值与 DataLoader 的打乱顺序，数据决定这条轨迹的形状——两者共同决定你看到的 12 行 loss。把它们放在 <code>loop.py</code> 里，读者读一个文件就知道「这个实验从哪里开始」；<code>main.py</code> 只读环境变量、调循环、打数字。代价是职责略重，但换来的是「改实验条件」和「改训练流程」落在两个文件里，互不干扰。真要做超参数搜索时，你只动 <code>main.py</code> 的学习率常量；要换数据集时，只动 <code>loop.py</code> 的 <code>build_loader</code>。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h2">4.2 三种种子一起固定</h2>
+<p>随机来源不止一个。本例里至少有三处：<code>random</code> 模块、<code>numpy</code> 的随机功能，以及 PyTorch 的网络初始化与 DataLoader 打乱。只固定其中两个，剩下的那个照样能让轨迹漂移。pb03 立下的纪律在这里第一次真正派上用场：</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch02/torch_train_loop/src/loop.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">三种随机源一起固定，缺一条就不可复现</span><span class="cb-file">examples/ch02/torch_train_loop/src/loop.py</span><span class="cb-lines">第 10–14 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="10" data-to="14"><span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">def</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">set_all_seeds</span><span class="tk" style="color:#24292E">(seed):</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#032F62">"""random / numpy / torch 三条随机流一起固定。"""</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    random.seed(seed)</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    np.random.seed(seed)</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    torch.manual_seed(seed)</span></span></span></pre></div></figure>
+<p>这五行看起来平淡，却是整个 train 模式成立的前提。闸门会用同一个种子跑两次程序，要求 stdout <strong>逐值一致</strong>；只要有一条随机流漏掉，第二次就会给出不同的 loss，报 <code>train_nondeterministic</code>。</p>
+<p>为什么 <code>random</code> 和 <code>numpy</code> 也要固定，明明本例好像只用 torch？因为真实项目里，数据增强可能用 <code>random</code> 决定翻转、采样可能用 <code>numpy</code> 决定索引。现在固定它们是防御性习惯：以后往例子里加一行 <code>np.random.choice</code>，轨迹不会突然变得不可复现。代价是三行代码，换来的是「加代码不破坏可复现性」。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">只固定 torch.manual_seed 还不够</span></header>
+<div class="box-b">
+<p>有人觉得「反正网络和数据都是 torch 生成的，固定一个就够了」。本例确实暂时是这样——但 <code>seed_has_no_effect</code> 这条检查会教育你。如果你只在 <code>main.py</code> 里写 <code>torch.manual_seed(seed)</code>，而把 <code>random</code> 和 <code>numpy</code> 留着不管，程序在当前代码下可能照样通过；可一旦以后有人用了 <code>np.random</code>，对照种子就可能出现「换了种子结果没变」或者「同种子两次不同」的怪现象。这类 bug 的特征是「当时没错，改完才错」，所以三行一起写比事后补要省心得多。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h3">4.2.1 三条随机流的边界</h3>
+<p>理解种子，关键要明白「三条流各管一段」。<code>random</code> 是 Python 标准库的随机源，常被数据增强、采样策略拿来决定「翻不翻转」「抽哪个索引」；<code>numpy</code> 的随机模块在科学计算代码里无处不在，从打乱数组到初始化参数都可能用到；PyTorch 自己又维护一条全局流，负责张量的随机初始化、DataLoader 的打乱、Dropout 的掩码等等。</p>
+<p>这三条流彼此不知道对方的存在。你在 Python 里连续调用 <code>random.seed(1)</code>、<code>np.random.seed(1)</code>、<code>torch.manual_seed(1)</code>，得到的是三套完全独立的序列，第一条流吐出的第一个数和另外两条毫无关系。所以「固定种子」不是一个动作，而是三个动作。</p>
+<p>本例还有第四条流：<code>torch.Generator()</code> 造出来的专用生成器。它有自己独立的状态，专门用来生成数据。为什么不再多固定一次？因为它不随实验种子变——它的 2024 是写死在代码里的，属于「实验条件的一部分」而不是「随机来源」。换句话说，它根本不是随机的，只是用了随机算法来造一组固定的假数据。把它和三条需要固定的流混为一谈，是初学时常见的混淆。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">种子是实验条件，不是超参数</span></header>
+<div class="box-b">
+<p>种子写在清单里而不是源码里，这件事的意义值得多说一句。超参数（学习率、批大小）是你要调到最好的东西；种子不是——它只是让实验可重复的编号。你从不「优化」种子，但你必须记录它。train 闸门把种子通过环境变量注入，等于把它从代码里拎出来变成表格里的一列：主实验 12345、对照实验 67890，任何人拿到清单都能复现这两条轨迹。若把种子写死在源码里，读者看到的数字就没有「这是在什么条件下得到的」这个信息。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h4">4.3 数据集、DataLoader 与小批量</h2>
+<p>训练数据长什么样？本例造一个最小的回归问题：16 个二维输入 <code>X</code>，真实权重 <code>[1.5,-0.5]</code>，目标 <code>y = X·w_true + 0.2</code>。没有噪声，所以理论上 loss 可以降到零——这让我们能专心看收敛过程，不被数据本身的噪音干扰。</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch02/torch_train_loop/src/loop.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">固定数据与 DataLoader：batch_size 为八，shuffle 打开</span><span class="cb-file">examples/ch02/torch_train_loop/src/loop.py</span><span class="cb-lines">第 17–24 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="17" data-to="24"><span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">def</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">build_loader</span><span class="tk" style="color:#24292E">():</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#032F62">"""固定数据，随机只来自专门的生成器，不污染全局随机流。"""</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    generator </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> torch.Generator().manual_seed(</span><span class="tk" style="color:#005CC5">2024</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    X </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> torch.randn(</span><span class="tk" style="color:#005CC5">16</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#E36209">generator</span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E">generator, </span><span class="tk" style="color:#E36209">dtype</span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E">torch.float64)</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    w_true </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> torch.tensor([</span><span class="tk" style="color:#005CC5">1.5</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#005CC5">0.5</span><span class="tk" style="color:#24292E">], </span><span class="tk" style="color:#E36209">dtype</span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E">torch.float64)</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    y </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> X </span><span class="tk" style="color:#D73A49">@</span><span class="tk" style="color:#24292E"> w_true </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.2</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    dataset </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> TensorDataset(X, y)</span></span></span>
+<span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> DataLoader(dataset, </span><span class="tk" style="color:#E36209">batch_size</span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#005CC5">8</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#E36209">shuffle</span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#005CC5">True</span><span class="tk" style="color:#24292E">), X, y</span></span></span></pre></div></figure>
+<p>这里有个容易被忽略的设计：<strong>数据由一个专用生成器产生，种子固定为 2024</strong>。为什么要另起一个生成器，而不是直接用 <code>torch.randn(16,2)</code>？因为后者会消耗全局随机流，把网络初始化的序列往后推。我们把数据和随机初始化解耦——数据恒定，只有网络初值和打乱顺序随 <code>PY_SEED</code> 变。这样对照种子改变的那部分就是纯粹的「训练起点不同」，解释起来干净。</p>
+<p><code>generator</code> 的 2024 是固定的，不随 <code>PY_SEED</code> 变。这不是疏漏，而是有意为之：如果数据也随主种子变，你就分不清轨迹变化来自数据还是来自初始化。固定数据是可控实验的基本功。</p>
+<p><code>DataLoader</code> 做两件事：<code>batch_size=8</code> 把 16 条样本切成两摞；<code>shuffle=True</code> 每轮打乱顺序。打乱用的是<strong>全局</strong> torch 随机流（没有传 <code>generator</code> 参数），因此受 <code>torch.manual_seed</code> 控制——同种子两次的打乱顺序相同，对照种子则不同。</p>
+<figure class="viz" data-kind="memory" data-frames="3" data-viz-id="vz-6ae48c65">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 十六张卡片怎样被切成两摞</figcaption>
+<div class="viz-screen" role="group" aria-label="十六张卡片怎样被切成两摞：逐步演示">
+<input class="vs-radio" type="radio" name="vz-6ae48c65" id="vz-6ae48c65-1" checked>
+<input class="vs-radio" type="radio" name="vz-6ae48c65" id="vz-6ae48c65-2">
+<input class="vs-radio" type="radio" name="vz-6ae48c65" id="vz-6ae48c65-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-6ae48c65-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-6ae48c65-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-6ae48c65-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dataset ：十六条样本，输入输出成对</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">X ：十六行二列的矩阵</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">y ：长度十六的目标</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X</span><span class="ve-lbl">取输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">y</span><span class="ve-lbl">取目标</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">dataset ：十六条样本，输入输出成对</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">batch1 ：八条，顺序来自全局随机流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">batch2 ：另外八条</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch1</span><span class="ve-lbl">切分</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch2</span><span class="ve-lbl">切分</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch1 ：第一批数据</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch2 ：第二批数据</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">step ：一次前向加一次反向</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">batch1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">本步的数据</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">batch2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">下一步的数据</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>数据集里有十六个样本</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dataset ：十六条样本，输入输出成对</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">X ：十六行二列的矩阵</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">y ：长度十六的目标</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X</span><span class="ve-lbl">取输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">y</span><span class="ve-lbl">取目标</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>DataLoader 打乱后切两批</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">dataset ：十六条样本，输入输出成对</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">batch1 ：八条，顺序来自全局随机流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">batch2 ：另外八条</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch1</span><span class="ve-lbl">切分</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dataset</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch2</span><span class="ve-lbl">切分</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>每步训练只用一个小批量</p><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch1 ：第一批数据</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch2 ：第二批数据</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">step ：一次前向加一次反向</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">batch1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">本步的数据</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">batch2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">下一步的数据</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧强调两批加起来恰好是 16 条、没有重叠——DataLoader 的切分是划分，不是抽样。第 3 帧则点出小批量的本质：每步只看一半数据，梯度是对「真实梯度」的一个带噪声的估计。噪声既是缺点（loss 轨迹抖动），也是优点（噪声能把参数从鞍点附近踢走，这一点在概率优化分册讲过）。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么 batch_size 选八而不是一或十六</span></header>
+<div class="box-b">
+<p>取 1 就是纯随机梯度下降：每步只看一条样本，噪声最大，轨迹抖得厉害。取 16 就是全批量：每步用全部数据，梯度精确、轨迹平滑，但每次更新的计算量翻倍。取 8 是折中——两批各占一半，既保留了噪声的逃逸能力，又不至于抖到看不出趋势。这个数字是经验选择，不是定律；你改成 4 或 16，轨迹会变，但闸门只要求前 8 步非增，一样能过。代价是你要重新写黄金值，因为轨迹数字全变了。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h5">4.3.1 小批量的噪声既是麻烦也是资源</h3>
+<p>全批量梯度下降每步都朝「真正的最陡下降方向」走，轨迹平滑得像教科书插图。小批量却只看一部分样本，估计出来的梯度带着噪声：这一批碰巧把某个方向放大，下一批又把它压小。本例每步走两批，噪声已经小了很多，但如果你把批大小改成 1，就会看到 loss 曲线上下跳动。</p>
+<p>噪声不是纯粹的坏事。概率优化分册讲过，高维非凹问题里的随机驻点大多是鞍点；纯梯度下降正好落在鞍点上时梯度为零，会永远停在那里，而小批量的噪声能不断扰动参数，把它从不稳定方向推走。批量越小，噪声越大，逃逸能力越强，代价是收敛后参数会持续抖动。学习率衰减的作用之一就是前期靠噪声逃逸、后期压低噪声稳定下来。</p>
+<p>这也解释了一个常见现象：训练 loss 曲线抖动时，有经验的工程师不会立刻调学习率，而是先画出移动平均。移动平均滤掉的是采样噪声，留下的是趋势。如果趋势仍在下降，模型就好好的；只有趋势掉头向上才需要干预。train 模式之所以能对本例要求前 8 步逐点非增，是因为这里用的是确定性数据、固定打乱顺序、并且打印的是全量 loss——换成真实随机训练，这样的逐点判定就太苛刻了。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把 loss 抖动一律当成发散</span></header>
+<div class="box-b">
+<p>你会看到什么：loss 从第 5 步到第 6 步突然升高一点点。你会怎么误判：学习率太大，赶紧减半。真相可能只是这一批样本碰巧更难，下一批就降回来了。判据是看窗口而不是单点——取最近若干步的移动平均，或者像闸门那样看一段窗口的整体趋势。反过来也要警惕另一种错：loss 连续下降但参数范数在爆炸，只看 loss 会把发散前夜误判成健康收敛。两种误判都源于「只看一个标量」，所以真实训练里要同时监控 loss、梯度范数和参数范数。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h6">4.4 训练循环四步：取数、前向、反向、更新</h2>
+<p>核心代码只有十行，但每一行都有明确职责：</p>
+<figure class="codeblock" data-lang="python" data-file="examples/ch02/torch_train_loop/src/main.py"><figcaption class="cb-head"><span class="cb-lang">python</span><span class="cb-title">四步循环：清账、前向、反向、更新，外加一次评估</span><span class="cb-file">examples/ch02/torch_train_loop/src/main.py</span><span class="cb-lines">第 20–29 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="20" data-to="29"><span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> _ </span><span class="tk" style="color:#D73A49">in</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">range</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">STEPS</span><span class="tk" style="color:#24292E">):</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> xb, yb </span><span class="tk" style="color:#D73A49">in</span><span class="tk" style="color:#24292E"> loader:</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            opt.zero_grad()</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            pred </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> model(xb)</span></span></span>
+<span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            batch_loss </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.5</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> torch.mean((pred </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> yb) </span><span class="tk" style="color:#D73A49">**</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">)</span></span></span>
+<span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            batch_loss.backward()</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            opt.step()</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        model.eval()</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#005CC5">print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"loss=</span><span class="tk" style="color:#005CC5">%.6f</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">%</span><span class="tk" style="color:#24292E"> full_loss(model, X, y))</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        model.train()</span></span></span></pre></div></figure>
+<p>四步依次是：</p>
+<ul>
+<li><code>opt.zero_grad()</code>：把上一轮留下的 <code>.grad</code> 清零；</li>
+<li><code>pred = model(xb)</code>：前向，得到这一批的预测；</li>
+<li><code>batch_loss.backward()</code>：反向，把梯度填进各参数的 <code>.grad</code>；</li>
+<li><code>opt.step()</code>：按 <code>w ← w - lr·g</code> 更新参数。</li>
+</ul>
+<p>注意循环结构：外层走 12 步，内层把 DataLoader 的两批各走一遍。也就是说每一步训练其实做了两次参数更新，12 步共 24 次。每次更新前都清零——这是关键。</p>
+<p>还有一处细节：<code>batch_loss</code> 是<strong>当前小批量</strong>上的损失，用来反向；但打印的是 <code>full_loss(model, X, y)</code>，即<strong>整套数据</strong>上的损失。为什么分开？因为小批量 loss 每步喂的数据不同，数值天然上下跳；把它打印出来，轨迹会抖得看不出趋势，前 8 步非增的判定根本过不了。整套数据的 loss 是同一个函数在不同参数点的值，才是「模型有没有变好」的度量。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-27338789">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 数据怎样流过四步循环</figcaption>
+<div class="viz-screen" role="group" aria-label="数据怎样流过四步循环：逐步演示">
+<input class="vs-radio" type="radio" name="vz-27338789" id="vz-27338789-1" checked>
+<input class="vs-radio" type="radio" name="vz-27338789" id="vz-27338789-2">
+<input class="vs-radio" type="radio" name="vz-27338789" id="vz-27338789-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-27338789-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-27338789-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-27338789-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">loader ：十六切八，两批轮流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">xb ：本批输入，八行二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">yb ：本批目标，长度八</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">loader</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">xb</span><span class="ve-lbl">取输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">loader</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">yb</span><span class="ve-lbl">取目标</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">xb ：本批输入，八行二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">yb ：本批目标，长度八</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pred ：模型输出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch_loss ：本批平方损失</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">xb</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pred</span><span class="ve-lbl">线性层前向</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">pred</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch_loss</span><span class="ve-lbl">与目标比较</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">yb</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch_loss</span><span class="ve-lbl">提供目标</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">loader ：十六切八，两批轮流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">model ：参数已更新</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">full_loss ：十六条的平方损失</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">batch_loss</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">model</span><span class="ve-lbl">反向加更新</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">model</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">full_loss</span><span class="ve-lbl">整套数据重算</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>从 DataLoader 取一批</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">loader ：十六切八，两批轮流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">xb ：本批输入，八行二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">yb ：本批目标，长度八</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">loader</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">xb</span><span class="ve-lbl">取输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">loader</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">yb</span><span class="ve-lbl">取目标</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>前向加反向在这批上发生</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">xb ：本批输入，八行二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">yb ：本批目标，长度八</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pred ：模型输出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">batch_loss ：本批平方损失</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">xb</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pred</span><span class="ve-lbl">线性层前向</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">pred</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch_loss</span><span class="ve-lbl">与目标比较</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">yb</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">batch_loss</span><span class="ve-lbl">提供目标</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>更新参数后在全量数据上评估</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">loader ：十六切八，两批轮流</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">model ：参数已更新</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">full_loss ：十六条的平方损失</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">batch_loss</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">model</span><span class="ve-lbl">反向加更新</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">model</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">full_loss</span><span class="ve-lbl">整套数据重算</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 3 帧里那条 <code>model -&gt; full_loss</code> 的边不带梯度——<code>full_loss</code> 内部包了 <code>torch.no_grad()</code>，只是拿当前参数算一个数给我们看，不参与反向。这也是为什么它可以用整套数据而不担心内存：不建图，就不需要为 16 条样本保存中间量。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把小批量 loss 当成全量 loss 打印</span></header>
+<div class="box-b">
+<p>如果你把 <code>print</code> 改成 <code>print(&quot;loss=%.6f&quot; % batch_loss.item())</code>，打出来的是每批的 8 条样本上的损失。由于两批交替、顺序还被打乱，相邻两步看的样本不同，loss 会上下跳动——不是模型变差了，是尺子换了。你会怎么误判？以为学习率太大导致震荡，于是把它调小，结果收敛变慢。真相是：评估必须在固定的数据集上做，否则你比较的不是同一个量。train 闸门的 <code>monotone_window=8</code> 也正是靠这一点才判得准。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h7">4.4.1 opt.step() 替你做了哪一行</h3>
+<p>pb05 里我们亲手用过 SGD 更新；这一节把它换成了 <code>opt.step()</code>。两者做的事情完全一样：对每个参数执行 <code>w ← w - lr·g</code>。差别只在「谁拿着参数列表」。手写时你要自己写 <code>for p in params: p.data -= lr * p.grad</code>；现在 <code>opt</code> 在创建时就收下了 <code>model.parameters()</code>，之后每步只需喊一声。</p>
+<p>优化器并不神秘。本例的 <code>torch.optim.SGD</code> 内部只存了学习率和参数引用，<code>step()</code> 就是遍历参数、做一次减法。它的价值在于统一接口：以后换成 Adam，<code>step()</code> 这行不变，只是内部改成按动量和二阶矩缩放的更新式。这就是框架收走的样板代码——你不必为每种优化器重写一遍循环。</p>
+<p>有一点必须注意：<code>step()</code> 读的是 <code>.grad</code>，不会自己重新计算梯度。所以四步的顺序不能乱——必须先 <code>backward()</code> 填上梯度，再 <code>step()</code> 用它。如果把两者调换，<code>step()</code> 会读到上一步的旧梯度（或第一次的 <code>None</code> 直接报错），参数按过时的方向更新，loss 轨迹变得莫名其妙。这个错误不会触发异常，只会给出一条看起来「像在收敛」但其实不对的曲线，属于典型的静默错误。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">学习率零点一从哪里来</span></header>
+<div class="box-b">
+<p><code>LR=0.1</code> 是试出来的，不是推出来的。本例的目标是二次型，理论上可以按曲率算出一个安全上界；但真实网络里曲率未知，工程上就是从保守值开始试。试的办法很朴素：跑一次看 12 行 loss，若平滑下降就保留，若反弹就减半，若下降太慢就加倍。本例取 0.1 时首行 <code>0.746848</code>、末行 <code>0.008668</code>，前 8 步严格递减，是个合适的值。改成 0.5 时前几步就会越过最低点反弹，闸门报 <code>train_loss_not_decreasing</code>。阈值不会替你选学习率，它只负责拦住不合适的选择。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h8">4.5 zero_grad 为什么必须</h2>
+<p><code>backward()</code> 把梯度<strong>加进</strong> <code>.grad</code>，而不是覆盖。pb05 已经讲过这个性质，但在只反向一次的例子里它不造成后果；到了循环里就成了头号陷阱。</p>
+<p>假设忘了 <code>zero_grad()</code>：第一步算出梯度 <code>g₁</code>，更新用 <code>g₁</code>；第二步算出 <code>g₂</code>，但 <code>.grad</code> 里已经是 <code>g₁+g₂</code>，更新步长用的是两者之和；第三步变成 <code>g₁+g₂+g₃</code>……梯度越积越大，参数很快被甩出去，loss 不降反升。闸门会报 <code>train_loss_not_decreasing</code>，因为前 8 步的非增判定被破坏。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">亲手制造一次「忘了清零」</span></header>
+<div class="box-b">
+<p>把 <code>main.py</code> 里的 <code>opt.zero_grad()</code> 那一行注释掉，跑 <code>PY_SEED=12345 python src/main.py</code>。你会看到 loss 不再平滑下降，前几步就可能反弹。再跑 <code>node build/run.js --unit pb06-trainloop</code>，闸门报 <code>train_loss_not_decreasing</code>。你会怎么误判？以为是学习率太大。真相是梯度累加让实际步长逐轮放大。做完把注释去掉，否则清单里的黄金值对不上。这个实验值得真的做一遍——它是理解「累加而非覆盖」最快的方式。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么框架不自动清零</span></header>
+<div class="box-b">
+<p>如果 <code>backward()</code> 自己先清零，那么「把主损失和正则损失的梯度加起来」就做不到——你只能先把两个损失合成一个标量再一次反向。有些场景确实没法合成，比如梯度来自不同分支的采样估计。框架把这个决定权交给你，代价是每轮都要写一行。习惯之后你会发现这行代码反而是一种提醒：它在每次更新前强制你意识到「现在的梯度从哪来」。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h9">4.5.1 累加不是缺陷，是一种接口</h3>
+<p>把「梯度累加」单纯当成坑，会错过它有用的那一面。考虑一个常见的训练技巧：梯度累积。显存只够放 2 条样本，但你希望等效批大小是 8。做法是连续跑 4 个小批，每批都做前向和反向但<strong>不清零</strong>，让梯度累加四次；等攒够了再调一次 <code>step()</code>，然后清零。数学上，四个梯度的和除以 4 就等于大批量的平均梯度。</p>
+<p>这个技巧能成立，正是因为 <code>backward()</code> 设计成累加而非覆盖。如果框架自作主张在每次反向前清零，你就没法实现它。本例没用到梯度累积，但把 <code>zero_grad()</code> 写在明确的位置，等于给这条路留了口子：你想累积时把这一行挪到循环外面即可。</p>
+<p>代价是学习者必须理解「清零是自己的责任」。框架选择把复杂性暴露出来，而不是藏起来——这和它坚持「标量才能 backward」「叶节点才能读 grad」是同一种哲学。本书从 pb04 起就反复讲这些边界，正是为了让你在需要变形时知道哪些动作是安全的。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">清零的位置比清零本身更重要</span></header>
+<div class="box-b">
+<p>写 <code>opt.zero_grad()</code> 不难，难的是放在哪。本例放在内层循环开头——每处理一批就清一次，这是常规做法。若你想做梯度累积，就得放到外层、攒够若干批再清。放错位置的症状很隐蔽：训练照跑、loss 照降，只是等效批大小和你想的不一样，调出来的学习率不再合适。判断办法是数一数每个 <code>step()</code> 之间调用了几次 <code>backward()</code>——常规训练应该是 1 次，梯度累积才是多次。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h10">4.6 eval 模式：本例里没差别，但必须写</h2>
+<p>每步训练结束后，代码先 <code>model.eval()</code>，算完全量 loss 再 <code>model.train()</code>。<code>eval()</code> 把模块切到评估模式：带 Dropout 的层会关闭随机丢弃，BatchNorm 会用累积统计量而不是当前批次的统计量。本例的 <code>TinyReg</code> 只有一个 <code>nn.Linear</code>，既没有 Dropout 也没有 BatchNorm，所以切换<strong>在数值上没有任何差别</strong>。</p>
+<p>那为什么还要写？因为这是习惯。真实模型几乎一定有对训练/评估敏感的层；如果你在验证时忘了切到 <code>eval()</code>，测出来的 loss 会带随机性，看起来像模型不稳定，实际只是 Dropout 还在开。<code>eval()</code> 与 <code>train()</code> 成对出现，是让别人一眼看出「这里在评估」的信号。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">在 eval 模式下反向更新参数</span></header>
+<div class="box-b">
+<p>有人为了「评估时不建图」，把整个验证循环放进 <code>model.eval()</code> 之后就再没切回来，接着又开始训练。结果训练时也处于评估模式，Dropout 永远不工作，模型悄悄失去了正则化。症状很隐蔽：训练 loss 漂亮地下降，验证 loss 却卡住不动。修法就是本例的写法——评估算完立刻 <code>model.train()</code> 切回。本例数值上看不出差别，恰恰是最危险的地方：你没法靠数字发现漏了切回，只能靠成对书写的纪律。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h11">4.7 真跑：12 行轨迹与 train 闸门</h2>
+<p>清单没有写死种子到源码，而是让闸门通过 <code>PY_SEED</code> 注入。主种子 12345 真跑得到的 stdout：</p>
+<figure class="term term-output" data-id="pb06-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">pb06-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">loss=0.746848</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss=0.468441</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">loss=0.297224</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">loss=0.191241</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">loss=0.124342</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">loss=0.082147</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">loss=0.054538</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">loss=0.036969</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">loss=0.025381</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">loss=0.017567</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">loss=0.012277</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">loss=0.008668</span></span></pre></figure>
+<p>12 行从 <code>0.746848</code> 一路降到 <code>0.008668</code>，首尾差 <code>0.738180</code>，前 8 步严格递减。这些数不是手填的，是闸门按清单注入种子后真跑、由 stdout 抓回来的。注意程序<strong>只打印 loss</strong>，不打印种子——理由下一节讲。</p>
+<p>清单 <code>pb06-trainloop.json</code> 用 <code>mode=train</code>，<code>seed_env</code> 写 <code>PY_SEED</code>，<code>seed=12345</code>，<code>seed_contrast=67890</code>。<code>expect.train</code> 写：<code>loss_key=loss</code>、<code>min_points=12</code>、<code>first_min=0.7</code>、<code>last_max=0.01</code>、<code>decline_min=0.7</code>、<code>monotone_window=8</code>、<code>slack=1e-4</code>。四个阈值全部按真值取：首行 <code>0.746848</code> 高于 <code>0.7</code>，末行 <code>0.008668</code> 低于 <code>0.01</code>，首尾差 <code>0.738180</code> 大于 <code>0.7</code>，前 8 步非增。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">四个阈值各自防什么</span></header>
+<div class="box-b">
+<p><code>min_points=12</code> 防「程序只跑了三步就说收敛」；<code>first_min=0.7</code> 防「起点已经在最优附近，下降演示没有意义」；<code>last_max=0.01</code> 防「每步只走微不足道的一小步」；<code>decline_min=0.7</code> 防「起点低终点也低的平凡通过」；<code>monotone_window=8</code> 加 <code>slack=1e-4</code> 防「前几步来回震荡却自称收敛」。这五条彼此独立，少一条都能构造出骗过闸门的写法。阈值来自真跑，不能为了让绿字好看反过来放宽。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h12">4.7.1 阈值为什么按真值取，而不是取整</h3>
+<p><code>first_min=0.7</code> 而首行实际是 <code>0.746848</code>，<code>last_max=0.01</code> 而末行是 <code>0.008668</code>——为什么不干脆写成 <code>0.75</code> 和 <code>0.005</code> 这种整齐的数？因为阈值不是「你想要什么」，而是「真跑给出了什么，留多少余量」。</p>
+<p>留余量的原则是：既要容得下合理波动，又不能宽到失去判别力。首行留约 0.047 的余量是因为不同机器上浮点末位可能差一点；末行留约 0.0013 的余量同理。<code>decline_min=0.7</code> 对实际降幅 <code>0.738180</code> 留了约 5% 的余量——若把学习率改小导致降幅只有 <code>0.6</code>，闸门就会拦下，这正是我们想要的。</p>
+<p>反过来的错误做法更常见：为了让失败的实验变绿，把 <code>last_max</code> 从 <code>0.01</code> 放宽到 <code>1.0</code>。闸门确实过了，但那条「必须真的收敛」的纪律被自己拆掉了。本套书所有数值实验的共同底线就是这一句：黄金值和阈值来自真跑，不能反过来迁就。你已经知道哪些动作不该做，剩下的交给纪律。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">用三次运行拼出完整证据</span></header>
+<div class="box-b">
+<p>把三次运行的角色摆在一起看：第一次给收敛轨迹与黄金值，验证「训练确实在降低 loss」；第二次同种子逐值一致，验证「程序是确定的」；第三次换种子轨迹改变，验证「数字来自计算而不是硬编码」。单独任何一次都只能说明一部分——第一次可能被硬编码表格骗过，第二次无法区分硬编码与真计算，第三次无法证明可复现。只有三次合起来，才能说这个训练实验是真的。这也是为什么 train 模式固定跑三次，而不是给你一个开关让你自己选。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h13">4.8 种子复现：为什么要跑三次</h2>
+<p>train 模式一共跑三次程序。第一次带 <code>seed=12345</code>，抓 stdout 并检查收敛；第二次还是 12345，要求<strong>逐值一致</strong>，否则报 <code>train_nondeterministic</code>；第三次换成 <code>seed_contrast=67890</code>，要求至少一个数值变化，否则报 <code>seed_has_no_effect</code>。</p>
+<p>对照种子 67890 真跑的结果是：首行 <code>0.502193</code>，末行 <code>0.003293</code>，中间十行也全部不同——整条轨迹都变了。主种子首行 <code>0.746848</code>、末行 <code>0.008668</code>；对照种子首行 <code>0.502193</code>、末行 <code>0.003293</code>。这说明数字确实由种子驱动的网络初值与打乱顺序算出来，而不是一张硬编码的表。</p>
+<p>这里只把对照的两个端点写进正文，没有为它另开一个 <code>output</code> 块。原因很简单：每个 <code>output</code> 块都必须被某个清单的 <code>output</code> 字段声明，而一个清单只声明一个 id。把对照数字写在 <code>experiment</code> 块的叙述里，既保留了证据，又不制造无人认领的输出块。</p>
+<p>现在回答 4.7 留下的问题：为什么程序不打印 <code>seed=12345</code>？因为那样的话，换种子后这一行必然变化，<code>seed_has_no_effect</code> 就会<strong>平凡通过</strong>——哪怕 12 行 loss 全是写死的。不打印种子，就逼着对照检查去看 loss 本身。这是一个很小的设计选择，却直接决定这条证据有没有牙。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-7128476d">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 三次运行：同一程序，两条轨迹，一次复现</figcaption>
+<div class="viz-screen" role="group" aria-label="三次运行：同一程序，两条轨迹，一次复现：逐步演示">
+<input class="vs-radio" type="radio" name="vz-7128476d" id="vz-7128476d-1" checked>
+<input class="vs-radio" type="radio" name="vz-7128476d" id="vz-7128476d-2">
+<input class="vs-radio" type="radio" name="vz-7128476d" id="vz-7128476d-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-7128476d-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-7128476d-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-7128476d-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：种子 12345，首行损失 0.746848</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一重复 ：同种子，末行损失 0.008668</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">第一次</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点一重复</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">第二次</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：十二行完整轨迹</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一重复 ：十二行，与上面逐值相同</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">起点一重复</span><span class="ve-lbl">逐值相等</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：末行损失 0.008668</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">起点二 ：种子 67890，末行损失 0.003293</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">各自收敛</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点二</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">各自收敛</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>主种子跑两次</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：种子 12345，首行损失 0.746848</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一重复 ：同种子，末行损失 0.008668</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">第一次</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点一重复</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">第二次</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>两次同种子必须逐值一致</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：十二行完整轨迹</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一重复 ：十二行，与上面逐值相同</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">起点一重复</span><span class="ve-lbl">逐值相等</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>对照种子改变整条轨迹</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">算法 ：四步循环，学习率零点一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点一 ：末行损失 0.008668</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">起点二 ：种子 67890，末行损失 0.003293</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点一</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">各自收敛</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点二</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">算法</span><span class="ve-lbl">各自收敛</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧验证确定性，第 3 帧验证数值真的来自种子。两条缺一不可：只跑两次同种子，一个硬编码 loss 表的程序也能过；只跑一次对照种子，一个用时间当随机源的程序每次都不同，看起来「有变化」却无法复现。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">复现性不等于正确性</span></header>
+<div class="box-b">
+<p>同种子两次一致，只说明程序是确定的；换种子有变化，只说明程序读了种子。两者都通过，也不能证明四步循环写对、loss 函数选对。本单元的正确性来自三条独立证据：手算的收敛趋势与 12 行轨迹吻合、train 闸门检查起点终点与单调性、对照种子改变整条轨迹。train 闸门查的是后两条，第一条要靠你自己看数字。把「闸门通过」当成「数学正确」，是这套书反复要破除的误解。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h14">4.8.1 为什么对照种子是必需的</h3>
+<p>最容易跳过的是第三次运行：既然同种子两次已经逐值一致，为什么还要换种子？因为「确定」和「真算」是两回事。把 12 个 loss 写死进一个列表，程序每次都打同一串数字——确定性满分，可它根本没有训练。<code>seed_has_no_effect</code> 就是专门抓这种骗法的：换一个种子，写死的表不会变，闸门立刻报失败。</p>
+<p>反过来，只跑对照种子而不跑同种子，也挡不住另一类问题。用当前时间、内存地址或系统熵当随机源的程序，每次跑都有变化，看上去「种子起了作用」，实际上完全不可复现。两次同种子一致正是要堵这个口。两次与一次，各自防一种骗法，缺一不可。</p>
+<p>对照种子取 67890 而不是 12346，是因为要拉开距离——两个相近种子可能碰巧给出相近轨迹，虽然不会完全相同，但读数不直观。取一个明显不同的数，第一条 loss 就从 <code>0.746848</code> 变成 <code>0.502193</code>，一眼能看出「种子确实换了」。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">亲眼看到 seed_has_no_effect</span></header>
+<div class="box-b">
+<p>想确认这道检查真的有牙，可以把 <code>main.py</code> 里读环境变量那行改成硬编码 <code>seed = 12345</code>，其他不动，跑 <code>node build/run.js --unit pb06-trainloop</code>。闸门会在第三次运行时发现：换种子 67890 后 12 行 loss 与主种子完全相同，于是报 <code>seed_has_no_effect</code>。这证明它检查的是 loss 本身，而不是某个被打印出来的种子字样。做完把那行改回去，程序必须重新从 <code>os.environ[&quot;PY_SEED&quot;]</code> 读种子。</p>
+</div>
+</section>
+<h2 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h15">4.9 图元怎么读，以及这一节的新增</h2>
+<p>这一节四张图的分工：<code>tree</code> 标新增文件；<code>memory</code> 看 16 条样本怎样切成两批，重点是「切分不是抽样」；第一张 <code>graph</code> 画数据怎样流过四步循环，重点是评估用的 <code>full_loss</code> 不建图；第二张 <code>graph</code> 画三次运行的关系，重点是「同种子证明确定性，换种子证明非硬编码」。</p>
+<p>读多帧图时仍要守住两条：每帧自包含，旧节点重写一遍；节点不超过十八个字，箭头两边留空格。这些约束保证同一份围栏在屏幕步进器和打印 PDF 里长得一样。</p>
+<p>回到 4.1 的第 2 帧：多了 <code>loop.py</code>（种子、数据、网络、评估）、<code>main.py</code>（四步循环与打印）、<code>pb06-trainloop.json</code>（种子与收敛判据）。到这里，前四册的手写实验已经完整翻译成框架写法：前向由张量运算完成，梯度由 autograd 计算，训练由四步循环驱动，正确性由黄金值与种子复现共同背书。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">把这一单元接到后面的模块与优化器</span></header>
+<div class="box-b">
+<p>现在的循环里，<code>opt</code> 是一个 <code>SGD</code> 实例，<code>model.parameters()</code> 只有两个张量。下一章会把网络写成正式的 <code>nn.Module</code> 子类，用 <code>parameters()</code> 枚举所有权重，并加上 Adam 与学习率调度——那时你会发现 <code>zero_grad()</code> 和 <code>step()</code> 两行原封不动，变的是优化器内部怎么算步长。理解本单元的四步之后，那些新东西只是替换其中一个零件，不是推翻重来。</p>
+</div>
+</section>
+<h3 id="pybridge-chapters-ch02-03-training-loop-and-seeds-md-h16">4.9.1 训练前的六项检查</h3>
+<p>把整章的纪律压缩成一份可以照着念的清单，下次写出训练脚本时逐项过一遍。</p>
+<p>第一，种子：三种随机源是否都固定？种子是否来自环境变量而不是源码常量？第二，数据：DataLoader 的批大小与打乱方式是否明确？数据生成是否用了独立生成器，以免污染全局随机流？第三，评估：打印的是不是固定数据集上的 loss，而不是每步都在变的小批量 loss？第四，清零：<code>zero_grad()</code> 是否在每次 <code>step()</code> 之前、且与想要的梯度累积策略一致？第五，模式：评估前后是否成对调用了 <code>eval()</code> 与 <code>train()</code>？第六，证据：清单是否用 <code>mode=train</code>、是否写了 <code>seed</code> 与 <code>seed_contrast</code>、收敛阈值是否来自真跑？</p>
+<p>这六项里没有一项需要读懂框架源码，全是能在一次运行里核对的观察量。它们也正好对应本单元四张图的四个层次：数据、文件、算法、验证。养成按清单自查的习惯，比记住某条报错文本更值钱——报错文本会随版本变，这六个问题不会。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么把检查写成清单而不是讲原理</span></header>
+<div class="box-b">
+<p>原理层面，「训练不收敛」永远可以归结为「数据错了」「更新错了」「验证错了」三句话，听完还是不知道该改哪行。清单把它翻译成能打印的量与明确的预期：打一行 loss 看趋势，打一行参数范数看爆炸，打一行种子确认读到了。这和本书坚持「数字要真跑、输出要贴原文」是同一种思路——一个能打印出来的中间量，比一段口头解释更能定位问题。代价是多写几行打印，比起追一整天的 bug 可以忽略。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>DataLoader 把数据切批并打乱；数据用专用生成器产生，打乱用全局随机流，两者种子分开固定；</li>
+<li>训练四步 = <code>zero_grad()</code> → 前向 → <code>backward()</code> → <code>step()</code>；漏掉清零会让梯度累加、步长逐轮放大；</li>
+<li>打印整套数据上的 loss 而不是小批量 loss，否则尺子每步都在换、轨迹抖动无法判定收敛；</li>
+<li><code>eval()</code> 在本例数值上无差别，但必须和 <code>train()</code> 成对写，防止真实模型里的 Dropout/BatchNorm 误用；</li>
+<li>train 闸门跑三次：同种子逐值一致、对照种子改变输出、轨迹满足起点终点降幅与前 8 步非增。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>为什么数据要用单独的 <code>torch.Generator()</code> 生成，而不是直接 <code>torch.randn</code>？</li>
+<li>为什么打印 <code>full_loss</code> 而不是 <code>batch_loss</code>？把两者混用会怎样误导你？</li>
+<li>漏掉 <code>zero_grad()</code> 后，梯度怎样变化？闸门会报什么码？</li>
+<li>本例里 <code>model.eval()</code> 没有数值效果，为什么还要写它与 <code>model.train()</code>？</li>
+<li>train 模式为什么跑三次？程序若打印了 <code>seed=12345</code>，哪条检查会被削弱？</li>
+<li>对照种子 67890 的首末 loss 分别是多少？它证明的是什么、不能证明的是什么？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>直接用 <code>torch.randn</code> 会消耗全局随机流，把网络初始化的序列往后推，数据和初始化就耦合了。专用生成器让数据恒定，只有初值与打乱顺序随 <code>PY_SEED</code> 变，对照实验的解释才干净。</li>
+<li><code>batch_loss</code> 每步看的是不同的 8 条样本，数值天然抖动；打印它等于每步换一把尺子，前 8 步非增的判定会被噪声破坏，你可能误判成学习率太大。<code>full_loss</code> 在固定数据集上算，才反映模型本身在变好还是变坏。</li>
+<li>梯度会累加：第 k 步的 <code>.grad</code> 是前 k 步梯度之和，实际步长逐轮放大，参数被甩出去、loss 反弹。闸门报 <code>train_loss_not_decreasing</code>。</li>
+<li>因为真实模型常含 Dropout、BatchNorm 这类对训练/评估模式敏感的层。评估时忘了切到 <code>eval()</code> 会让验证 loss 带随机性；评估后忘了切回 <code>train()</code> 会让训练时 Dropout 失效。本例没这些层所以数值无差别，但成对书写是防止以后漏掉的纪律。</li>
+<li>同种子两次证明确定性，换对照种子证明数值不是硬编码。如果程序打印了 <code>seed=12345</code>，换种子后这一行必然变化，<code>seed_has_no_effect</code> 会平凡通过——即使 12 行 loss 全是写死的。</li>
+<li>首行 <code>0.502193</code>、末行 <code>0.003293</code>。它证明整条轨迹由种子驱动的初值与打乱顺序算出来、不是硬编码表；但不能证明四步循环写对、loss 函数选对——那要靠轨迹的收敛判据和你自己的手算核对。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

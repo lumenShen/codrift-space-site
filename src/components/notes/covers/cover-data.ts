@@ -17,6 +17,13 @@ const ACCENTS: Record<string, string> = {
   'c-engineering': '#ff9a4d',
   'cpp-engineering': '#a78bfa',
   'rust-engineering': '#f4764c',
+  linalg: '#5ab0ff',
+  multic: '#46e2a0',
+  probopt: '#ffc857',
+  pybridge: '#ff9a4d',
+  mldl: '#a78bfa',
+  llm: '#ff6b9a',
+  dlmath: '#7ee8c7',
 };
 
 const GLYPHS: Record<string, string> = {
@@ -25,6 +32,13 @@ const GLYPHS: Record<string, string> = {
   'c-engineering': '{ }',
   'cpp-engineering': '++',
   'rust-engineering': 'R>',
+  linalg: 'A·x',
+  multic: '∇',
+  probopt: 'P',
+  pybridge: 'py',
+  mldl: 'ML',
+  llm: 'QK',
+  dlmath: 'σ',
 };
 
 /** 每本笔记的默认版式：站点内实际展示的那一套（站长选定「夜读极光」） */

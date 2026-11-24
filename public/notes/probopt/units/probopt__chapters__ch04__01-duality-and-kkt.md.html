@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拉格朗日对偶与 KKT：对偶变量为什么是影子价格</title>
+<meta name="description" content="零基础 · 第 9 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-probopt-chapters-ch04-01-duality-and-kkt-md { @top-right { content: "拉格朗日对偶与 KKT：对偶变量为什么是影子价格"; } }
+#content { page: p-u-probopt-chapters-ch04-01-duality-and-kkt-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/probopt.html">《probopt》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">拉格朗日对偶与 KKT：对偶变量为什么是影子价格</h1><p class="doc-sub">零基础 · 第 9 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/probopt/chapters/ch04/01-duality-and-kkt.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h1">9.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h2">9.2 原问题：一个带半空间约束的二次规划</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h3">9.3 拉格朗日量：把约束塞进目标</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h4">9.4 弱对偶：三行证明，不需要任何凸性</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h5">9.5 强对偶与对偶间隙：为什么凸问题比较幸运</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h6">9.6 KKT 四条件：互补松弛才是重头戏</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h7">9.7 真跑：投影梯度解原问题，三分搜索解对偶问题</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h8">9.8 数字怎么读：六个值互相咬合</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h9">9.9 影子价格：λ 到底给什么定价</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h10">9.10 和等式乘子那单元的分工</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h11">9.11 常见失败模式与排查</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h12">9.12 为什么这样的玩具例子值得真跑</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h13">9.13 从 KKT 到算法：乘子怎么真的被求出来</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h14">9.14 对偶为什么适合分布式优化</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h15">9.15 非凸问题里对偶还有没有用</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h16">9.16 黄金值从哪里来：独立推导与真跑的分工</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-01-duality-and-kkt-md-h17">9.17 一句话收束</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>从一个带不等式约束的二次规划出发，写出拉格朗日量 <code>L(x,λ)</code> 和对偶函数 <code>d(λ)=min_x L(x,λ)</code>；</li>
+<li>用三行不等式证明弱对偶，说清为什么任意 <code>λ≥0</code> 给出的 <code>d(λ)</code> 都是原问题最优值的下界；</li>
+<li>解释强对偶与对偶间隙的区别，以及凸性和约束资格条件为什么是强对偶的靠山；</li>
+<li>逐条说出 KKT 四条件，并重点讲清互补松弛 <code>λg(x)=0</code> 怎么决定「哪条约束真正在卡」；</li>
+<li>读懂 <code>duality_probe</code> 真跑的六个黄金值，并把 <code>λ</code> 解释为影子价格，认出它在 SVM 与 RLHF 里的样子。</li>
+</ul>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h1">9.1 先看工程长什么样</h2>
+<p>上一单元我们让优化器自己找步长，这一单元给优化问题加一条硬规矩：变量必须待在某个区域内。带约束的优化在机器学习里太常见了——概率要非负且和为 1，策略与参考模型的 KL 要小于阈值，投资组合的权重不能超过上限。处理这类问题的钥匙叫对偶：与其直接在受限区域里找最优解，不如给每条约束配一个「价格」，把硬约束换成软惩罚，再从价格那一侧反过来逼近答案。</p>
+<p>这一册里有一节和本单元相邻但不重叠：<code>books/multic/chapters/ch03/02-lagrange.md</code> 讲的是<strong>等式约束</strong>的乘子，重点在「等高线相切」和 <code>∇f=λ∇g</code> 的几何。本单元接过这个故事，但把主角换成<strong>不等式约束</strong>与对偶函数：不再只问「最优点在哪」，而是问「把 x 消掉之后，λ 那边剩下一个什么问题，它和原问题差多少」。读的时候若发现某段推导似曾相识，那是因为地基共用；真正的增量在弱对偶、强对偶和互补松弛这三件事。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一句话讲完对偶</span></header>
+<div class="box-b">
+<p>原问题在可行域里直接找最低点；对偶问题派一个「定价员」λ 给约束标价，然后在所有 x 上把带罚的目标压到最低，得到一个随 λ 变化的下界 <code>d(λ)</code>。把这条下界抬得越高，就越接近原问题的最小值。凸问题里两边恰好相等，间隙为零，λ 就顺带成了约束的影子价格。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-a15b7f66">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：ch04 下新增一个原对偶对拍例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：ch04 下新增一个原对偶对拍例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-a15b7f66" id="vz-a15b7f66-1" checked>
+<input class="vs-radio" type="radio" name="vz-a15b7f66" id="vz-a15b7f66-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-a15b7f66-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-a15b7f66-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/duality.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/duality.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po09-duality.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch04 下还没有这一单元的例子</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>落盘后的 duality_probe 工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/duality.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/duality.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po09-duality.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里四个文件的分工与前几单元一致：<code>duality.h</code> 声明原问题、投影、对偶函数和残差函数；<code>duality.c</code> 用投影梯度法解原问题、用三分搜索解对偶问题；<code>main.c</code> 把两边的结果并排打印；清单给出黄金值与容差。注意程序里没有任何「调用优化库」的动作——不管是原问题的迭代还是对偶问题的搜索，都是几十行手写循环，读者能一步一步跟着算。</p>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h2">9.2 原问题：一个带半空间约束的二次规划</h2>
+<p>把问题定死，后面所有数字才有根。取两个变量 <code>x=(x₀,x₁)</code>，目标函数是</p>
+<p><code>min f(x) = ½(x₀² + x₁²) − 2x₀ − 2x₁</code></p>
+<p>约束是 <code>x₀ + x₁ ≤ 1</code>。这是一个二次规划：目标是凸二次函数（Hessian 是单位阵），约束是一个半空间。几何上，无约束的最小点在 <code>∇f=0</code> 处，也就是 <code>x=(2,2)</code>；但这个点违反约束，因为 <code>2+2=4&gt;1</code>。所以最优解一定落在边界 <code>x₀+x₁=1</code> 上——约束「顶住了」。</p>
+<p>在边界上，目标变成 <code>f(x)=½(x₀²+x₁²)−2</code>，因为 <code>x₀+x₁=1</code> 让线性部分恒为 <code>−2</code>。现在只需在直线上最小化平方和，显然 <code>x₀=x₁=0.5</code> 时最小，得到 <code>f=½(0.25+0.25)−2=0.25−2=−1.75</code>。这就是原问题的最优值 <code>p*=−1.75</code>，一个可以徒手验算的黄金值。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么选这个玩具问题当教具</span></header>
+<div class="box-b">
+<p>它同时满足四个条件。第一，闭式解干净：<code>x*=(0.5,0.5)</code>、<code>p*=−1.75</code>、<code>λ*=1.5</code> 都是一位小数，手算不会出错。第二，约束真的起作用：无约束解 <code>(2,2)</code> 明显不可行，所以乘子非零，互补松弛的「紧约束」一侧有东西可讲。第三，对偶函数有初等闭式：<code>d(λ)=−λ−(λ−2)²</code>，是一条抛物线，画得出图、求得出极值。第四，凸性齐备：目标严格凸、约束线性，Slater 条件显然成立（比如 <code>(0,0)</code> 严格满足 <code>x₀+x₁&lt;1</code>），所以强对偶成立，间隙为零。四个条件凑齐，才能让「对偶」这个概念第一次露面时不被技术细节淹没。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h3">9.3 拉格朗日量：把约束塞进目标</h2>
+<p>给不等式约束 <code>g(x)=x₀+x₁−1≤0</code> 配一个非负乘子 <code>λ≥0</code>，构造拉格朗日量</p>
+<p><code>L(x,λ) = f(x) + λ·g(x) = ½(x₀²+x₁²) − 2x₀ − 2x₁ + λ(x₀+x₁−1)</code></p>
+<p>对 <code>x</code> 求偏导并令其为零：<code>∂L/∂x₀ = x₀−2+λ = 0</code>、<code>∂L/∂x₁ = x₁−2+λ = 0</code>，于是 <code>x₀=x₁=2−λ</code>。这一步把「在边界上找最优」换成了「对每个 λ 解一个无约束问题」——约束的影响被吸收进 λ 里了。为什么要求 <code>λ≥0</code>？因为若 <code>λ&lt;0</code>，违反约束（<code>g&gt;0</code>）反而让 <code>λg&lt;0</code>，<code>L</code> 被人为压低，下界就守不住了。<code>λ≥0</code> 是对偶可行性的要求，也是影子价格不能为负的数学说法：放宽一条约束不可能让最小值变大。</p>
+<p>把 <code>x₀=x₁=2−λ</code> 代回 <code>L</code>，得到对偶函数</p>
+<p><code>d(λ) = −λ − (λ−2)²</code></p>
+<p>验算一下：<code>λ=0</code> 时 <code>d(0)=−4</code>，<code>λ=1.5</code> 时 <code>d(1.5)=−1.5−0.25=−1.75</code>，<code>λ=2</code> 时 <code>d(2)=−2</code>，<code>λ=3</code> 时 <code>d(3)=−3−1=−4</code>。它是一条开口向下的抛物线，顶点正好在 <code>λ=1.5</code>，顶点高度 <code>−1.75</code> 与 <code>p*</code> 相等。对偶问题就是「在 <code>λ≥0</code> 上最大化这条抛物线」，最优解 <code>λ*=1.5</code>。注意对偶函数永远是通过「先对 x 求最小」得到的——这一步消掉了原变量，把二维搜索降成一维搜索，这是对偶最实用的地方。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-791d356b">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 对偶函数作为下界：抬到顶点就贴住原问题最优值</figcaption>
+<div class="viz-screen" role="group" aria-label="对偶函数作为下界：抬到顶点就贴住原问题最优值：逐步演示">
+<input class="vs-radio" type="radio" name="vz-791d356b" id="vz-791d356b-1" checked>
+<input class="vs-radio" type="radio" name="vz-791d356b" id="vz-791d356b-2">
+<input class="vs-radio" type="radio" name="vz-791d356b" id="vz-791d356b-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-791d356b-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-791d356b-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-791d356b-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d0 ：d(0) = -4，一条低处的下界</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，原问题最优值</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d0</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">-4 低于 -1.75，弱对偶</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d0 ：d(0) = -4，仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d1 ：d(1.5) = -1.75，下界上升</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，仍在</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">两者贴合</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d1 ：d(1.5) = -1.75，顶点保留</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d2 ：d(2.5) = -1.75，对称点</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">bad ：d(3) = -4，离得更远</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">恰好也相等</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">bad</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">远低于最优值</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>任取一个 λ，先把 L 对 x 压到最低</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d0 ：d(0) = -4，一条低处的下界</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，原问题最优值</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d0</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">-4 低于 -1.75，弱对偶</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>把 λ 往顶点挪，下界被抬高</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d0 ：d(0) = -4，仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d1 ：d(1.5) = -1.75，下界上升</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，仍在</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">两者贴合</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>越过顶点，下界又掉下去</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d1 ：d(1.5) = -1.75，顶点保留</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d2 ：d(2.5) = -1.75，对称点</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">bad ：d(3) = -4，离得更远</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">恰好也相等</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">bad</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">pstar</span><span class="ve-lbl">远低于最优值</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是弱对偶的图形版：<code>d(0)=−4</code> 躺在 <code>p*=−1.75</code> 下面，是一条合法但松的下界。第 2 帧把 λ 推到顶点，下界刚好贴住 <code>p*</code>，这就是强对偶。第 3 帧是个小提醒：这条抛物线关于 <code>λ=1.5</code> 对称，<code>d(2.5)</code> 也等于 <code>−1.75</code>——但 <code>λ=2.5</code> 不满足 KKT 的驻点条件吗？其实它对应的 <code>x=2−2.5=−0.5</code>，<code>x₀+x₁=−1≤1</code> 可行，但互补松弛被破坏（<code>λg=−2.5≠0</code>），所以它不是最优乘子。这个例子说明「下界贴住」只是最优性的必要现象，不能反过来当作判据；要确认最优，还得看 KKT。</p>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h4">9.4 弱对偶：三行证明，不需要任何凸性</h2>
+<p>弱对偶说的是：对任意可行 <code>x</code> 和任意 <code>λ≥0</code>，都有 <code>d(λ) ≤ f(x)</code>，进而 <code>d(λ) ≤ p*</code>。证明只有三步，值得逐字记住：</p>
+<ol>
+<li>可行意味着 <code>g(x)≤0</code>，乘子非负意味着 <code>λ≥0</code>，所以 <code>λg(x)≤0</code>；</li>
+<li>于是 <code>L(x,λ) = f(x) + λg(x) ≤ f(x)</code>；</li>
+<li><code>d(λ)=min_z L(z,λ) ≤ L(x,λ) ≤ f(x)</code>，对所有可行 x 成立，取最小即得 <code>d(λ)≤p*</code>。</li>
+</ol>
+<p>整段证明只用了「最小值不大于任一取值」和「非负数乘非正数非正」，没有用到凸性、可微性、维数——所以弱对偶永远成立，哪怕原问题非凸、不可微、离散。它是我们敢把对偶下界当「证书」的底气：任何时候你找到一个 λ 使 <code>d(λ)</code> 接近你手上的可行点目标值，就知道这个可行点几乎最优，不用再搜了。反过来，若 <code>d(λ)</code> 远低于可行目标值，你暂时还不能说可行点不好——可能只是 λ 选得差。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把下界方向记反</span></header>
+<div class="box-b">
+<p>对<strong>最小化</strong>问题，对偶给出的是<strong>下界</strong>（<code>d≤p*</code>），对偶问题在最大化这个下界。很多人从「最大化问题」的记忆出发，把符号全弄反，结果写出的代码把三分搜索改成最小化，得到一个远离真实值的数。一个可靠的自检办法是代入 λ=0：此时 <code>L=f</code>，<code>d(0)=min f</code>（无约束最小值），本例是 <code>−4</code>，确实比 <code>p*=−1.75</code> 小。若你的公式给出 <code>d(0)=+something</code> 大于 <code>p*</code>，方向一定反了。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h5">9.5 强对偶与对偶间隙：为什么凸问题比较幸运</h2>
+<p>把最优对偶值记作 <code>d* = max_{λ≥0} d(λ)</code>。弱对偶保证 <code>d* ≤ p*</code>，两者之差 <code>gap = p* − d*</code> 叫<strong>对偶间隙</strong>，永远非负。若 <code>gap=0</code>，就说强对偶成立。强对偶不是免费的：一般非凸问题里 <code>d* &lt; p*</code>，这在对偶性和非凸优化里叫对偶间隙，是很多算法的硬伤。深度学习里绝大多数目标都是非凸的，所以当你看到某个方法宣称「通过对偶求解」时，第一反应应该是问：它在什么条件下与原本问题等价？</p>
+<p>对凸问题，强对偶成立还需要一个技术条件，叫约束资格条件（constraint qualification）。最常用的是 Slater 条件：存在一点严格满足所有不等式约束（对本例就是 <code>x₀+x₁&lt;1</code>）。我们的例子里 <code>(0,0)</code> 就是这样一个点，所以强对偶成立，<code>gap=0</code>。Slater 条件的作用可以直觉理解为：可行域必须有「内部」，不能退化成一条线或一个点，否则乘子可能不存在或不唯一，对偶函数也不再光滑。线性约束的凸二次规划天然满足它，这也是为什么我们的玩具例子敢把 <code>gap=0</code> 写成黄金值。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">什么时候会出现非零间隙</span></header>
+<div class="box-b">
+<p>把目标改成非凸的，比如 <code>f(x)=−x₀²−x₁²−2x₀−2x₁</code>（二次项系数变负），仍约束 <code>x₀+x₁≤1</code>。此时原问题的最优解会跑到可行域的「角」上，而对偶函数仍按老办法得到一条抛物线，顶点值会严格低于原问题最优值——<code>gap&gt;0</code>。你可以照着 <code>duality.c</code> 改一个版本真跑一遍，会看到 <code>gap</code> 那一行不再是零。这个实验的价值在于把「强对偶需要凸性」从一句口号变成一个看得见的数字。做的时候记得另建清单，别覆盖本单元的黄金值。</p>
+</div>
+</section>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-e50b7aa2">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 原问题与对偶问题：两个方向，一个间隙</figcaption>
+<div class="viz-screen" role="group" aria-label="原问题与对偶问题：两个方向，一个间隙：逐步演示">
+<input class="vs-radio" type="radio" name="vz-e50b7aa2" id="vz-e50b7aa2-1" checked>
+<input class="vs-radio" type="radio" name="vz-e50b7aa2" id="vz-e50b7aa2-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-e50b7aa2-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-e50b7aa2-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，原问题最小值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dstar ：d* = -1.75，对偶问题最大值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">gap ：gap = p* - d*，恒不为负</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，不变</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dstar ：d* = -1.75，抬到顶</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">gap ：gap = 0，强对偶</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">pstar</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">dstar</span><span class="ve-lbl">两边相等</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dstar</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">gap</span><span class="ve-lbl">相等即零间隙</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>两侧各自的最优值</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，原问题最小值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dstar ：d* = -1.75，对偶问题最大值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">gap ：gap = p* - d*，恒不为负</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>凸且 Slater 成立时，间隙被压成零</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">pstar ：p* = -1.75，不变</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">dstar ：d* = -1.75，抬到顶</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">gap ：gap = 0，强对偶</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">pstar</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">dstar</span><span class="ve-lbl">两边相等</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dstar</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">gap</span><span class="ve-lbl">相等即零间隙</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里 <code>gap</code> 节点被重新写成零，但 <code>pstar</code> 和 <code>dstar</code> 都原样重复——这就是帧自包含的要求：读者单看第 2 帧也知道零间隙是「两边都是 −1.75」的结果，而不是凭空出现的。</p>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h6">9.6 KKT 四条件：互补松弛才是重头戏</h2>
+<p>对一般问题 <code>min f(x)</code>、<code>g_j(x)≤0</code>，KKT 条件有四组：</p>
+<ul>
+<li><strong>驻点</strong>：<code>∇f(x) + Σ λ_j ∇g_j(x) = 0</code>；</li>
+<li><strong>原始可行</strong>：<code>g_j(x) ≤ 0</code>；</li>
+<li><strong>对偶可行</strong>：<code>λ_j ≥ 0</code>；</li>
+<li><strong>互补松弛</strong>：<code>λ_j·g_j(x) = 0</code>。</li>
+</ul>
+<p>前两条管「点在哪、梯度怎么摆」，第三条管「乘子取什么值」，第四条把前三条连起来。互补松弛的意思很直白：<code>λ</code> 和 <code>g</code> 至少有一个为零。约束松着（<code>g&lt;0</code>，没顶住），则 <code>λ=0</code>，这条约束对解没有影响，是个「摆设」；约束顶住（<code>g=0</code>），<code>λ</code> 可以非零，它才成为真正的影子价格。把两种情形合写成 <code>λg=0</code>，既不漏也不重。</p>
+<p>代回本例验证。最优处 <code>x*=(0.5,0.5)</code>，<code>g(x*)=0</code>（顶住），<code>λ*=1.5</code>：驻点 <code>∇f=(−1,−1)</code>、<code>∇g=(1,1)</code>，所以 <code>∇f+λ∇g=(−1,−1)+1.5(1,1)=(0.5,0.5)</code>——等等，这不为零！哪里错了？重新求导：<code>f=½(x₀²+x₁²)−2x₀−2x₁</code>，<code>∂f/∂x₀=x₀−2=−1.5</code>，不是 <code>−1</code>；在 <code>x=(0.5,0.5)</code> 处 <code>∇f=(−1.5,−1.5)</code>，加 <code>1.5(1,1)</code> 正好得零。驻点成立，原始可行 <code>0.5+0.5−1=0≤0</code> 成立，对偶可行 <code>1.5≥0</code> 成立，互补 <code>1.5×0=0</code> 成立。四条全过。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">互补松弛不是「λ 和 g 都必须为零」</span></header>
+<div class="box-b">
+<p>常见误读是把 <code>λg=0</code> 理解成「两者都为零」。它对「至少一个为零」就够了，而且两种情形对应完全不同的几何：本例约束顶住，<code>g=0</code> 而 <code>λ=1.5&gt;0</code>；若把目标改成 <code>f=½(x₀²+x₁²)−0.5x₀−0.5x₁</code>，无约束最小点 <code>(0.5,0.5)</code> 已满足 <code>x₀+x₁=1</code>，仍是紧约束。要造松约束的例子，得让无约束最小点落进可行域内部，比如目标 <code>f=½(x₀²+x₁²)</code>，最小点 <code>(0,0)</code> 满足 <code>g=−1&lt;0</code>，此时 KKT 给出 <code>λ=0</code>——约束不发挥作用，乘子归零。读 KKT 时脑子里要有这两张画面来回切。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h7">9.7 真跑：投影梯度解原问题，三分搜索解对偶问题</h2>
+<p>程序走两条完全独立的路。原问题用投影梯度法：每步先按 <code>∇f</code> 下降，再把点拉回半空间 <code>x₀+x₁≤1</code>。投影动作很简单——若 <code>x₀+x₁</code> 超过 1，就从两个坐标各扣掉超出量的一半。对偶问题用三分搜索最大化 <code>d(λ)</code>：因为 <code>d</code> 是凹的，每次把区间缩掉三分之一，80 次之后区间长度远小于机器精度。两条路不共享任何中间量，最后才在 <code>main.c</code> 里碰头算间隙。</p>
+<p>下面是原问题的求解代码，逐字来自 <code>duality.c</code> 的第 25 到 41 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch04/duality_probe/src/duality.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">投影梯度与对偶函数：两条互不依赖的路径</span><span class="cb-file">examples/ch04/duality_probe/src/duality.c</span><span class="cb-lines">第 25–41 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="25" data-to="41"><span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_primal_solve</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">];</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> k;</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (k </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; k </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> DU_ITERS; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">k) {</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">du_grad</span><span class="tk" style="color:#24292E">(x, g);</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.1</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">];</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.1</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">];</span></span></span>
+<span class="cl" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">du_project</span><span class="tk" style="color:#24292E">(x);</span></span></span>
+<span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="34"><span class="ln" data-ln="34" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_f</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">], </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="35"><span class="ln" data-ln="35" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span>
+<span class="cl is-empty" data-ln="36"><span class="ln" data-ln="36" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="37"><span class="ln" data-ln="37" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 对偶函数：固定 lambda，L 对 x 的最小值在 x0=x1=2-lambda 取到。 */</span></span></span>
+<span class="cl" data-ln="38"><span class="ln" data-ln="38" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_dual_func</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">lambda</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="39"><span class="ln" data-ln="39" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> xi </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> lambda;</span></span></span>
+<span class="cl" data-ln="40"><span class="ln" data-ln="40" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_f</span><span class="tk" style="color:#24292E">(xi, xi) </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> lambda </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> xi </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="41"><span class="ln" data-ln="41" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>第 30、31 行是先下降：<code>∇f=x−2</code>，所以 <code>x ← x − 0.1(x−2) = 0.9x+0.2</code>，往 <code>(2,2)</code> 走。第 32 行立刻拉回可行域：一旦 <code>x₀+x₁&gt;1</code> 就被平摊扣掉。两步合起来的不动点正是 <code>(0.5,0.5)</code>——从 <code>[0,3]</code> 区间外的点走两步就贴上去，后面 198 步只是把浮点误差抹平。对偶函数那段用闭式 <code>x=2−λ</code> 直接把 <code>min_x L</code> 算出来，完全不看原问题的迭代结果；这就是「裁判与运动员分离」的落实。</p>
+<p>三分搜索与互补残差的代码来自第 43 到 60 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch04/duality_probe/src/duality.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">三分搜索最大化对偶函数，并验证互补松弛</span><span class="cb-file">examples/ch04/duality_probe/src/duality.c</span><span class="cb-lines">第 43–60 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="43" data-to="60"><span class="cl" data-ln="43"><span class="ln" data-ln="43" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* d(lambda) = -lambda - (lambda-2)^2 是凹的，三分搜索求最大。 */</span></span></span>
+<span class="cl" data-ln="44"><span class="ln" data-ln="44" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_dual_max</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">lambda_out</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="45"><span class="ln" data-ln="45" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> lo </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.0</span><span class="tk" style="color:#24292E">, hi </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="46"><span class="ln" data-ln="46" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> k;</span></span></span>
+<span class="cl" data-ln="47"><span class="ln" data-ln="47" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (k </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; k </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">80</span><span class="tk" style="color:#24292E">; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">k) {</span></span></span>
+<span class="cl" data-ln="48"><span class="ln" data-ln="48" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> m1 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> lo </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> (hi </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> lo) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="49"><span class="ln" data-ln="49" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> m2 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> hi </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> (hi </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> lo) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="50"><span class="ln" data-ln="50" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#6F42C1">du_dual_func</span><span class="tk" style="color:#24292E">(m1) </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_dual_func</span><span class="tk" style="color:#24292E">(m2)) lo </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> m1;</span></span></span>
+<span class="cl" data-ln="51"><span class="ln" data-ln="51" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">else</span><span class="tk" style="color:#24292E"> hi </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> m2;</span></span></span>
+<span class="cl" data-ln="52"><span class="ln" data-ln="52" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="53"><span class="ln" data-ln="53" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">lambda_out </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.5</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> (lo </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> hi);</span></span></span>
+<span class="cl" data-ln="54"><span class="ln" data-ln="54" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_dual_func</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">lambda_out);</span></span></span>
+<span class="cl" data-ln="55"><span class="ln" data-ln="55" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span>
+<span class="cl is-empty" data-ln="56"><span class="ln" data-ln="56" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="57"><span class="ln" data-ln="57" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 互补松弛残差：lambda * g(x) 在最优处应为零。 */</span></span></span>
+<span class="cl" data-ln="58"><span class="ln" data-ln="58" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">du_complement</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">lambda</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="59"><span class="ln" data-ln="59" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">fabs</span><span class="tk" style="color:#24292E">(lambda </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">));</span></span></span>
+<span class="cl" data-ln="60"><span class="ln" data-ln="60" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>搜索区间取 <code>[0,3]</code> 是有讲究的：对 <code>λ≥3</code>，<code>x=2−λ≤−1</code>，<code>d(λ)=−λ−(λ−2)²</code> 只会继续下降，所以顶点必在 <code>[0,2]</code> 内，取 <code>[0,3]</code> 安全地把 <code>λ≥0</code> 的约束包住。互补残差直接用绝对值，因为 <code>λ≥0</code>、<code>g≤0</code>，乘积本就不正，取绝对值得到非负残差，打印成零说明互补条件成立。</p>
+<p>真跑得到的 stdout 如下：</p>
+<figure class="term term-output" data-id="po09-duality-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">po09-duality-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">x:[0.500000,0.500000]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">primal=-1.750000</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">dual=-1.750000</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">gap=0.000000</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">lambda=1.500000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">complement=0.000000</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">d_at_zero=-4.000000</span></span></pre></figure>
+<p>六个数值行都在清单里写了黄金值和 <code>atol=1e-6</code>。向量行 <code>x:[...]</code> 用冒号，闸门按文字逐字比较，不解析成数值。程序没有打印任何 <code>PASS</code> 或 <code>OK</code>，证据全由闸门从 stdout 重算。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把三分搜索改成二分会怎样</span></header>
+<div class="box-b">
+<p>二分的前提是函数单调，而 <code>d(λ)</code> 是先升后降的抛物线，直接二分会跑偏。把 <code>du_dual_max</code> 里的两个中点比较改成「若 <code>d(m1)&lt;d(m2)</code> 则 <code>lo=m1</code>」这种写法仍是三分；若改成「若 <code>d(mid)&gt;target</code> 则 <code>hi=mid</code>」，就必须先知道顶点值 <code>target=−1.75</code>——那就成了循环论证，因为顶点值正是我们想求的东西。这个反例说明三分搜索在这里不是随便选的：它只依赖凹性，不依赖顶点位置。想验证闸门确实在干活，把清单里 <code>lambda</code> 的黄金值改成 <code>1.6</code>，程序输出不变，闸门会报 <code>numeric_value_mismatch</code>。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h8">9.8 数字怎么读：六个值互相咬合</h2>
+<p>先看 <code>x:[0.500000,0.500000]</code> 与 <code>primal=−1.750000</code>：把 x 代回目标，<code>½(0.25+0.25)−2×0.5−2×0.5=0.25−2=−1.75</code>，手算对上屏幕。再看 <code>lambda=1.500000</code>：驻点条件说 <code>x=2−λ</code>，所以 <code>λ=2−0.5=1.5</code>，也对上。然后 <code>dual=−1.750000</code>：代入 <code>d(λ)=−λ−(λ−2)²=−1.5−0.25=−1.75</code>。最后 <code>gap=0.000000</code> 就是两者相减，这是强对偶的数字版。</p>
+<p><code>complement=0.000000</code> 值得单独看：<code>λ(x₀+x₁−1)=1.5×(0.5+0.5−1)=0</code>。它确认了约束正好顶住，乘子非零不是凭空来的。<code>d_at_zero=−4.000000</code> 则是弱对偶的现场证据：<code>λ=0</code> 时 <code>L=f</code>，<code>d(0)=min f=−4</code>，比 <code>p*=−1.75</code> 低 2.25，是一条合法但很松的下界。把 <code>d_at_zero</code> 和 <code>dual</code> 摆在一起看，就能感受到「把下界从 −4 抬到 −1.75」这件事——对偶求解的全部意义都在这 2.25 里。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么 `gap` 要用 `primal − dual` 而不是绝对值</span></header>
+<div class="box-b">
+<p>因为弱对偶保证这个差非负，用减法就自带一个符号检查：若程序某天打印出负的 <code>gap</code>，说明要么约束符号写反、要么对偶问题被错写成最小化，比绝对值更早暴露问题。黄金值里同时放 <code>primal</code>、<code>dual</code>、<code>gap</code> 三个数，也有这层用意——一个程序可以硬编码 <code>gap=0</code> 却把两边都算错，但三个数一起对账就很难蒙混过关。这与 po08 里同时核对 <code>sgd_final</code> 和 <code>adam_final</code> 是同一条纪律。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h9">9.9 影子价格：λ 到底给什么定价</h2>
+<p>把约束右端从 <code>x₀+x₁≤1</code> 改成 <code>x₀+x₁≤b</code>，其它不变。快乐地重算一遍：无约束解仍是 <code>(2,2)</code>，边界上的最优是 <code>x₀=x₁=b/2</code>，目标值 <code>p*(b)=½(b²/4+b²/4)−2b=b²/4−2b</code>。对 b 求导：<code>dp*/db = b/2 − 2</code>。在 <code>b=1</code> 处，这个导数是 <code>−1.5</code>。而我们的 <code>λ*=1.5</code>。符号相反，是因为我们把约束写成 <code>g=x₀+x₁−b≤0</code>：右端 b 增大相当于 <code>g</code> 整体平移，<code>∂p*/∂b = −λ</code>。若把约束写成 <code>b−x₀−x₁≤0</code>，乘子符号约定翻转，就有 <code>∂p*/∂b=λ</code>。两种写法都对，关键是固定一种约定并写进注释——这正是影子价格这个解读最容易被符号绊倒的地方。</p>
+<p>现在给个不含符号歧义的说法：<code>λ</code> 的绝对值告诉你「约束松一点点，最优值大约改善多少」。本例 <code>|λ|=1.5</code>，意思是把上限从 1 放宽到 1.01，最优值大约下降 <code>1.5×0.01=0.015</code>；代入精确公式 <code>p*(1.01)−p*(1)=1.01²/4−2.02−(−1.75)≈−0.014975</code>，几乎一致。反过来，若 <code>λ=0</code>，说明约束根本没卡住，再放宽也没用。这就是「影子价格」名字的由来：它不是市场上真实付出的钱，而是这条约束在最优解处隐含的边际代价。</p>
+<p>支持向量机把这个模式放大到了极致。软间隔 SVM 的每个训练样本带一个不等式约束和对应的乘子 <code>αᵢ</code>；KKT 的互补松弛保证只有卡在间隔边界上或越界的样本才有非零 <code>αᵢ</code>——它们就是支持向量。其余样本 <code>αᵢ=0</code>，删掉也不改变结果。RLHF 里也有同款结构：给策略加一条 KL 约束限制它偏离参考模型太远，对应的拉格朗日乘子控制「偏离」与「奖励」之间的兑换率；工程上常把这个乘子做成自适应控制器，奖励涨太快就加大惩罚，约束太松就减小乘子。你看到的是一堆调参，本质仍是本节的 <code>L=f+λg</code> 与互补松弛。</p>
+<figure class="viz" data-kind="calltree" data-frames="3" data-viz-id="vz-b3a34b36">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> 两条求解路径在 main 里汇合，裁判与运动员分离</figcaption>
+<div class="viz-screen" role="group" aria-label="两条求解路径在 main 里汇合，裁判与运动员分离：逐步演示">
+<input class="vs-radio" type="radio" name="vz-b3a34b36" id="vz-b3a34b36-1" checked>
+<input class="vs-radio" type="radio" name="vz-b3a34b36" id="vz-b3a34b36-2">
+<input class="vs-radio" type="radio" name="vz-b3a34b36" id="vz-b3a34b36-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-b3a34b36-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-b3a34b36-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-b3a34b36-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印六个数值行</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_primal_solve() ：投影梯度，给出 x 与 primal</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_dual_max() ：三分搜索，给出 lambda 与 dual</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_primal_solve()</span><span class="ve-lbl">拿可行解</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_dual_max()</span><span class="ve-lbl">拿下界</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">du_primal_solve() ：只用 f 与 grad</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">du_dual_max() ：只用 d(lambda)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_project() ：把点拉回半空间</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_dual_func() ：闭式消掉 x</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">du_primal_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_project()</span><span class="ve-lbl">保可行</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">du_dual_max()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_dual_func()</span><span class="ve-lbl">算下界</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：已有两侧结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_complement() ：检查 lambda*g(x)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="ret"><span class="ve-a">du_primal_solve()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回 x 与 primal</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">du_dual_max()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回 lambda 与 dual</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">du_complement()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回互补残差</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>main 先要原问题和对偶问题的解</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印六个数值行</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_primal_solve() ：投影梯度，给出 x 与 primal</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_dual_max() ：三分搜索，给出 lambda 与 dual</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_primal_solve()</span><span class="ve-lbl">拿可行解</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_dual_max()</span><span class="ve-lbl">拿下界</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>两侧各自依赖完全不同的量</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">du_primal_solve() ：只用 f 与 grad</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">du_dual_max() ：只用 d(lambda)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_project() ：把点拉回半空间</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_dual_func() ：闭式消掉 x</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">du_primal_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_project()</span><span class="ve-lbl">保可行</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">du_dual_max()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">du_dual_func()</span><span class="ve-lbl">算下界</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>最后才算间隙与互补残差</p><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：已有两侧结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">du_complement() ：检查 lambda*g(x)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="ret"><span class="ve-a">du_primal_solve()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回 x 与 primal</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">du_dual_max()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回 lambda 与 dual</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">du_complement()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回互补残差</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧把两条路径的依赖画得很清楚：原问题只碰 <code>f</code>、<code>grad</code> 和 <code>du_project</code>，对偶问题只碰 <code>du_dual_func</code>。第 3 帧才让它们在 <code>main</code> 里相遇算 <code>gap</code> 和互补残差。若你在实现里让对偶函数去读原问题的迭代结果，这两个节点之间就会多出一条箭头——那正是要避免的：验证方一旦复用被验证方的中间量，残差就恒为零，检查形同虚设。</p>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h10">9.10 和等式乘子那单元的分工</h2>
+<p><code>books/multic/chapters/ch03/02-lagrange.md</code> 已经讲过圆上最大化线性函数的例子，那里约束是等式 <code>x₀²+x₁²=1</code>，重点是「两组等高线相切、梯度共线、<code>∇f=λ∇g</code>」。本单元刻意不重复那条推导，而是补上它没覆盖的三件事。</p>
+<p>第一件是<strong>不等式</strong>。等式约束下乘子可正可负（那里 <code>λ=±2.5</code> 区分最大与最小）；不等式约束下 <code>λ≥0</code>，因为负乘子会让违反约束反而降低拉格朗日量，破坏下界。第二件是<strong>对偶函数</strong>。等式那节虽然也提到 <code>d(λ)=min_x L</code>，但重心在乘子的几何；这里把 <code>d(λ)</code> 当作主角，证明弱对偶、求它的最大值、把最大化下界变成独立问题。第三件是<strong>互补松弛</strong>。等式约束永远「顶住」，没有松紧之分；不等式约束才有 <code>g&lt;0</code> 时 <code>λ=0</code> 的分支，才需要 <code>λg=0</code> 把两种情形统一起来。</p>
+<p>两个单元共用的只有拉格朗日量 <code>L=f+λg</code> 这个外壳和「驻点条件」这条地基。把它们读在一起，你得到的是完整图景：等式约束给几何，不等式约束给经济解释；一个是「梯度对齐」，一个是「给约束定价」。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把这里的 λ 和 po08 的 v_t 混为一谈</span></header>
+<div class="box-b">
+<p>它们是两种完全不同的「每方向一个旋钮」。Adam 的 <code>v_t</code> 是梯度平方的滑动平均，用来调步幅，是优化器的内部状态，随迭代不断更新；对偶变量 <code>λ</code> 是约束的价格，由对偶问题整体优化得到，在凸问题里收敛到固定值。前者是「算法记忆」，后者是「问题本身的参数」。把两者都叫「自适应权重」会让你在读文献时彻底迷路。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h11">9.11 常见失败模式与排查</h2>
+<p>第一，乘子符号约定。写 <code>g=x₀+x₁−1≤0</code> 得 <code>λ=+1.5</code>；写成 <code>g=1−x₀−x₁≤0</code> 得 <code>λ=−1.5</code>——但后者违反 <code>λ≥0</code> 的对偶可行性，说明这种写法对应的对偶问题应该最大化 <code>−λ</code> 的那一套符号约定。两种约定都能算出正确 x，但影子价格的符号解读相反。固定一种，写进注释。</p>
+<p>第二，对偶函数算错。必须对 <code>x</code> 求最小之后再代入，不能把任意 x 代进 <code>L</code> 就当 <code>d(λ)</code>。本例 <code>du_dual_func</code> 用闭式 <code>x=2−λ</code>，直接消掉了 x；如果你改成「用当前原问题迭代的 x 算 L」，得到的不是对偶函数，间隙也会失去意义。第三，三分搜索的区间没覆盖顶点。取 <code>[0,3]</code> 是因为顶点在 1.5；若目标改成顶点在 10 的问题，区间必须跟着改，否则搜索会贴着区间端点返回错误答案。</p>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>最可能的原因</th>
+<th>先查哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gap</code> 打印成负数</td>
+<td>对偶方向写反，或约束符号约定不一致</td>
+<td><code>du_dual_func</code> 与 <code>du_f</code></td>
+</tr>
+<tr>
+<td><code>lambda</code> 收敛到区间端点</td>
+<td>搜索区间没包住顶点</td>
+<td><code>du_dual_max</code> 的 <code>[0,3]</code></td>
+</tr>
+<tr>
+<td><code>complement</code> 不为零</td>
+<td>约束未顶住却给了非零乘子</td>
+<td>KKT 驻点与原始可行</td>
+</tr>
+<tr>
+<td><code>x</code> 落在可行域外</td>
+<td>投影步写漏或扣错方向</td>
+<td><code>du_project</code></td>
+</tr>
+<tr>
+<td>黄金值报 mismatch</td>
+<td>改了目标系数却没更新清单</td>
+<td><code>po09-duality.json</code></td>
+</tr>
+</tbody>
+</table>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把投影步注释掉会怎样</span></header>
+<div class="box-b">
+<p>把 <code>du_primal_solve</code> 里的 <code>du_project(x)</code> 注释掉，迭代会一路走向无约束最小点 <code>(2,2)</code>，<code>primal</code> 打印成 <code>−4</code>，<code>gap</code> 变成 <code>−4−(−1.75)=−2.25</code>，是个负数。闸门会同时报 <code>primal</code> 和 <code>gap</code> 的 <code>numeric_value_mismatch</code>。这个阴性对照说明：投影不是可有可无的细节，它是「可行」这条 KKT 条件在算法里的唯一落点；去掉它，程序算的是另一个问题。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h12">9.12 为什么这样的玩具例子值得真跑</h2>
+<p>闭式解只要三行手算：<code>x=2−λ</code>、代入边界得 <code>λ=1.5</code>、<code>p*=−1.75</code>。既然如此，为什么还要写两个求解器、建清单、跑闸门？因为手算只能给你答案，真跑能给你<strong>独立的第二条路径</strong>。程序里原问题走投影梯度，对偶问题走三分搜索，两条路都不用闭式解；它们各自逼近 <code>−1.75</code>，然后在 <code>main</code> 里碰头算间隙。如果一个实现把符号写反、把投影漏掉、把区间设窄，手算的答案不会自动跳出来纠正它，但真跑的六个数字会立刻露出破绽。</p>
+<p>更重要的是，程序把「求解」和「验证」分成了不同函数。今天问题简单，闭式解在手；明天换成带几十条约束的二次规划，闭式解没了，但 <code>du_complement</code> 这种残差检查还能原封不动地用。你在这一节练的「两条独立路径 + 残差对账」，是后面所有数值实验的通用骨架。</p>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h13">9.13 从 KKT 到算法：乘子怎么真的被求出来</h2>
+<p>KKT 条件刻画了最优解长什么样，但没有告诉你怎么走到那里。本例之所以能徒手算出 <code>λ=1.5</code>，是因为目标二次、约束一条、维度只有二。换成一般问题，需要一套迭代办法。最朴素的是<strong>对偶上升</strong>：固定当前 <code>λ</code>，对 x 做一步（或若干步）无约束下降，最小化 <code>L(x,λ)=f(x)+λg(x)</code>；然后用当前的约束违反量更新乘子，<code>λ ← λ + α·g(x)</code>。若约束被违反得厉害（<code>g&gt;0</code>），乘子就变大，下一轮对 x 的惩罚更强，逼它回到可行域。两个变量交替更新，直到约束满足且 x 不再变化。</p>
+<p>这个更新式和 po08 里的优化器更新长得像，但角色完全不同：那里更新的是模型参数，这里更新的是约束的价格。步长 <code>α</code> 与对 x 的学习率不是一回事——<code>α</code> 太大，乘子会在正负之间剧烈震荡；<code>α</code> 太小，约束违反量收敛得极慢。更麻烦的是，当 <code>L</code> 对 x 不是严格凸时，<code>min_x L</code> 那一步可能没有唯一解，对偶函数不光滑，朴素的乘子更新会卡住。本例不存在这个问题：<code>L</code> 对 x 是严格凸二次函数，<code>d(λ)</code> 是光滑抛物线，所以三分搜索这类「不看梯度只看函数值」的方法就能稳稳找到顶点。</p>
+<p>工程上更常用的是<strong>增广拉格朗日法</strong>。它在 <code>L</code> 里再加一项 <code>ρ·g(x)²/2</code>，把约束违反变成实实在在的惩罚：<code>L_ρ = f + λg + (ρ/2)g²</code>。这一项有两个好处：让 x 子问题更良态，即使原目标只是半正定也能收敛；让乘子更新更平稳，因为二次惩罚已经把大部分约束违反吸收掉了。代价是多出一个惩罚系数 <code>ρ</code> 要调。现代约束优化库大多以增广拉格朗日为核心，不是偶然——它把「硬约束」和「软惩罚」的优点拼在了一起。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">对偶上升的符号很容易写反</span></header>
+<div class="box-b">
+<p>取决于把约束写成 <code>g≤0</code> 还是 <code>−g≤0</code>，乘子更新是 <code>λ+αg</code> 还是 <code>λ−αg</code>。一个不会出错的自检办法：代入本例，初始 <code>λ=0</code>、无约束解 <code>x=(2,2)</code>，<code>g=3&gt;0</code>（违反约束）。我们要让 <code>λ</code> 从 0 涨到 1.5，所以更新必须是加号 <code>λ ← λ+αg</code>。若你写成了减号，<code>λ</code> 会往负方向跑，违反 <code>λ≥0</code>，对偶下界立刻失真。写代码之前先在纸上跑一步，比事后对着一堆 nan 调试快得多。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h14">9.14 对偶为什么适合分布式优化</h2>
+<p>对偶还有一层工程价值：它天然把大问题拆成小问题。假设目标可以拆成若干个子系统的损失之和 <code>f(x)=Σᵢ fᵢ(xᵢ)</code>，而约束把它们耦合在一起，比如 <code>Σᵢ Aᵢxᵢ ≤ b</code>。写出拉格朗日量 <code>L=Σᵢ fᵢ(xᵢ)+λ(ΣᵢAᵢxᵢ−b)</code>，重新整理成 <code>Σᵢ[fᵢ(xᵢ)+λAᵢxᵢ]−λb</code>。注意括号里的每一项只含一个 <code>xᵢ</code>——在固定 <code>λ</code> 时，各个子系统可以<strong>并行</strong>各自最小化自己那一项，完全不用知道别人的变量。然后用一个协调器收集各子的约束贡献，更新一次 <code>λ</code>，再广播下去。这就是对偶分解（dual decomposition）的基本结构。</p>
+<p>这个模式在电力调度、网络流量控制、多智能体强化学习里很常见。每个局部单元只关心自己的成本和一个共享价格 <code>λ</code>：价格高了就少用资源，价格低了就多用。协调器不碰局部变量，只根据总资源用量调价格。你看到的「市场机制」其实是对偶算法的一种实现——价格就是影子价格，供需平衡就是互补松弛。回到本例，虽然只有一个 x、一条约束，看不到分解的好处，但 <code>d(λ)=min_x L</code> 那一步已经蕴含了这个结构：对偶函数的可分解性正是分布式优化的理论地基。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从对偶分解到联邦学习</span></header>
+<div class="box-b">
+<p>联邦学习里多个客户端各自训练本地模型，只上传梯度或参数更新。如果把全局目标写成各客户端损失之和，再加一条「本地模型不能偏离全局模型太远」的约束，拉格朗日量就具有上面那种可分解结构：固定乘子时各客户端并行本地训练，服务端只更新乘子并广播。ADMM（交替方向乘子法）是这个思路的成熟版本，它在对偶分解之上加了增广项和变量分离，收敛更稳。你不必现在就掌握 ADMM，但应该认得那个骨架：本地最小化 + 乘子更新 + 广播，三步循环。本节的小例子就是这三步的最小样本。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h15">9.15 非凸问题里对偶还有没有用</h2>
+<p>前面强调强对偶需要凸性，那是不是非凸问题里对偶就废了？不是。即使 <code>gap&gt;0</code>，对偶仍有两个用途。第一，它给出<strong>下界</strong>，可以作为分支定界一类全局优化算法的剪枝依据：如果某个子域的对偶下界已经高于当前最好可行解，这个子域就可以整枝砍掉，不用再搜。第二，对偶变量常常是有用的<strong>正则化旋钮</strong>。RLHF 里的 KL 乘子就是典型：工程师未必在意强对偶是否成立，只在意这个乘子能不能把策略约束在合理范围内。此时对偶不再是「等价求解」，而是「可解释的调参接口」。</p>
+<p>这也解释了为什么深度学习文献里经常出现「拉格朗日」却很少严格证明强对偶。很多场景的目标是非凸神经网络，理论保证弱；但乘子的更新规则依然来自 KKT 那一套，实践效果好就用了。作为读者，你要能区分两种主张：一种说「用对偶等价地解原问题」，这需要强对偶；另一种说「用对偶变量调节约束强度」，这只需要弱对偶和一点工程经验。本节例子属于前者——凸、可行域有内点、间隙严格为零，所以我们可以放心地说 <code>p*=d*</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">亲手制造一个非零间隙</span></header>
+<div class="box-b">
+<p>把 <code>du_f</code> 的二次项系数从 <code>+0.5</code> 改成 <code>−0.5</code>，目标变成凹函数，约束不变。暂不改动对偶函数的推导（它假设了 <code>L</code> 对 x 有极小值，凹目标下变成极大值，推导失效），程序会给出一对不一致的数，<code>gap</code> 不再是零。这说明强对偶的成立条件一旦被破坏，本单元那套「两条路径必然相遇」的推理就不再成立。真正严谨地处理凹目标需要换一套符号约定（把最大化转成最小化再取负），这也从侧面说明凸性为什么值得单独强调。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h16">9.16 黄金值从哪里来：独立推导与真跑的分工</h2>
+<p>本单元六个黄金值里，<code>primal=−1.75</code>、<code>lambda=1.5</code>、<code>d_at_zero=−4</code> 来自手算闭式，<code>dual=−1.75</code> 来自对偶函数的闭式最大值，<code>gap=0</code> 来自强对偶定理，<code>complement=0</code> 来自互补松弛。没有一个来自「第一次跑出来的输出」。这条纪律在数值实验里至关重要：如果黄金值抄自程序输出，程序里一个稳定的错误就会被固化成标准答案，之后每次对拍都是 green——但 green 的是错误。</p>
+<p>真跑的作用不是「产生答案」，而是「独立地验证答案」。本例里原问题走投影梯度、对偶问题走三分搜索，两条路径都不使用闭式解；它们各自逼近 −1.75，然后在 <code>main</code> 里碰头。若某个实现把投影漏掉或对偶符号写反，手算的黄金值不会跟着错，闸门会立刻报 <code>numeric_value_mismatch</code>。反过来，若把黄金值改成程序的错误输出，闸门会 green，但你会失去发现错误的机会——这就是「黄金值必须独立」的全部理由。</p>
+<p>容差 <code>atol=1e-6</code> 也有来历。投影梯度在几步之内就贴到不动点，剩下的迭代只处理浮点舍入；三分搜索 80 次后区间长度约 <code>3×(2/3)⁸⁰</code>，远小于机器精度。因此所有数值误差都在 <code>1e-12</code> 量级，<code>1e-6</code> 留了足够余量，又不至于宽到掩盖真错误。这与 po07「容差要按误差来源定」的说法一致：先弄清误差从哪里来，再定容差，而不是反过来。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">复现这个实验要记哪些条件</span></header>
+<div class="box-b">
+<p>目标系数 <code>0.5</code> 与 <code>−2</code>、约束写法 <code>x₀+x₁−1≤0</code>、投影步的扣法（超出量平摊）、学习率 <code>0.1</code>、迭代次数 200、三分搜索区间 <code>[0,3]</code> 与迭代 80 次、黄金值的闭式来源、容差 <code>1e-6</code> 的依据。清单保存了容差与程序该打印什么，源码保存了怎么算，两者合起来才是一份可复现记录。少写其中任何一条，别人（包括未来的你）都无法解释为什么屏幕上是这六个数。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-01-duality-and-kkt-md-h17">9.17 一句话收束</h2>
+<p>把这一单元压缩成一句话：先写拉格朗日量把约束装进目标，再对原变量取最小得到对偶下界，最后最大化这个下界并读出乘子；凸性保证两边相遇，互补松弛告诉你哪条约束在真正收费。记住这条主线，具体的代数只是它的展开。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>拉格朗日量 <code>L=f+λg</code> 把约束塞进目标；对偶函数 <code>d(λ)=min_x L</code> 消掉原变量，本例 <code>d(λ)=−λ−(λ−2)²</code>；</li>
+<li>弱对偶 <code>d(λ)≤p*</code> 只需三行证明，与凸性无关；<code>d(0)=−4</code> 是一条松但合法的下界；</li>
+<li>凸问题加 Slater 条件给强对偶，<code>gap=p*−d*=0</code>；本例 <code>p*=d*=−1.75</code>、<code>λ*=1.5</code>、<code>x*=(0.5,0.5)</code>；</li>
+<li>KKT 四条件：驻点、原始可行、对偶可行、互补松弛；<code>λg=0</code> 决定哪条约束真正卡住；</li>
+<li><code>|λ|=1.5</code> 是影子价格：上限从 1 放宽到 1.01，最优值约降 0.015；SVM 的支持向量与 RLHF 的 KL 乘子是同一个模式；</li>
+<li>原问题走投影梯度、对偶问题走三分搜索，两条独立路径在 <code>main</code> 汇合；黄金值与 <code>atol=1e-6</code> 只写在清单里。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>写出本例的 <code>L(x,λ)</code>，对 x 求偏导并解出 <code>x=2−λ</code>，再代回得到 <code>d(λ)</code> 的闭式。</li>
+<li>用三行证明弱对偶，并说明证明里哪一步用到了 <code>λ≥0</code>、哪一步用到了 <code>g(x)≤0</code>。</li>
+<li>计算 <code>d(0)</code>、<code>d(1.5)</code>、<code>d(3)</code>，说明为什么 <code>d(0)</code> 是合法但松的下界。</li>
+<li>KKT 四条件分别是什么？在本例验证它们，并说明为什么 <code>λ=2.5</code> 即使让 <code>d</code> 贴到最优值也不是最优乘子。</li>
+<li>把约束右端从 1 改成 <code>b</code>，写出 <code>p*(b)</code>，并验证 <code>b=1</code> 处 <code>dp*/db=−λ*</code>。这个负号说明什么？</li>
+<li>影子价格是什么意思？SVM 里为什么只有支持向量对应非零乘子？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>L=½(x₀²+x₁²)−2x₀−2x₁+λ(x₀+x₁−1)</code>；<code>∂L/∂x₀=x₀−2+λ=0</code>、<code>∂L/∂x₁=x₁−2+λ=0</code>，故 <code>x₀=x₁=2−λ</code>。代回得 <code>d(λ)=−λ−(λ−2)²</code>。</li>
+<li>可行点满足 <code>g(x)≤0</code>，<code>λ≥0</code>，故 <code>λg(x)≤0</code>；于是 <code>L(x,λ)=f(x)+λg(x)≤f(x)</code>；而 <code>d(λ)=min_z L(z,λ)≤L(x,λ)≤f(x)</code>，对所有可行 x 成立，取最小得 <code>d(λ)≤p*</code>。<code>λ≥0</code> 用在第一步的乘法保号，<code>g(x)≤0</code> 也用在第一步。</li>
+<li><code>d(0)=−4</code>、<code>d(1.5)=−1.75</code>、<code>d(3)=−4</code>。<code>d(0)≤p*=−1.75</code>，所以是合法下界；但它比 <code>p*</code> 低 2.25，间隔很大，说明 <code>λ=0</code> 这个定价太粗糙，没把约束的价值算进去。</li>
+<li>驻点 <code>∇f+λ∇g=0</code>、原始可行 <code>g≤0</code>、对偶可行 <code>λ≥0</code>、互补松弛 <code>λg=0</code>。在 <code>x=(0.5,0.5)</code>、<code>λ=1.5</code> 处：<code>∇f=(−1.5,−1.5)</code>、<code>∇g=(1,1)</code>，和为 0；<code>g=0</code>；<code>λ≥0</code>；<code>λg=0</code>。<code>λ=2.5</code> 对应 <code>x=(−0.5,−0.5)</code>，虽然 <code>d(2.5)=−1.75</code> 也贴住下界，但 <code>g=−2</code>，<code>λg=−5≠0</code>，互补松弛失败，所以不是最优乘子——下界贴合只是必要现象。</li>
+<li>边界最优 <code>x₀=x₁=b/2</code>，<code>p*(b)=b²/4−2b</code>。求导 <code>dp*/db=b/2−2</code>，在 <code>b=1</code> 处为 <code>−1.5=−λ*</code>。负号来自约束写法 <code>g=x₀+x₁−b≤0</code>：右端 b 增大相当于放宽约束，<code>p*</code> 下降，所以导数为负；乘子的绝对值 <code>λ*</code> 才是「放宽一单位值多少」的影子价格。</li>
+<li>影子价格是约束右端变化时最优值的变化率，衡量「放宽约束值多少」。软间隔 SVM 里只有卡在间隔边界或越界的样本约束是紧的，其余样本约束松着、<code>αᵢ=0</code>，由互补松弛它们对决策没有贡献，因此正好对应支持向量。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

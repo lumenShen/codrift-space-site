@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>两层网络：前向、梯度与训练</title>
+<meta name="description" content="零基础 · 第 1 单元 · 建议 90 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-dlmath-chapters-ch01-01-tiny-network-and-its-gra { @top-right { content: "两层网络：前向、梯度与训练"; } }
+#content { page: p-u-dlmath-chapters-ch01-01-tiny-network-and-its-gra; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/dlmath.html">《dlmath》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">两层网络：前向、梯度与训练</h1><p class="doc-sub">零基础 · 第 1 单元 · 建议 90 分钟</p><p class="doc-meta">源文件 books/dlmath/chapters/ch01/01-tiny-network-and-its-gradient.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h1">1.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h2">1.2 前向：两个数字怎么变成一个预测</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h3">1.3 反向：链式法则在哪一步最容易漏</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h4">1.4 对拍：数值梯度给解析梯度背书</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h5">1.5 训练：种子复现与收敛轨迹</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h6">1.6 为什么必须先写 C，再谈框架</a></li><li class="toc-l3"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h7">1.6.1 前向的四个中间量</a></li><li class="toc-l3"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h8">1.6.2 13 个参数为什么够</a></li><li class="toc-l3"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h9">1.6.3 梯度表怎么读</a></li><li class="toc-l3"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h10">1.6.4 阴性对照到底在防什么</a></li><li class="toc-l3"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h11">1.6.5 为什么要固定种子而不是只固定数据</a></li><li class="toc-l2"><a href="#dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h12">1.7 这一节新增了什么</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>手写一个两层网络的前向传播，说清每一步的形状与激活函数的作用；</li>
+<li>推导并写出反向传播的四个式子，指出最容易漏掉的链式因子；</li>
+<li>用中心差分独立地算出数值梯度，与解析梯度逐项对拍；</li>
+<li>解释为什么「程序打印 PASS」不算证据，以及阴性对照为什么必须有；</li>
+<li>用固定种子复现一次训练，并说清种子对照为什么能证明输出不是硬编码。</li>
+</ul>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h1">1.1 先看工程长什么样</h2>
+<p>这一节不装框架、不装 Python，先把一个最小的网络用 C 写出来。理由很简单：本分册要验证的不是「会不会调库」，而是<strong>每一步数值是不是真的对</strong>。用 C 写，编译、运行、抓stdout 这条老路可以原封不动地复用。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>把网络想成一条两级流水线：两个数字进去，先被三个隐元各看一遍（每个隐元拿着三个旋钮加一个偏置），三个结果再被一个输出神经元汇总。</p>
+<p>「学习」在这里只有一件事：把这 13 个旋钮一点点拧到合适的位置。往哪边拧？答案是梯度——<strong>每个旋钮对误差的敏感度</strong>。算梯度有两种办法：顺着公式推（解析梯度），以及把旋钮轻轻拧一下看误差怎么变（数值梯度）。两者必须给出同一个数。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-ba83c666">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：一个结构，三种运行模式</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：一个结构，三种运行模式：逐步演示">
+<input class="vs-radio" type="radio" name="vz-ba83c666" id="vz-ba83c666-1" checked>
+<input class="vs-radio" type="radio" name="vz-ba83c666" id="vz-ba83c666-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-ba83c666-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-ba83c666-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/dlmath/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">tiny_net/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/tiny_net.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/tiny_net.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-forward.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-gradcheck.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-train.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>开始时，ch01 下什么都没有</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/dlmath/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">tiny_net/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/tiny_net.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/tiny_net.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-forward.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-gradcheck.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-train.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是动笔前的空目录。第 2 帧长出三个清单：同一个程序用不同 <code>args</code> 跑出三份 stdout，分别由 <code>numerical</code>、<code>gradient</code>、<code>train</code> 三种闸门判定。清单不是装饰——正文里每个 <code>output</code> 块都必须被某个清单的 <code>output</code> 声明，否则报 <code>output_block_uncovered</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么先把接口写在头文件里</span></header>
+<div class="box-b">
+<p><code>include/tiny_net.h</code> 只有类型和函数声明。读它就知道这个网络会什么、不会什么：能前向、能算损失、能算两种梯度、能训练。实现全在 <code>src/tiny_net.c</code> 里，<code>src/main.c</code> 只负责选模式、打印数值。等后面换更大的网络，改的是实现，不是驱动。</p>
+</div>
+</section>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/tiny_net/include/tiny_net.h"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">两层网络的全部接口：13 个参数藏在一个结构体里</span><span class="cb-file">examples/ch01/tiny_net/include/tiny_net.h</span><span class="cb-lines">第 5–23 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="5" data-to="23"><span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_IN</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_HIDDEN</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_PARAMS</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">13</span></span></span>
+<span class="cl is-empty" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">typedef</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">struct</span><span class="tk" style="color:#24292E"> {</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">w1</span><span class="tk" style="color:#24292E">[NET_IN][NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">b1</span><span class="tk" style="color:#24292E">[NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">w2</span><span class="tk" style="color:#24292E">[NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> b2;</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">} </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-empty" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_seed</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">unsigned</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">long</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">seed</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_init</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_forward</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN]);</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_loss</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_backprop</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">grad</span><span class="tk" style="color:#24292E">[NET_PARAMS]);</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_numerical_grad</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">grad</span><span class="tk" style="color:#24292E">[NET_PARAMS]);</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_param_name</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">index</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">char</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">out</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">32</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_train</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">steps</span><span class="tk" style="color:#24292E">);</span></span></span></pre></div></figure>
+<p>2×3 个 <code>w1</code>、3 个 <code>b1</code>、3 个 <code>w2</code>、1 个 <code>b2</code>，加起来正好 13。权重初值由 LCG 从 <code>BOOK_SEED</code> 生成——不用 <code>rand()</code>，因为它的实现由库决定，换个机器序列就变了。种子固定，13 个数字就固定。</p>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h2">1.2 前向：两个数字怎么变成一个预测</h2>
+<p>隐元先把两个输入各乘一个权重再加偏置，过一个 <code>tanh</code>；输出层把三个隐元加权求和，过一个 <code>sigmoid</code> 压到 (0,1)。损失取 <code>½(y-t)²</code>，平方前的 ½ 是为了求导时刚好消掉 2。</p>
+<p>种子 12345、输入 <code>(0.5, -0.3)</code>、目标 <code>0.8</code> 时，真实输出是：</p>
+<figure class="term term-output" data-id="dl-forward-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-forward-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">y=0.580931</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss=0.023996</span></span></pre></figure>
+<p>这两个数字就是本节的黄金值，写在清单的 <code>expect.numbers</code> 里，容差 <code>atol=1e-6</code>。注意：<strong>容差写在清单，不写在正文</strong>。正文里写「约等于 0.58」不算证据；闸门从 stdout 里解析 <code>y=</code> 与 <code>loss=</code> 两行，自己重算差值是否在容差内。程序要是自己打印一句 <code>PASS</code>，闸门看都不看。</p>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h3">1.3 反向：链式法则在哪一步最容易漏</h2>
+<p>记 <code>y = σ(s)</code>，<code>s = Σ hⱼw2ⱼ + b2</code>，<code>hⱼ = tanh(zⱼ)</code>，<code>zⱼ = Σ xᵢ w1ᵢⱼ + b1ⱼ</code>。损失 <code>L = ½(y-t)²</code>。从后往前：</p>
+<ul>
+<li><code>∂L/∂y = y - t</code></li>
+<li><code>∂L/∂s = (y-t) · y(1-y)</code> ← <strong>这个 <code>y(1-y)</code> 就是最常漏的 sigmoid 链式因子</strong></li>
+<li><code>∂L/∂w2ⱼ = (∂L/∂s) · hⱼ</code>，<code>∂L/∂b2 = ∂L/∂s</code></li>
+<li><code>∂L/∂hⱼ = (∂L/∂s) · w2ⱼ</code>，再乘 <code>1-hⱼ²</code> 得到 <code>∂L/∂zⱼ</code>，然后分给 <code>w1</code> 与 <code>b1</code></li>
+</ul>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">漏一个因子，所有梯度一起错</span></header>
+<div class="box-b">
+<p>写作 <code>ds = dy</code> 而不是 <code>ds = dy * y * (1-y)</code>，程序照常跑、loss 照常下降，只是下降得不对。这种错<strong>肉眼几乎看不出来</strong>——所以下面的对拍不是可选项。源码里用 <code>#ifdef GRAD_BUG</code> 把这个错误写成了可切换的开关，供闸门做阴性对照。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h4">1.4 对拍：数值梯度给解析梯度背书</h2>
+<p>中心差分不需要任何链式法则：把第 k 个参数加 <code>ε</code> 算一次损失，减 <code>ε</code> 再算一次，斜率就是 <code>(L₊-L₋)/(2ε)</code>，ε 取 <code>1e-5</code>。它慢，但<strong>明显正确</strong>，正合「暴力版」的角色。13 个参数逐个算完，与解析梯度逐行对照：</p>
+<figure class="term term-output" data-id="dl-gradcheck-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-gradcheck-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">w1_0_0 analytic=-0.0018961 numerical=-0.0018961</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">w1_0_1 analytic=-0.0114738 numerical=-0.0114738</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">w1_0_2 analytic=-0.0088071 numerical=-0.0088071</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">w1_1_0 analytic=0.0011377 numerical=0.0011377</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">w1_1_1 analytic=0.0068843 numerical=0.0068843</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">w1_1_2 analytic=0.0052843 numerical=0.0052843</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">b1_0 analytic=-0.0037922 numerical=-0.0037922</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">b1_1 analytic=-0.0229477 numerical=-0.0229477</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">b1_2 analytic=-0.0176142 numerical=-0.0176142</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">w2_0 analytic=0.0274368 numerical=0.0274368</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">w2_1 analytic=0.0261818 numerical=0.0261818</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">w2_2 analytic=0.0302945 numerical=0.0302945</span></span>
+<span class="cl is-text is-term" data-ln="13"><span class="code">b2 analytic=-0.0533324 numerical=-0.0533324</span></span></pre></figure>
+<p>清单要求至少 13 组、至少 8 组非零解析梯度、每组 <code>|analytic-numerical| ≤ 1e-5</code>。三条缺一不可：只查「每组接近」的话，一个把所有梯度都输出 0 的程序会 trivially 通过。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">阴性对照：故意写错必须被抓住</span></header>
+<div class="box-b">
+<p>清单还给了 <code>negative_flags: [&quot;-DGRAD_BUG=1&quot;]</code>。闸门用这组参数<strong>再编译一份</strong>，跑出错梯度的表；如果这份表也通过了对拍，就报 <code>gradient_harness_not_discriminating</code>——说明这套检查根本不判别。</p>
+<p>这和检测模式里的 <code>detect_not_attributable</code> 是同一条纪律：把字样打印出来不算检测，把梯度打印成「看起来对」也不算对拍。实测 <code>-DGRAD_BUG=1</code> 下第一行变成 <code>analytic=-0.0077885 numerical=-0.0018961</code>，对拍失败，阴性对照成立。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h5">1.5 训练：种子复现与收敛轨迹</h2>
+<p>把 13 个参数按 <code>w ← w - 0.5·∂L/∂w</code> 更新十步，每步打印一次 loss：</p>
+<figure class="term term-output" data-id="dl-train-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-train-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">loss=0.020956</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss=0.018392</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">loss=0.016219</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">loss=0.014366</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">loss=0.012779</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">loss=0.011412</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">loss=0.010228</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">loss=0.009198</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">loss=0.008298</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">loss=0.007509</span></span></pre></figure>
+<p>闸门对这份轨迹查四件事：至少 10 个点、起点不低于 0.01、终点不高于 0.01、首尾降幅至少 0.01，前 6 步非增（留 1e-4 的 slack）。然后<strong>同一个种子再跑一次</strong>，所有数值必须逐值一致；给了 <code>seed_contrast: 67890</code> 就再跑第三次，要求至少一个数值变化。最后这条是为了防止程序干脆把 loss 硬编码成一张表——那样同种子复现能过，对照种子也一模一样。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">复现性不等于正确性</span></header>
+<div class="box-b">
+<p>「每次跑出来一样」只说明程序是确定的，不说明它算对了。本单元里三道判定各管一件事：数值黄金值管前向对不对，梯度对拍管导数对不对，种子与收敛管训练过程是不是真的在跑。少一道都会留下能骗过闸门的写法。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h6">1.6 为什么必须先写 C，再谈框架</h2>
+<p>这一节最容易被问的问题是：明明三行 PyTorch 就能建这个网络，为什么要手写 13 个参数？答案不在「会不会写」，而在「出了错能不能定位」。</p>
+<p>框架把前向、求导、更新三件事包成一个 <code>backward()</code>，用起来省事，但它同时把链式法则的中间量藏起来了。初学者看到 loss 不下降，能改的只有学习率和层数——因为他看不见梯度到底长什么样。这一节把每一步都摊在 stdout 上：前向给出 <code>y</code> 和 <code>loss</code>，对拍给出 13 组解析梯度和数值梯度，训练给出十步 loss 轨迹。哪一步数值不对，肉眼就能定位到具体环节。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">把三道判定想成三道体检</span></header>
+<div class="box-b">
+<p>数值黄金值查的是「前向算对没有」；梯度对拍查的是「导数算对没有」；种子与收敛查的是「训练过程是不是真的在跑」。这三件事彼此独立：一个程序可以把前向算对、梯度写错，也可以梯度写对、训练循环写错（比如忘了更新参数，loss 十步全一样）。只做其中一道，等于只做了一项体检就宣布健康。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h7">1.6.1 前向的四个中间量</h3>
+<p>把 <code>net_forward</code> 拆开看，其实只有四个量，每个都有明确形状：<code>z</code> 是 3 个隐元的加权和（长度 3），<code>h = tanh(z)</code> 还是 3 个；<code>s</code> 是一个标量，把 3 个 <code>h</code> 加权求和再加偏置；最后 <code>y = σ(s)</code> 把任意实数压到 (0,1)。损失再拿 <code>y</code> 和目标 <code>0.8</code> 比较。</p>
+<p>为什么输出要过 sigmoid？因为这一节把任务定义成「预测一个 0 到 1 之间的数」。sigmoid 把 <code>s</code> 的整个实数轴压进这个区间，顺手带来一个很好的性质：它的导数能用自身表示，<code>σ'(s) = σ(s)(1-σ(s))</code>。反传时只要保存了 <code>y</code>，就不必再算一次 exp——这正是 1.3 里那个 <code>y(1-y)</code> 因子的来源。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">sigmoid 的饱和区</span></header>
+<div class="box-b">
+<p>当 <code>s</code> 很大或很小，<code>y</code> 会非常接近 1 或 0，此时 <code>y(1-y)</code> 接近 0，梯度几乎消失。上游传来的误差再大，乘上这个因子也变成近乎零，参数就「学不动」了。这就是著名的梯度消失。这一节的网络只有两层，输入和目标都温和，不至于触发；但你要记住：<strong>激活函数不是随便选的</strong>，它直接决定梯度能不能传回去。后面讲Transformer 时会看到，深层网络改用 ReLU、LayerNorm、残差连接，全是在跟这件事较劲。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h8">1.6.2 13 个参数为什么够</h3>
+<p><code>w1</code> 是 2×3，意思是「两个输入各自连到三个隐元」，六条边六个权重；<code>b1</code> 是三个隐元各自一个偏置；<code>w2</code> 是三个隐元各自连到输出，三条边三个权重；<code>b2</code> 一个。总数是 <code>6+3+3+1=13</code>。</p>
+<p>这个数字看起来小得可笑，但结构上和真正的 LLM 没有区别——只是每个数字都被放大了几千亿倍。一个 Transformer 层里的 attention 有 <code>W_Q</code>、<code>W_K</code>、<code>W_V</code>、<code>W_O</code> 四个矩阵，本质都是「把一组向量线性映射到另一组向量」，和这里的 <code>w1</code>、<code>w2</code> 是同一件事。区别只在维度：这里是 2→3，那里是几千→几千。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从 13 个参数到 13 亿，什么变了</span></header>
+<div class="box-b">
+<p>变的不是数学，是三件事。第一，矩阵乘法从手写循环换成 BLAS/GPU 核，因为朴素实现的复杂度不够用。第二，随机数不再手写 LCG，而是用专门设计的初始化分布（Xavier / He），保证前向的方差不爆炸也不消失。第三，训练的每一步都要在海量数据上做小批量平均，还要记录动量、二阶矩等状态。但「前向算对、梯度对拍、固定种子复现」这三条纪律一条都没变——这一节练的就是这三条。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h9">1.6.3 梯度表怎么读</h3>
+<p>13 行输出里，<code>analytic</code> 是链式法则推出来的，<code>numerical</code> 是把参数加减小量后看损失怎么变。两者每行都对到小数点后七位，这不是巧合：中心差分的误差是 <code>O(ε²)</code>，ε 取 <code>1e-5</code>，误差量级在 <code>1e-10</code> 附近，远小于打印精度。</p>
+<p>读表时别只看「数值接近不接近」，还要看符号。比如 <code>b2 analytic=-0.0533324</code>，是负的；这意味着把 <code>b2</code> 增大一点，loss 会下降——参数更新时 <code>b2 ← b2 - 0.5×(-0.0533324)</code>，也就是往增大方向走。训练十步后 loss 从 <code>0.020956</code> 降到 <code>0.007509</code>，正是这些符号 collectively 起作用的结果。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把学习率改大试试</span></header>
+<div class="box-b">
+<p><code>net_train</code> 里写的是 <code>0.5 * grad</code>。改成 <code>5.0</code>，前几步可能掉得更快，但很可能某一步直接冲过最低点，loss 反而反弹，甚至出现 <code>nan</code>。这不是 bug，是学习率太大导致步长越过了碗底。把 <code>slack</code> 之外的判定条件不动，只改学习率再跑，看看 <code>train_loss_not_decreasing</code> 会不会报出来——这一步能让你对「收敛判定不是形式主义」有直观感受。改完记得把 <code>last_max</code> 之类的黄金值按真实输出更新。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h10">1.6.4 阴性对照到底在防什么</h3>
+<p>有人可能会说：梯度对拍已经把 13 行都比过了，为什么还要多编译一份错梯度？答案是防「测试本身失灵」。假设某天有人把 <code>net_numerical_grad</code> 里的扰动量 <code>eps</code> 写成 <code>0.0</code>，那么数值梯度全部是 0/0 或者 0，解析梯度也恰好接近 0 的参数会「通过」；再假设有人把对拍的容差从 <code>1e-5</code> 放宽到 <code>1.0</code>，任何错误都能过。这些改动都不会让闸门报错，除非闸门主动做一次「故意写错必须被抓住」的演练。</p>
+<p><code>negative_flags: [&quot;-DGRAD_BUG=1&quot;]</code> 就是这次演练。它不改变测试代码，只改变被测代码里的一个链式因子。正确实现对拍通过、错误实现对拍失败，才说明这套检查有判别力。实测错误版本的第一行是 <code>analytic=-0.0077885 numerical=-0.0018961</code>，差了四倍，远超过 <code>atol=1e-5</code>。如果你把 <code>GRAD_BUG</code> 的效果注释掉，闸门会报 <code>gradient_harness_not_discriminating</code>——这跟检测模式里「把字样 printf 出来也算检测」是同一种骗法，只是换了个场景。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">把这个方法搬到别处</span></header>
+<div class="box-b">
+<p>「阴性对照」不是梯度对拍专用的。任何「自动检查」都应该问一句：如果我故意把被检查的东西弄坏，检查器会不会报警？编译器的 <code>-Werror</code> 可以拿一个真警告试；单元测试可以临时改一个断言的期望值；这一节的训练收敛判定可以给程序喂一组硬编码的 loss 表。能报警的说明检查有效，不能报警的就是零证据通过。这条纪律比任何具体工具都值钱。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h11">1.6.5 为什么要固定种子而不是只固定数据</h3>
+<p>这一节的输入 <code>x=(0.5,-0.3)</code> 和目标 <code>0.8</code> 都是写死的，看起来已经「固定数据」了。但真正决定 13 个初值的是 <code>BOOK_SEED</code>：同一个输入，换一个种子，初始权重就全变，前向输出和 loss 轨迹跟着变。所以只固定数据不够——<strong>随机来源不止一个</strong>，权重初始化是最隐蔽的那个。</p>
+<p>闸门把种子当环境变量注入，是有意为之：种子写在源码里叫「硬编码」，写在清单里叫「实验条件」。前者读者看不出来，后者一眼可见且可被对照实验改变。<code>seed_contrast: 67890</code> 就是对照实验——如果换种子后数字纹丝不动，说明程序根本没用种子，那些「可复现」的数字不过是一张写死的表。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">可复现不等于正确</span></header>
+<div class="box-b">
+<p>这一点值得重复。「同样输入每次输出一样」只证明程序是确定的；一个把整条 loss 曲线硬编码进数组的程序也完全确定。再强调一次这一节的三道判定：数值黄金值证明前向数值对，梯度对拍证明导数对，对照种子证明输出确实由权重算出来。三者合起来，才能说这个训练实验是真的。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h12">1.7 这一节新增了什么</h2>
+<p>回到 1.1 的第 2 帧：<code>tiny_net/</code> 下多了一个头文件、两个源文件、三个清单。三个清单指向同一个正文单元的三个 <code>output</code> 块；<code>run.js --all</code> 的全量覆盖检查会逐个核对，哪个块没被声明都会报 <code>output_block_uncovered</code>。</p>
+<p>下一单元补线性代数：这里的 <code>w1</code>、<code>w2</code> 现在还是数组，接下来要把它们写成矩阵，把整层前向写成一个矩阵乘法——那时「13 个参数」会变成「一个权重矩阵」，但梯度对拍的纪律一点不变。把这一节的三道判定和阴性对照的写法记牢，后面所有数值实验都照这个模子铺开。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>13 个参数的两层网络：2×3 个 <code>w1</code>、3 个 <code>b1</code>、3 个 <code>w2</code>、1 个 <code>b2</code>；权重由 LCG + 固定种子生成，不用 <code>rand()</code>；</li>
+<li>反向传播最容易漏的是 sigmoid 的链式因子 <code>y(1-y)</code>；</li>
+<li>中心差分是「明显正确的暴力版」，解析梯度必须与它逐项相符，且非零梯度要有足够多；</li>
+<li>阴性对照不是装饰：<code>negative_flags</code> 编译出的错梯度若也通过，闸门报 <code>gradient_harness_not_discriminating</code>；</li>
+<li>训练判定 = 收敛轨迹 + 同种子复现 + 对照种子必须改变输出；程序自报的 PASS 一律不算证据；</li>
+<li>容差只能写在清单的 <code>expect</code>，正文贴真实 stdout，<code>--fix</code> 回写原始输出。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>为什么中心差分取 <code>(L₊-L₋)/(2ε)</code> 而不是 <code>(L₊-L)/ε</code>？后者在什么时候也能用？</li>
+<li>梯度对拍为什么还要单独查「非零解析梯度的个数」？</li>
+<li><code>negative_flags</code> 编译出来的错梯度如果也通过了，说明什么？闸门报什么码？</li>
+<li><code>train</code> 模式为什么要跑三次？只跑两次（同种子）够不够？</li>
+<li>把 LCG 换成 <code>rand()</code>，哪个判定最可能先出问题？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>中心差分是二阶精度，误差 <code>O(ε²)</code>；单侧差分是一阶 <code>O(ε)</code>，ε=1e-5 时精度差好几个量级。单侧差分在 ε 极小、函数求值极贵时才退而求其次。</li>
+<li>防 trivially 通过：一个把全部解析梯度输出 0 的程序，<code>|0 - 数值梯度|</code> 在 ε 很小时可能落在容差内（尤其数值梯度本身也接近 0 的参数）。要求足够多组非零，才能证明真的算了梯度。</li>
+<li>说明这套对拍不判别——错梯度和对梯度都放过，等于零证据。闸门报 <code>gradient_harness_not_discriminating</code>，与 detect 模式的 <code>detect_not_attributable</code> 是同一类失败。</li>
+<li>不够。同种子两次一致只能证明确定性；把 loss 表硬编码进程序也能过。对照种子必须让输出变化，才能证明数值真是从种子驱动的权重算出来的。</li>
+<li>同种子复现。<code>rand()</code> 的序列由 C 运行库实现决定，换台机器或换编译器就可能不同；<code>train</code> 的两次同种子对账会报 <code>train_nondeterministic</code>。（前向与梯度的黄金值也会跟着变，但复现检查最直接。）</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

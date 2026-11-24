@@ -254,8 +254,8 @@ function scrollToLibrary(): void {
         </p>
 
         <p class="notes-lede">
-          六种笔记来自同一套 Markdown 写作流水线：模型先把晦涩的教材语言重写成人话，
-          再由复核与机械验算把结论钉住。Rust 笔记的 175 份代码清单全部真编译、真运行，算法单元另配随机对拍，正文输出由真实运行结果回写。选一种，直接在站内翻开——没有跳转，没有另一套网页界面。
+          {{ notesTotals.kinds }} 种笔记来自同一套 Markdown 写作流水线：模型先把晦涩的教材语言重写成人话，
+          再由复核与机械验算把结论钉住。从线性代数、概率优化到 Transformer 与 LLM，每本书的每个数字都由真跑和闸门对账得出。选一种，直接在站内翻开——没有跳转，没有另一套网页界面。
         </p>
 
         <div class="hero-actions">
@@ -273,7 +273,7 @@ function scrollToLibrary(): void {
             </svg>
           </button>
           <button type="button" class="notes-ghost" data-cursor="target" @click="scrollToLibrary">
-            先看六种笔记
+            先看 {{ notesTotals.kinds }} 种笔记
           </button>
         </div>
 
@@ -301,7 +301,7 @@ function scrollToLibrary(): void {
         </p>
       </div>
 
-      <div class="cover-shelf" aria-label="六种笔记的封面">
+      <div class="cover-shelf" :aria-label="`${notesTotals.kinds} 种笔记的封面`">
         <button
           v-for="(item, index) in notesCollections"
           :key="item.id"
@@ -325,11 +325,11 @@ function scrollToLibrary(): void {
 
     <section id="notes-library" class="notes-library" aria-labelledby="library-title">
       <div class="section-head">
-        <p class="section-kicker">THE LIBRARY / 06</p>
-        <h2 id="library-title">六种笔记，按需翻开</h2>
+        <p class="section-kicker">THE LIBRARY / {{ String(notesTotals.kinds).padStart(2, '0') }}</p>
+        <h2 id="library-title">{{ notesTotals.kinds }} 种笔记，按需翻开</h2>
         <p>
-          不是重复的教材：正课版负责把每一步讲透，复习版只留概念与做题路径，
-          C 与 C++ 笔记分别从编译器 / 对象生命周期的视角讲工程，算法笔记用对拍把结论钉在随机数据上，Rust 笔记把机制、工程组织与算法实现串成一条线：34 个单元、18 万字、351 页。
+          不是重复的教材：数学底座把线性代数、多元微积分、概率优化讲透，工程笔记从编译器 / 对象生命周期 / Rust 机制讲实现；
+          新上架的 PyTorch 桥接、机器学习核心与 Transformer 与 LLM 三册把这条链路接到大模型算法开发，每个数字都由真跑与闸门对账得出。
         </p>
       </div>
 

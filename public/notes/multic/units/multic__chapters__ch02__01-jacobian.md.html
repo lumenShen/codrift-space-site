@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jacobian：向量值函数的导数长什么形状</title>
+<meta name="description" content="零基础 · 第 3 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-multic-chapters-ch02-01-jacobian-md { @top-right { content: "Jacobian：向量值函数的导数长什么形状"; } }
+#content { page: p-u-multic-chapters-ch02-01-jacobian-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/multic.html">《multic》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">Jacobian：向量值函数的导数长什么形状</h1><p class="doc-sub">零基础 · 第 3 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/multic/chapters/ch02/01-jacobian.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h1">3.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h2">3.2 向量值函数：输出从标量变成向量</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h3">3.3 Jacobian 的形状：行是输出，列是输入</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h4">3.4 线性近似：Jacobian 是最佳的局部线性映射</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h5">3.5 解析版与数值版：把四格真跑出来</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h6">3.6 梯度是 Jacobian 的特例</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h7">3.7 batch Jacobian：神经网络里的直觉</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h8">3.8 Jacobian 的行列式：导数在多维里的推广</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h9">3.9 链式法则中的 Jacobian：反向为什么需要转置</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h10">3.10 从标量到向量：导数的概念地图</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h11">3.11 可微与 Jacobian 的存在</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h12">3.12 把整节串成一条数值叙事</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h13">3.13 再用三个例子磨手感</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h14">3.14 方向导数与 Jacobian 的行</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h15">3.15 Jacobian 的秩：输出真的独立吗</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h16">3.16 数值实现里的三个细节</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h17">3.17 把 Jacobian 与后面几节的关系摆清楚</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h18">3.18 坐标变换下的 Jacobian：链式法则的几何</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h19">3.19 常见误解速查与第一人称踩坑记录</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-01-jacobian-md-h20">3.20 为什么这一节值得单独占一个单元</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清向量值函数 <code>F: Rⁿ→Rᵐ</code> 的导数为什么是一个 <code>m×n</code> 的矩阵；</li>
+<li>手算 <code>F(x,y)=(x²+y, xy)</code> 在指定点的 Jacobian，并解释「行=输出、列=输入」；</li>
+<li>用中心差分独立算出数值 Jacobian，与解析版逐项对照；</li>
+<li>解释 Jacobian 作为「最佳局部线性近似」的含义，以及它与可微的关系；</li>
+<li>说清梯度是 Jacobian 在标量输出时的特例，以及反向传播里为什么需要转置。</li>
+</ul>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h1">3.1 先看工程长什么样</h2>
+<p>前两个单元的输出都是标量：一个函数值，一个 loss。这一单元第一次让输出变成多个数。<code>F(x,y)=(x²+y, xy)</code> 吃进两个输入，吐出两个输出。导数不再是一个向量，而是一张表——每个输出对每个输入的偏导各占一格。这张表就是 Jacobian 矩阵。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一个函数突然变成两个输出，会发生什么</span></header>
+<div class="box-b">
+<p>之前的 <code>f(x,y)</code> 像一台机器：两个旋钮进去，一个读数出来。梯度告诉我们每个旋钮对读数的灵敏度。现在换成 <code>F(x,y)</code>：还是两个旋钮，但有两个读数。每个旋钮都会同时影响两个读数，于是灵敏度从「两个数」变成「四个数」。把这四个数按「哪一行是哪个读数、哪一列是哪个旋钮」排好，得到 2×2 的 Jacobian。它不是一个全新的概念，只是把上一单元的偏导按输出再多排一维。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-b4b1216a">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：进入 ch02，多了一个 Jacobian 探针</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：进入 ch02，多了一个 Jacobian 探针：逐步演示">
+<input class="vs-radio" type="radio" name="vz-b4b1216a" id="vz-b4b1216a-1" checked>
+<input class="vs-radio" type="radio" name="vz-b4b1216a" id="vz-b4b1216a-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-b4b1216a-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-b4b1216a-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/multic/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">partial_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">steepest/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/jac.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/jac.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc03-jac.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>ch01 留下的两个例子</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/multic/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">partial_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">steepest/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元在 ch02 下新增</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/jac.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/jac.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc03-jac.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧画的是动笔前的形态：<code>examples/ch01/</code> 里有前两个单元的例子，<code>examples/ch02/</code> 还没有内容。第 2 帧在 <code>ch02/</code> 下长出 <code>jac_probe/</code>。注意这是第二个项目，所以按照规矩必须多文件：<code>jac.h</code> 声明接口、<code>jac.c</code> 实现解析与数值两套 Jacobian、<code>main.c</code> 驱动打印、清单声明 <code>numerical</code> 模式。共用库依旧不动，<code>mc_partial</code> 与 <code>mc_print_mat</code> 直接拿来用。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么解析版与数值版同时留在代码里</span></header>
+<div class="box-b">
+<p>和 mc01 同样的理由：解析版快但可能推错，数值版慢但明显正确。<code>jac_analytic</code> 写公式，<code>jac_numerical</code> 对每个输出、每个输入做功差分。真跑把两张矩阵并排打印，一眼就能看出是否逐格相等。这一节没有用 <code>gradient</code> 模式加阴性对照，是因为公式简单到几乎不会错；真正的看点是「形状对不对」——行列的约定一旦反了，数值可能对不上，也可能碰巧对上（本例恰好对称时才看不出来，3.8 节专门讲这个坑）。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h2">3.2 向量值函数：输出从标量变成向量</h2>
+<p>标量值函数 <code>f: Rⁿ→R</code> 把一个向量映射成一个数。向量值函数 <code>F: Rⁿ→Rᵐ</code> 把一个向量映射成另一个向量，可以拆成 <code>m</code> 个标量分量函数：<code>F(x)=(F₁(x), F₂(x), …, Fₘ(x))</code>。本例 <code>F(x,y)=(u,v)</code>，其中 <code>u(x,y)=x²+y</code>，<code>v(x,y)=xy</code>。两个分量都是二元标量函数，求偏导的办法你已经会了。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">拆成标量分量，事情就简单了</span></header>
+<div class="box-b">
+<p>遇到向量值函数别慌，它不是新物种。把它拆开看，<code>F</code> 的输出有两个数，每个数都是一个普通的二元函数。你上一单元会对 <code>f(x,y)</code> 求偏导，现在对 <code>u</code> 和 <code>v</code> 各求一遍就行了。唯一的新问题是「结果怎么摆」：两个函数各有两个偏导，一共四个数，必须约定谁放哪格。这个约定就是 Jacobian 的行列规则，也是这一节最需要记住的东西。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-e59c8b8f">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 向量值函数：一个输入向量，两个输出分量</figcaption>
+<div class="viz-screen" role="group" aria-label="向量值函数：一个输入向量，两个输出分量：逐步演示">
+<input class="vs-radio" type="radio" name="vz-e59c8b8f" id="vz-e59c8b8f-1" checked>
+<input class="vs-radio" type="radio" name="vz-e59c8b8f" id="vz-e59c8b8f-2">
+<input class="vs-radio" type="radio" name="vz-e59c8b8f" id="vz-e59c8b8f-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-e59c8b8f-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-e59c8b8f-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-e59c8b8f-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">输入 ：(x,y)=(2,3)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">上通道 ：u=x²+y，输出 7</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">下通道 ：v=xy，输出 6</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">输入</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">上通道</span><span class="ve-lbl">同时喂给两支</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">输入</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">下通道</span><span class="ve-lbl">同时喂给两支</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">输出 ：(7,6)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">上通道</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">输出</span><span class="ve-lbl">第一分量</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">下通道</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">输出</span><span class="ve-lbl">第二分量</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>两个输入送进函数</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">输入 ：(x,y)=(2,3)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>函数拆成两个标量通道</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">上通道 ：u=x²+y，输出 7</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">下通道 ：v=xy，输出 6</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">输入</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">上通道</span><span class="ve-lbl">同时喂给两支</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">输入</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">下通道</span><span class="ve-lbl">同时喂给两支</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>两个输出合回一个向量</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">输出 ：(7,6)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">上通道</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">输出</span><span class="ve-lbl">第一分量</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">下通道</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">输出</span><span class="ve-lbl">第二分量</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是输入 <code>(2,3)</code>；第 2 帧把函数拆成两支，各自算出 7 与 6；第 3 帧把结果合回向量 <code>(7,6)</code>。三帧各自自包含，第 3 帧仍写出两支通道作为来源。</p>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h3">3.3 Jacobian 的形状：行是输出，列是输入</h2>
+<p>定义：若 <code>F: Rⁿ→Rᵐ</code>，则其 Jacobian <code>J</code> 是一个 <code>m</code> 行 <code>n</code> 列的矩阵，第 <code>i</code> 行第 <code>j</code> 列的元素是 <code>∂Fᵢ/∂xⱼ</code>——<strong>第 i 个输出对第 j 个输入的偏导</strong>。口诀是「行=输出，列=输入」。本例 <code>m=2</code>、<code>n=2</code>，所以 <code>J</code> 是 2×2：</p>
+<p><code>J = [[∂u/∂x, ∂u/∂y], [∂v/∂x, ∂v/∂y]]</code></p>
+<p>在 <code>(2,3)</code> 处：<code>∂u/∂x=2x=4</code>，<code>∂u/∂y=1</code>，<code>∂v/∂x=y=3</code>，<code>∂v/∂y=x=2</code>，于是 <code>J=[[4,1],[3,2]]</code>。这就是解析版要写出的四格。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把行列记反，方形矩阵上看不出来</span></header>
+<div class="box-b">
+<p>你会觉得「反正都是 2×2，行先列后有什么区别」。真相是：本例 <code>J=[[4,1],[3,2]]</code>，转置后是 <code>[[4,3],[1,2]]</code>，两个都是合法的 2×2 矩阵，程序不会报维度错。只有当输出与输入维度不同时（比如 <code>n=3, m=2</code>），<code>J</code> 是 2×3，转置是 3×2，形状才暴露问题。所以方形情形是最危险的——你必须靠「行=输出、列=输入」这条约定主动检查，不能指望编译器。mc08 里「漏转置」在方形矩阵上隐形，是同一类陷阱。</p>
+</div>
+</section>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-b02e5e95">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> Jacobian 的网格：行对应输出，列对应输入</figcaption>
+<div class="viz-screen" role="group" aria-label="Jacobian 的网格：行对应输出，列对应输入：逐步演示">
+<input class="vs-radio" type="radio" name="vz-b02e5e95" id="vz-b02e5e95-1" checked>
+<input class="vs-radio" type="radio" name="vz-b02e5e95" id="vz-b02e5e95-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-b02e5e95-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-b02e5e95-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[0][0] = 4 ：∂u/∂x，第一行第一列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[0][1] = 1 ：∂u/∂y，第一行第二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[1][0] = 3 ：∂v/∂x，第二行第一列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[1][1] = 2 ：∂v/∂y，第二行第二列</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">第一行 ：输出 u 的梯度 (4,1)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">第一列 ：输入 x 影响所有输出 (4,3)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">J[0][0]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">J[0][1]</span><span class="ve-lbl">同一行，换输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">J[0][0]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">J[1][0]</span><span class="ve-lbl">同一列，换输出</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>2×2 的四个格子，标上来源</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[0][0] = 4 ：∂u/∂x，第一行第一列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[0][1] = 1 ：∂u/∂y，第一行第二列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[1][0] = 3 ：∂v/∂x，第二行第一列</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">J[1][1] = 2 ：∂v/∂y，第二行第二列</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>按行读与按列读给出不同解释</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">第一行 ：输出 u 的梯度 (4,1)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">第一列 ：输入 x 影响所有输出 (4,3)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">J[0][0]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">J[0][1]</span><span class="ve-lbl">同一行，换输入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">J[0][0]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">J[1][0]</span><span class="ve-lbl">同一列，换输出</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧把四格连同来源写出来。第 2 帧点出两种读法：<strong>按行读</strong>，得到某个输出的梯度；<strong>按列读</strong>，得到某个输入对所有输出的影响。这是理解 Jacobian 的关键——它同时编码了「每个输出对输入的敏感度」和「每个输入对输出的影响」两组信息。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">为什么行是输出而不是输入</span></header>
+<div class="box-b">
+<p>这是约定，不是定理，但约定得很聪明。线性近似写成 <code>F(x+Δx) ≈ F(x) + J·Δx</code>。<code>F</code> 是 <code>m</code> 维向量，<code>Δx</code> 是 <code>n</code> 维向量，矩阵乘向量要得到 <code>m</code> 维结果，<code>J</code> 必须是 <code>m×n</code>——也就是行对应输出。若反过来定义成 <code>n×m</code>，每次写线性近似都得转置，反而累赘。所以「行=输出」是让公式最省事的约定，记住这个理由比死背口诀牢。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h4">3.4 线性近似：Jacobian 是最佳的局部线性映射</h2>
+<p>一元函数可导意味着「局部像直线」，多元函数可微意味着「局部像一张平面（线性映射）」。Jacobian 就是这张平面的系数矩阵。具体地，在 <code>p</code> 附近：</p>
+<p><code>F(p+Δx) ≈ F(p) + J(p)·Δx</code></p>
+<p>误差是 <code>o(‖Δx‖)</code>。这意味着：如果你在 <code>p</code> 附近挪动一小步 <code>Δx</code>，输出的变化可以先用矩阵乘法 <code>J·Δx</code> 算出来，剩下的误差比步长更小。Jacobian 是「在 <code>p</code> 处最贴合 <code>F</code> 的线性映射」。</p>
+<p>拿本例验一下。在 <code>p=(2,3)</code> 处 <code>F(p)=(7,6)</code>，<code>J=[[4,1],[3,2]]</code>。往 x 正方向挪 <code>0.01</code>，<code>Δx=(0.01,0)</code>，线性近似预测 <code>ΔF≈J·Δx=(0.04,0.03)</code>，于是 <code>F≈(7.04,6.03)</code>。真值：<code>u=2.01²+3=4.0401+3=7.0401</code>，<code>v=2.01×3=6.03</code>，即 <code>(7.0401,6.03)</code>。误差 <code>(0.0001,0)</code>，确实是步长 <code>0.01</code> 的平方量级——这正是 <code>o(‖Δx‖)</code> 的味道。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">自己再算一个斜向的步</span></header>
+<div class="box-b">
+<p>取 <code>Δx=(0.01,0.02)</code>，线性预测 <code>ΔF=(4×0.01+1×0.02, 3×0.01+2×0.02)=(0.06,0.07)</code>，预测点 <code>(7.06,6.07)</code>。真值 <code>u=2.01²+3.02=4.0401+3.02=7.0601</code>，<code>v=2.01×3.02=6.0702</code>。真值 <code>(7.0601,6.0702)</code>，误差 <code>(0.0001,0.0002)</code>，仍是步长的平方量级。两个例子都说明 Jacobian 给出的线性项抓住了一阶变化，剩下的是二阶小量。把步长减半，误差会变成四分之一——这就是「一阶近似」的含义。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-27830bb3">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 线性近似：用一张平面替换曲面</figcaption>
+<div class="viz-screen" role="group" aria-label="线性近似：用一张平面替换曲面：逐步演示">
+<input class="vs-radio" type="radio" name="vz-27830bb3" id="vz-27830bb3-1" checked>
+<input class="vs-radio" type="radio" name="vz-27830bb3" id="vz-27830bb3-2">
+<input class="vs-radio" type="radio" name="vz-27830bb3" id="vz-27830bb3-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-27830bb3-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-27830bb3-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-27830bb3-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">原点 ：p=(2,3)，F(p)=(7,6)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">位移 ：Δx=(0.01,0)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">一阶项 ：J·Δx=(0.04,0.03)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">原点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">一阶项</span><span class="ve-lbl">矩阵乘向量</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">近似点 ：(7.04,6.03)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：(7.0401,6.03)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">一阶项</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">近似点</span><span class="ve-lbl">加回 F(p)</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">近似点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">真值</span><span class="ve-lbl">误差是 o(‖Δx‖)</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>在原点点取值</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">原点 ：p=(2,3)，F(p)=(7,6)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>加一阶项，得到近似点</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">位移 ：Δx=(0.01,0)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">一阶项 ：J·Δx=(0.04,0.03)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">原点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">一阶项</span><span class="ve-lbl">矩阵乘向量</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>真值与近似值只差二阶小量</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">近似点 ：(7.04,6.03)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：(7.0401,6.03)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">一阶项</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">近似点</span><span class="ve-lbl">加回 F(p)</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">近似点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">真值</span><span class="ve-lbl">误差是 o(‖Δx‖)</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧展示线性项怎么算；第 3 帧把近似点与真值并列，误差是 <code>0.0001</code>，相对步长 <code>0.01</code> 是高阶小量。三帧自包含。</p>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h5">3.5 解析版与数值版：把四格真跑出来</h2>
+<p>源码里解析版直接写四个公式，数值版用共用库的 <code>mc_partial</code> 对每个输出、每个输入做中心差分。下面是两段核心实现。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch02/jac_probe/src/jac.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch02/jac_probe/src/jac.c</span><span class="cb-lines">第 13–30 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="13" data-to="30"><span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* J = [[∂u/∂x, ∂u/∂y], [∂v/∂x, ∂v/∂y]] = [[2x, 1], [y, x]]。 */</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">jc_analytic</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">mc_mat_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">j</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">j </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_zero_mat</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl is-marked" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> x.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">];</span><span class="k-note">u 对 x 的偏导</span></span></span>
+<span class="cl is-marked" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">u 对 y 的偏导</span></span></span>
+<span class="cl is-marked" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> x.v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">];</span><span class="k-note">v 对 x 的偏导</span></span></span>
+<span class="cl is-marked" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> x.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">];</span><span class="k-note">v 对 y 的偏导</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span>
+<span class="cl is-empty" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 数值版：第 i 行第 k 列是第 i 个输出对第 k 个输入的中心差分。 */</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">jc_numerical</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">mc_mat_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">j</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> eps </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">j </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_zero_mat</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl is-marked" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_partial</span><span class="tk" style="color:#24292E">(jc_u, x, </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">, eps);</span><span class="k-note">数值版第一格</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_partial</span><span class="tk" style="color:#24292E">(jc_u, x, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">, eps);</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_partial</span><span class="tk" style="color:#24292E">(jc_v, x, </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">, eps);</span></span></span>
+<span class="cl is-marked" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    j-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_partial</span><span class="tk" style="color:#24292E">(jc_v, x, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">, eps);</span><span class="k-note">数值版第三格</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">16</span>u 对 x 的偏导</li><li><span class="cb-note-ln">17</span>u 对 y 的偏导</li><li><span class="cb-note-ln">18</span>v 对 x 的偏导</li><li><span class="cb-note-ln">19</span>v 对 y 的偏导</li><li><span class="cb-note-ln">26</span>数值版第一格</li><li><span class="cb-note-ln">29</span>数值版第三格</li></ol></figure>
+<p>第 16 到 19 行是解析公式，必须和「行=输出、列=输入」的约定一致。第 26 到 29 行是数值版：两次调用 <code>mc_partial(jc_u, …)</code> 填第一行，两次 <code>mc_partial(jc_v, …)</code> 填第二行。注意 <code>mc_partial</code> 的第一个参数是函数指针，所以同一个原语既能算 <code>u</code> 的偏导也能算 <code>v</code> 的偏导——这正是共用库把「数值微分」与「具体函数」解耦的好处。</p>
+<p>真跑 stdout：</p>
+<figure class="term term-output" data-id="mc03-jac-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">mc03-jac-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">J_analytic:[4.000000,1.000000;3.000000,2.000000]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">J_numerical:[4.000000,1.000000;3.000000,2.000000]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">j00=4.0000000</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">j01=1.0000000</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">j10=3.0000000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">j11=2.0000000</span></span></pre></figure>
+<p>前两行用冒号打印矩阵（分号分隔行、逗号分隔列），和向量一样是字面文本，不参与数值对账。后四行 <code>j00</code> 到 <code>j11</code> 是四个黄金值，清单 <code>expect.numbers</code> 里各给了 <code>atol=1e-6</code>。解析版与数值版两张矩阵逐格相同，说明形状约定和公式都没写错。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">本机实测：四个数字都来自真跑</span></header>
+<div class="box-b">
+<ul>
+<li>工具链：gcc {{gcc}}（{{cstd}}），编译参数 <code>-std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Iinclude -I../../common/include</code>，链接 <code>-lm</code>；</li>
+<li>命令（在 <code>examples/ch02/jac_probe/</code> 里）：<code>gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Iinclude -I../../common/include src/main.c src/jac.c ../../common/src/multicalc.c -lm -o /tmp/mc03-jac.exe</code>；</li>
+<li>结果：编译退出码 0、无警告、运行退出码 0；解析矩阵与数值矩阵逐格相同，四个黄金值 <code>4,1,3,2</code> 全部在 <code>atol=1e-6</code> 内对上。</li>
+</ul>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h6">3.6 梯度是 Jacobian 的特例</h2>
+<p>现在把 Jacobian 和前两单元的梯度连起来。标量输出 <code>f: Rⁿ→R</code> 是 <code>m=1</code> 的特例，它的 Jacobian 是 <code>1×n</code> 的一行：<code>[∂f/∂x₁, …, ∂f/∂xₙ]</code>。我们习惯把梯度写成与输入同形的 <code>n</code> 维列向量，也就是把这一行<strong>转置</strong>过来。所以梯度不是与 Jacobian 无关的新东西，它就是标量输出时的那一行，只是被转置成了列的形状。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">转置来自「同形」偏好，不是数学必然</span></header>
+<div class="box-b">
+<p>数学上，<code>f</code> 的 Jacobian 严格是一行；工程上，框架把梯度存成和参数同形的张量。要让一行变成同形的一列，只能转置。你看到的每一个「梯度转置」，几乎都在履行这个翻译职责。本例是 2×2 的方形 Jacobian，转不转置形状都一样，所以看不出来；等遇到 <code>m≠n</code> 的情形，转置的必要性就一目了然。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把 Jacobian 当成「一堆梯度」而忽略行结构</span></header>
+<div class="box-b">
+<p>你会说：Jacobian 不就是每个输出各有一个梯度，堆起来吗？对，但「怎么堆」正是关键。若把每个输出的梯度都写成列向量再左右并排，得到的是 <code>n×m</code>，与标准的 <code>m×n</code> 差一个转置。这个错误在反向传播里会直接导致形状不匹配：上游梯度是 <code>m</code> 维，要乘 <code>n×m</code> 的矩阵根本乘不了。养成习惯：写 Jacobian 时先问「输出维数 m 是多少」，把它作为行数定下来，再填列。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h7">3.7 batch Jacobian：神经网络里的直觉</h2>
+<p>训练时输入往往是一整个 batch：<code>B</code> 个样本，每个 <code>n</code> 维。把 <code>F</code> 作用在每个样本上，得到 <code>B</code> 个 <code>m</code> 维输出。如果对每个样本都算一份 Jacobian，就得到 <code>B</code> 份 <code>m×n</code> 矩阵，堆起来是一个 <code>B×m×n</code> 的三阶张量。框架里做 batch 的 gradcheck 时，就是在跟这个张量打交道。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">batch 维度不要和 Jacobian 的行列混在一起</span></header>
+<div class="box-b">
+<p>你会觉得 <code>B×m×n</code> 里的 <code>B</code> 只是一层包装，没什么讲究。真相是：框架在 batch 维上通常做向量化，Jacobian 的 <code>m×n</code> 计算对每个样本独立，但内存布局必须明确「哪一维是 batch」。把 batch 维和输入维搞混，会出现「矩阵乘法把不同样本混在一起」的 bug，而且往往不报错。工程上的做法是把 batch 当作最外层维度固定下来，里面才是每个样本的 <code>m×n</code>。代价是多了内存开销，换来的是逻辑清晰。</p>
+</div>
+</section>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-fc0c9ba2">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> batch Jacobian：每个样本一份 m×n</figcaption>
+<div class="viz-screen" role="group" aria-label="batch Jacobian：每个样本一份 m×n：逐步演示">
+<input class="vs-radio" type="radio" name="vz-fc0c9ba2" id="vz-fc0c9ba2-1" checked>
+<input class="vs-radio" type="radio" name="vz-fc0c9ba2" id="vz-fc0c9ba2-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-fc0c9ba2-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-fc0c9ba2-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本0 ：输入 (2,3)，一份 2×2 Jacobian</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本1 ：输入 (1,4)，一份 2×2 Jacobian</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">张量 ：2 份 2×2，形状 2×2×2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">样本0</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">张量</span><span class="ve-lbl">第一片</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">样本1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">张量</span><span class="ve-lbl">第二片</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>batch 里有两个样本</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本0 ：输入 (2,3)，一份 2×2 Jacobian</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本1 ：输入 (1,4)，一份 2×2 Jacobian</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>堆成三阶张量，batch 在最外层</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">张量 ：2 份 2×2，形状 2×2×2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">样本0</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">张量</span><span class="ve-lbl">第一片</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">样本1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">张量</span><span class="ve-lbl">第二片</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧强调每个样本有自己的 Jacobian；第 2 帧把它们堆成三阶张量，batch 维在最外层。节点文字都短，打印出来也是两张完整的图。</p>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h8">3.8 Jacobian 的行列式：导数在多维里的推广</h2>
+<p>一元导数是一个数，可以比较大小。多元 Jacobian 是矩阵，不能直接比大小，但它的行列式有类似「局部放大率」的意义：线性映射 <code>Δx ↦ J·Δx</code> 把单位体积缩放 <code>|det J|</code> 倍。本例 <code>det J = 4×2 − 1×3 = 5</code>，说明 <code>F</code> 在 <code>(2,3)</code> 附近把面积放大约 5 倍。行列式为 0 意味着映射在这个点把某个方向压扁，局部不可逆——这是多元版「导数为零」的对应现象。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">行列式为零不等于函数不单调</span></header>
+<div class="box-b">
+<p>你会把 <code>det J=0</code> 当成「这里出问题了」。真相是：它只说明线性近似不可逆，<code>F</code> 本身可能在其他方面表现良好。比如 <code>F(x,y)=(x²,y)</code> 在 x=0 处 <code>J=[[0,0],[0,1]]</code>，行列式为零，但函数仍然把不同的输入映到不同的输出（除了 x 与 −x 重合），并不是全局不可逆。可逆性定理（反函数定理）说的是 <code>det J≠0</code> <strong>保证</strong>局部可逆，逆命题不成立。把充分条件当充要条件用，是这一节最容易犯的逻辑错误。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">行列式在生成模型里的影子</span></header>
+<div class="box-b">
+<p>归一化流（normalizing flow）用一系列可逆变换把简单分布变成复杂分布，训练时需要计算每步变换的 <code>log|det J|</code> 来修正概率密度。那里的 Jacobian 往往设计成三角矩阵，行列式就是对角线乘积，计算才可行。你在本节手算的 <code>det J=5</code>，就是那个量在最小维度的样子。理解「行列式=局部体积缩放」，以后看到流模型里的对数行列式项就不会觉得那是凭空冒出来的。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h9">3.9 链式法则中的 Jacobian：反向为什么需要转置</h2>
+<p>若 <code>y=F(x)</code>（Jacobian 为 <code>J_F</code>，形状 <code>m×n</code>），<code>L=g(y)</code>（梯度 <code>∇_y L</code> 是 <code>m</code> 维列向量），则 <code>∂L/∂x = J_Fᵀ · ∇_y L</code>。这是多元链式法则的核心式子。形状对账：<code>J_Fᵀ</code> 是 <code>n×m</code>，乘 <code>m</code> 维向量得到 <code>n</code> 维，正好与 <code>x</code> 同形。若不转置，<code>m×n</code> 乘 <code>m</code> 维向量在维度上就不合法。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">转置是「把影响送回原空间」</span></header>
+<div class="box-b">
+<p>前向传播把 <code>n</code> 维输入变成 <code>m</code> 维输出，Jacobian 记录了这个过程。反向传播要反过来问「输出的变化对输入意味着什么」，自然要用同一个映射的「反向版本」。在线性代数里，把 <code>m</code> 维的量送回 <code>n</code> 维空间的正确操作就是乘 <code>Jᵀ</code>（更严格地说是伴随映射）。所以转置不是人为加的步骤，而是「反方向」这件事在矩阵语言里的写法。mc05 会把这套推导完整走一遍。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">用「转置」这个词掩盖维度思考</span></header>
+<div class="box-b">
+<p>你会养成习惯：看到链式法则就写 <code>.T</code>，不再检查维度。真相是：转置只在「输出行、输入列」这套约定下才对；若某处把 Jacobian 定义反了，机械地转置反而错。稳妥做法永远是先把 <code>J</code> 的形状写出来，再问「要得到与谁同形的梯度，该乘什么」。本节 2×2 的方形 Jacobian 看不出差别，但你已经知道 mc08 里「漏转置」在方形矩阵上隐形——那正是机械习惯翻车的地方。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h10">3.10 从标量到向量：导数的概念地图</h2>
+<p>把前三个单元放在一起看，导数的概念地图是这样的：输入输出都是标量时，导数是数；输出标量、输入向量时，导数是梯度向量；输出向量、输入向量时，导数是 Jacobian 矩阵；输出向量、输入标量时，导数是速度向量。Jacobian 是其中最一般的形式，其他几种都是它的特例或转置。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一张表装下所有情况</span></header>
+<div class="box-b">
+<p><code>R→R</code> 导数是数；<code>Rⁿ→R</code> 梯度是 <code>n</code> 维向量（严格说是 <code>1×n</code> 的一行转置）；<code>Rⁿ→Rᵐ</code> Jacobian 是 <code>m×n</code>；<code>R→Rᵐ</code> 是 <code>m</code> 维列向量。统一写法是「输出维数作行、输入维数作列」。你以后在任何框架文档里看到梯度形状，都可以用这张表反推它为什么是那个形状。把形状想清楚，反向传播里绝大多数疑惑都会消失。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h11">3.11 可微与 Jacobian 的存在</h2>
+<p>Jacobian 存在要求每个偏导都存在，但仅此还不够——可微要求整张 Jacobian 能作为线性近似，误差是 <code>o(‖Δx‖)</code>。和 mc01 里「偏导存在推不出可微」一样，这里「Jacobian 的每个格子都能算」也推不出「Jacobian 就是好的线性近似」。反例同样是带分段和振荡的函数：偏导处处存在却不连续，线性近似在局部失效。我们训练用的函数由平滑模块拼成，几乎处处可微，所以工程上默认 Jacobian 好用；但遇到绝对值、max 这类折痕，仍要意识到那里可能没有合格的线性近似。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">用数值 Jacobian 判断可微会得到假阳性</span></header>
+<div class="box-b">
+<p>你会想：数值差分算出来的 Jacobian 挺正常，函数应该可微。真相是：中心差分在某些不可微点也会给出一个数——比如 <code>|x|</code> 在 0 处，中心差分恰好给出 0（左右斜率对称抵消）。这个数既不是左导数也不是右导数，更不对应任何线性近似。所以「差分能算出值」不等于「导数存在」。判断可微要看定义里的误差阶，而不是看差分有没有输出。这也是为什么gradcheck 只能验证「解析梯度与差分一致」，不能证明「函数可微」。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h12">3.12 把整节串成一条数值叙事</h2>
+<p>真跑的六行输出讲的是同一件事。前两行 <code>J_analytic</code> 与 <code>J_numerical</code> 逐格相同，证明四条公式与行列约定一致。后四行 <code>j00=4, j01=1, j10=3, j11=2</code> 是四个黄金值，分别对应 <code>∂u/∂x, ∂u/∂y, ∂v/∂x, ∂v/∂y</code>。把这四格按「行=输出」排好得到 <code>[[4,1],[3,2]]</code>；行列式是 5，线性近似在 <code>(2,3)</code> 附近把面积放大 5 倍；转置后是 <code>[[4,3],[1,2]]</code>，这正是反向传播要用的那个矩阵。一个 2×2 的小例子，把 Jacobian 的形状、数值、线性近似、行列式、转置五个方面全串起来了。</p>
+<p>这六行还演示了一种通用的阅读顺序：先看矩阵的整体形状，确认行列约定；再看逐格数值，确认公式；最后看派生量（行列式、转置、线性近似），确认几何意义。以后你在论文或框架文档里遇到任何一个 Jacobian，都可以按这三步读，不必被一堆下标吓住。数值对账只是第一步——它告诉你「算得对」，而形状与几何才告诉你「用得对」。两者缺一不可：一个形状错但数值碰巧对的实现，在方形矩阵上能骗过所有简单的测试，只有在维度不对称的真实层上才会原形毕露。把这套阅读顺序练成习惯，是这一节最值得带走的技能。</p>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h13">3.13 再用三个例子磨手感</h2>
+<p>只看一个函数容易把 Jacobian 记成套公式。下面三个例子各有侧重，你可以先自己填四格再对答案。</p>
+<p>第一例 <code>F(x,y)=(eˣcos y, eˣsin y)</code>。第一行是 <code>∂/∂x (eˣcos y)=eˣcos y</code>，<code>∂/∂y (eˣcos y)=−eˣsin y</code>；第二行是 <code>eˣsin y</code> 与 <code>eˣcos y</code>。这个 Jacobian 每行都是对应输出的梯度，行与行互相旋转 90°，它是二维极坐标到直角坐标映射的局部线性化。行列式是 <code>e²ˣ(cos²y+sin²y)=e²ˣ</code>，永远为正，说明映射处处保持定向且局部可逆。</p>
+<p>第二例 <code>F(x,y)=(x+y, x−y)</code>。Jacobian 是 <code>[[1,1],[1,−1]]</code>，处处相同——因为 <code>F</code> 本身就是线性映射，它的线性近似就是它自己。这是理解「Jacobian 是最佳线性近似」的干净例子：对线性函数，近似是精确的，没有二阶误差。行列式是 −2，负号说明映射翻转了定向。</p>
+<p>第三例 <code>F(x,y)=(x², y²)</code>。Jacobian 是 <code>[[2x,0],[0,2y]]</code>，对角矩阵。在 x=0 或 y=0 的轴上，某个对角元为零，行列式为零，线性近似在那条线上把对应方向压扁。但函数本身 <code>x²</code> 在整个实轴上并不是一一对应——它把 x 与 −x 映到同一个值。这个例子提醒你，Jacobian 行列式为零的点往往正是映射「折叠」的地方。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">手算与真跑互相印证</span></header>
+<div class="box-b">
+<p>把第一例在 <code>(0,0)</code> 处算一遍：<code>J=[[1,0],[0,1]]</code>，是单位矩阵，说明映射在原点附近近似恒等，行列式为 1。把第二例在任何点算都是 <code>[[1,1],[1,−1]]</code>。把第三例在 <code>(1,2)</code> 处算得 <code>[[2,0],[0,4]]</code>。三例分别给出「旋转缩放」「纯线性」「对角伸缩」三种典型 Jacobian。建议你照本节的清单元理写一版程序，把这三个例子的解析与数值 Jacobian 都打印出来——数值版不需要改结构，只要换掉 <code>jc_u</code> 与 <code>jc_v</code> 两个函数即可，这正体现了共用原语的可复用性。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h14">3.14 方向导数与 Jacobian 的行</h2>
+<p>mc02 讲过方向导数 <code>D_u f=∇f·u</code>。对向量值函数，沿方向 <code>u</code> 走会有 <code>m</code> 个方向导数，每个对应一个输出分量。把它们排成一个向量，恰好是 <code>J·u</code>——Jacobian 乘方向向量。这一句把前两个单元和本单元完全打通：<code>J</code> 的第 i 行是第 i 个输出的梯度，所以 <code>J·u</code> 的第 i 个分量就是第 i 个输出沿 <code>u</code> 的方向导数。</p>
+<p>本例 <code>J=[[4,1],[3,2]]</code>，沿 <code>u=(1/√2,1/√2)</code> 的方向导数向量是 <code>(4/√2+1/√2, 3/√2+2/√2)=(5/√2, 5/√2)≈(3.535534,3.535534)</code>。两个分量都是正数，说明两个输出沿 45° 方向都在增长。若沿 <code>u=(1,0)</code>（x 轴正向），得到 <code>(4,3)</code>，正是 Jacobian 的第一列——印证了「第 j 列是输入 xⱼ 对所有输出的影响」。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">行与列的两种读法再强调一次</span></header>
+<div class="box-b">
+<p><code>J·u</code> 是「行视角」：每个输出拿自己的那一行与方向做内积，得到该输出的变化率。<code>J</code> 的第 j 列是「列视角」：第 j 个输入变化时，所有输出各自怎么变。两种读法说的是同一个矩阵，只是你关心「哪个输出」还是「哪个输入」不同。线性代数里这叫「矩阵乘向量是行的线性组合」，你把这句话和 Jacobian 的行列约定对上，就再也不会搞混。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把 `J·u` 与 `Jᵀ·u` 的作用搞反</span></header>
+<div class="box-b">
+<p>你会想：既然方向导数是 <code>J·u</code>，那反向传播应该也用 <code>J·u</code>。真相是：方向导数是「输入方向 → 输出变化」，用 <code>J</code>；反向传播是「输出梯度 → 输入梯度」，用 <code>Jᵀ</code>。两者作用的向量生活在不同空间：<code>u</code> 在输入空间（<code>n</code> 维），上游梯度在输出空间（<code>m</code> 维）。<code>J</code> 把输入向量送到输出空间，<code>Jᵀ</code> 把输出向量送回输入空间。本例两个空间都是 2 维，形状上看不出区别，但概念上方向完全相反。记住「输入空间 vs 输出空间」这两个词，比记「正向用 J、反向用转置」更不容易混。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h15">3.15 Jacobian 的秩：输出真的独立吗</h2>
+<p>Jacobian 的秩告诉你 <code>m</code> 个输出里有多少是「真正独立变化」的。若 <code>rank(J)&lt;m</code>，说明输出之间存在局部依赖——某些输出组合无法独立改变。本例 <code>det J=5≠0</code>，所以满秩 2，两个输出独立。若某个点 <code>det J=0</code>，秩降到 1，两个输出在该点附近被压到一条曲线上。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">秩 deficient 在实践里的含义</span></header>
+<div class="box-b">
+<p>自编码器里，编码器把高维输入压到低维隐变量，其 Jacobian 必然秩亏——因为输出维度本就小于输入。生成模型里，若生成器的 Jacobian 秩亏，意味着它只能生成数据空间里的一个低维流形，覆盖不到全部可能输出。训练坍塌（mode collapse）的一种表现就是生成器 Jacobian 的秩越来越小。你在本节手算的 <code>det J=5</code>，就是这些高级话题在最小尺度上的影子：行列式不为零，映射才局部「铺开」，才有能力覆盖周围空间。</p>
+</div>
+</section>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用线性近似理解秩</span></header>
+<div class="box-b">
+<p>Jacobian 是线性映射，线性映射把整个空间压成的维度就是秩。<code>rank=2</code> 表示平面映到平面，面积不塌；<code>rank=1</code> 表示平面被压成一条线，面积变零；<code>rank=0</code> 表示所有方向都被压到一个点。你在 <code>(2,3)</code> 处算出的 <code>J</code> 满秩，所以 <code>F</code> 在那附近把小圆映成小椭圆，而不是一条线或一点。把「秩」想成「线性近似保留了多少维」，比背定义直观得多。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h16">3.16 数值实现里的三个细节</h2>
+<p>第一，差分步长 <code>eps</code> 取 <code>1e-5</code>，理由和 mc01 完全一样：截断误差 <code>O(eps²)</code> 与舍入误差 <code>O(u/eps)</code> 的平衡点。第二，<code>mc_partial</code> 接收函数指针，所以同一个原语能作用于不同输出；要把 <code>u</code> 与 <code>v</code> 分别包成函数传进去。第三，数值版总是先 <code>*j = mc_zero_mat(2,2)</code> 把矩阵清零，再逐格填入——避免结构体里残留上一次调用的旧值。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">共用库的 mc_mat_t 是定长的，维度不会自动检查</span></header>
+<div class="box-b">
+<p>共用库用 <code>MC_MAX=8</code> 的固定数组存矩阵，<code>rows</code> 与 <code>cols</code> 只是记录有效尺寸。<code>mc_partial</code> 也不检查输入向量的 <code>n</code> 是否足够。若你手滑把 <code>j-&gt;a[1][1]</code> 写成 <code>j-&gt;a[1][2]</code>，在 2×2 的矩阵里这是越界写，但数组实际开到 8×8，程序不会崩，只会悄悄改了不该改的格子。更隐蔽的是打印时 <code>mc_print_mat</code> 只按 <code>rows/cols</code> 循环，越界那格根本不显示，你看到的是一张「看起来对」的矩阵。真实项目里要用断言或带边界检查的容器，教材里为了代码短才省略。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从 jac_probe 到更大的网络</span></header>
+<div class="box-b">
+<p>框架里的自动微分不需要你手写这四个偏导——它把每个算子（加、乘、指数）的局部 Jacobian 记下来，反向时按链式法则连乘。本例手写的 <code>jc_analytic</code> 就是那个「局部 Jacobian」的人工版。等到了 mc05，你会看到 <code>J₁ᵀ J₂ᵀ … J_Lᵀ</code> 这样的连乘链，每一环都是本节这种小矩阵。先在 2×2 上手算清楚，后面面对上百层的链条时才有抓手。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h17">3.17 把 Jacobian 与后面几节的关系摆清楚</h2>
+<p>本单元是整册的枢纽之一。前面的梯度只处理标量输出，一旦输出变成向量，你就必须面对「导数该长什么形状」这个问题，而答案正是 Jacobian。它把偏导按输出与输入两个维度排开，让「一个输入影响多个输出」这件事第一次有了紧凑的表达。往前看，它是 mc01 偏导与 mc02 梯度的推广——把「一个输出」放宽到「多个输出」。往后看，它是 mc04 Hessian 的近亲——Hessian 是「梯度的 Jacobian」，也就是对一个向量值函数（梯度场）再求一次 Jacobian。mc05 的链式法则用 <code>Jᵀ</code> 把梯度传回输入空间。mc08 的矩阵微分则回答「当输入本身是矩阵时，Jacobian 的形状约定怎么演化成 Frobenius 内积与 trace 形式」。一句话：你在本节建立的「行=输出、列=输入」约定，会在后面每一节反复出现。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一条线索贯穿整册</span></header>
+<div class="box-b">
+<p>偏导是标量，梯度是偏导的向量打包，Jacobian 是梯度的矩阵打包，Hessian 是 Jacobian 的再求导，反向传播是 Jacobian 转置的连乘。这些名词看似各成一章，其实是同一个「导数」概念在不同输出维度、不同输出类型下的化身。你每往前学一节，回头看这张清单都会更清楚一层。把本节的 <code>J=[[4,1],[3,2]]</code> 记牢，它后面会以各种形式回来。</p>
+<p>具体到下一单元：Hessian 是对梯度场再求一次 Jacobian。梯度场把输入向量映射到梯度向量，是 <code>Rⁿ→Rⁿ</code> 的向量值函数，它的 Jacobian 就是 <code>n×n</code> 的 Hessian。本节强调的「行=输出、列=输入」在那里变成「行=梯度分量、列=输入坐标」，两条约定完全一致。你在本节练熟的按行读梯度、按列读影响，下一单元会原样复用，只是多出一个对称性——那是混合偏导相等的礼物。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h18">3.18 坐标变换下的 Jacobian：链式法则的几何</h2>
+<p>前面 3.13 节第二例 <code>F(x,y)=(x+y,x−y)</code> 是线性映射，Jacobian 处处相同。若再把 <code>F</code> 接到另一个函数 <code>G</code> 上，复合函数 <code>G∘F</code> 的 Jacobian 等于两者 Jacobian 的乘积——这就是链式法则的矩阵形式：<code>J_{G∘F}(x) = J_G(F(x)) · J_F(x)</code>。注意乘法顺序：先作用的 <code>F</code> 的 Jacobian 在右边，后作用的 <code>G</code> 的在左边。矩阵乘法不满足交换律，所以顺序错了结果就错。哪怕两个 Jacobian 恰好都是方阵，乘出来仍然合法，数值却完全不同，这是最容易被忽略的一类错误。写出形状再决定左右顺序，比凭语感写要可靠得多。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">顺序为什么是「后乘前」</span></header>
+<div class="box-b">
+<p>把 <code>Δx</code> 想成一个小位移。先经 <code>F</code> 变成 <code>J_F·Δx</code>，再经 <code>G</code> 变成 <code>J_G·(J_F·Δx)</code>，括号去掉就是 <code>(J_G·J_F)·Δx</code>。所以复合映射的线性近似是 <code>J_G·J_F</code>，后作用的矩阵在左边。这个顺序和「先脱鞋再脱袜」是同一类问题——日常语言常说「先 F 后 G」，写成矩阵却是 <code>G</code> 在左。以后看到 <code>J₂J₁</code> 的连乘，记得从右往左读，那才是作用顺序。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">用本例验一次链式法则</span></header>
+<div class="box-b">
+<p>取 <code>F(x,y)=(x+y,x−y)</code>，<code>J_F=[[1,1],[1,−1]]</code>。取 <code>G(u,v)=(u²,v)</code>，<code>J_G=[[2u,0],[0,1]]</code>。在 <code>x=(2,3)</code> 处，<code>F(x)=(5,−1)</code>，<code>J_G</code> 在该点是 <code>[[10,0],[0,1]]</code>。复合 <code>G∘F=( (x+y)², x−y )</code>，直接求导得 <code>J=[[2(x+y),2(x+y)],[1,−1]]</code>，在 <code>(2,3)</code> 处是 <code>[[10,10],[1,−1]]</code>。用链式公式：<code>J_G·J_F=[[10,0],[0,1]]·[[1,1],[1,−1]]=[[10,10],[1,−1]]</code>，完全一致。这个手算例子把「后乘前」的顺序钉死了。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把链式法则写成 `J_F·J_G` 会怎样</span></header>
+<div class="box-b">
+<p>你会觉得「先 F 后 G，那就 J_F 乘 J_G」。真相是：在非方阵或不可交换的情形下这直接给出错误形状和错误数值。本例因为两个 Jacobian 恰好都是 2×2，乘出来仍是 2×2，不报错但数值全错：<code>[[1,1],[1,−1]]·[[10,0],[0,1]]=[[10,1],[10,−1]]</code>，与正确结果天差地别。这就是方形矩阵的危险之处——形状检查完全失效，只有对拍或手算能发现。mc05 会把这套顺序问题放在多层网络里再讲一遍。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h19">3.19 常见误解速查与第一人称踩坑记录</h2>
+<p>我自己在写第一版 <code>jc_numerical</code> 时犯过一个错：把第一行写成了 <code>mc_partial(jc_v, x, 0, eps)</code> 与 <code>mc_partial(jc_v, x, 1, eps)</code>，也就是用第二个输出的函数填了第一行。程序照常跑，打印出来的矩阵转置过来恰好还是 <code>[[4,1],[3,2]]</code>？不，本例 <code>jc_u</code> 与 <code>jc_v</code> 的偏导分别是 <code>(4,1)</code> 与 <code>(3,2)</code>，交换后第二行变成 <code>(4,1)</code>、第一行变成 <code>(3,2)</code>，矩阵变成 <code>[[3,2],[4,1]]</code>，与解析版明显不同。闸门报了 <code>numeric_value_mismatch</code>，我才知道自己把函数指针传反了。这个坑不深，但很典型：<strong>数值版最容易错的不是差分公式，而是把「哪个函数填哪一行」搞混</strong>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">给数值版加一道自检</span></header>
+<div class="box-b">
+<p>写完 <code>jc_numerical</code> 后，先别急着跑大程序，打印一行中间结果看看：<code>printf(&quot;%.6f %.6f\n&quot;, mc_partial(jc_u,x,0,eps), mc_partial(jc_u,x,1,eps))</code> 应该输出 <code>4.000000 1.000000</code>。若看到别的数，先怀疑函数指针传错了，而不是怀疑差分公式。这种「先验证零件再装整机」的习惯，在写复杂反向传播时能省下大量时间。代价只是多打几行临时输出，换来的是错误定位从「整张梯度表都不对」缩小到「第一个函数指针就错了」。调试完记得把临时输出删掉，否则它会混进正文对账的 stdout，让清单里的黄金值对不上——这也是一年手工对拍里最常见的意外之一。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-01-jacobian-md-h20">3.20 为什么这一节值得单独占一个单元</h2>
+<p>你可能会觉得 Jacobian 不过是「偏导排成矩阵」，何必单独讲一整节。等真正写反向传播就会被说服：那里每一个线性算子都有一个 Jacobian，网络有多少层，链式链条里就有多少个 Jacobian 在相乘。若对「行=输出、列=输入」这条约定只是模棱两可地记住，写出来的 <code>.T</code> 会在某个维度不对称的层上翻车，而且这种 bug 在方形层上完全隐形。本节用一个 2×2 的小例子把约定、数值、几何、转置一次性钉死，正是为了后面少踩坑。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">小例子是高级概念的最佳载体</span></header>
+<div class="box-b">
+<p><code>F(x,y)=(x²+y,xy)</code> 简单到能完全手算，却又包含了 Jacobian 的全部要点：两行两列能演示行列约定；四个偏导都不为零能做对拍；行列式非零能讲线性近似；转置后仍是 2×2 能演示「方形上错误隐形」。换成真实网络里几百维的层，你无法手算、无法一眼看出错，只能依赖本节建立的直觉。花时间把小例子吃透，是最省时间的投资。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">给下一单元留一个问题</span></header>
+<div class="box-b">
+<p>Jacobian 描述的是一阶导数。如果继续对梯度 <code>∇f</code> 求 Jacobian，就得到二阶导数的矩阵——Hessian。它对称（在偏导连续时），它的特征值告诉我们驻点是极小、极大还是鞍点，它的逆矩阵出现在牛顿法里。本节的 <code>det J=5</code> 是一阶体积缩放，下一单元的 <code>det H</code> 将告诉我们曲率信息。你把「行=输出、列=输入」的约定带过去，会发现 Hessian 不过是「梯度这个向量值函数的 Jacobian」，概念上毫无违和。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>向量值函数 <code>F: Rⁿ→Rᵐ</code> 的 Jacobian 是 <code>m×n</code> 矩阵，第 i 行第 j 列是 <code>∂Fᵢ/∂xⱼ</code>——行=输出，列=输入；</li>
+<li>本例 <code>F(x,y)=(x²+y,xy)</code> 在 <code>(2,3)</code> 处 <code>J=[[4,1],[3,2]]</code>，四个黄金值由解析与数值两条路共同确认；</li>
+<li>Jacobian 是最佳局部线性近似：<code>F(p+Δx)≈F(p)+J(p)·Δx</code>，误差是 <code>o(‖Δx‖)</code>；</li>
+<li>梯度是标量输出时 Jacobian 那一行转置成同形向量的特例；反向传播用 <code>Jᵀ</code> 把影响送回输入空间；</li>
+<li><code>det J</code> 是局部体积放大率，为零只说明线性近似不可逆，不等于函数全局不可逆。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li><code>F(x,y)=(x²+y, xy)</code>，在 <code>(1,−2)</code> 处手算 Jacobian 的四格，并写出 <code>det J</code>。</li>
+<li>为什么 Jacobian 的行对应输出、列对应输入？从线性近似 <code>F(p+Δx)≈F(p)+JΔx</code> 的形状推导。</li>
+<li>本例 <code>J=[[4,1],[3,2]]</code>，写出它的转置，并说明转置后每个元素表示什么。</li>
+<li>数值 Jacobian 里，为什么 <code>jc_numerical</code> 要对 <code>jc_u</code> 和 <code>jc_v</code> 各调用两次 <code>mc_partial</code>？</li>
+<li>梯度与 Jacobian 是什么关系？为什么梯度要转置？</li>
+<li><code>det J=0</code> 是否意味着 <code>F</code> 在该点附近不可逆？反函数定理的条件是充分还是必要？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>∂u/∂x=2x=2</code>，<code>∂u/∂y=1</code>，<code>∂v/∂x=y=−2</code>，<code>∂v/∂y=x=1</code>，故 <code>J=[[2,1],[−2,1]]</code>，<code>det J=2×1−1×(−2)=4</code>。</li>
+<li><code>F</code> 是 <code>m</code> 维，<code>Δx</code> 是 <code>n</code> 维，矩阵乘 <code>J·Δx</code> 要得到 <code>m</code> 维结果，<code>J</code> 必须是 <code>m×n</code>，所以行对应输出、列对应输入。</li>
+<li><code>Jᵀ=[[4,3],[1,2]]</code>。它把「输出的变化」映射回「输入应有的变化」，第 i 行第 j 列变成 <code>∂Fⱼ/∂xᵢ</code>，是反向传播要用的形状。</li>
+<li>因为有两个输出，每个输出都要对两个输入各做一次中心差分，共 2×2=4 次。<code>mc_partial</code> 的函数指针参数让同一原语能作用于 <code>jc_u</code> 与 <code>jc_v</code>。</li>
+<li>梯度是标量输出（<code>m=1</code>）时 Jacobian 的那一行，转置成与输入同形的列向量。转置是为了满足框架「梯度与参数同形」的约定。</li>
+<li>不意味着全局不可逆，只说明该点的线性近似不可逆、反函数定理不适用。定理条件是充分的：<code>det J≠0</code> 保证局部可逆，但 <code>det J=0</code> 时函数也可能仍然可逆（如 <code>x³</code> 在 0 处导数为零却严格单调）。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

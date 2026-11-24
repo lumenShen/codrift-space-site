@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>动量与自适应方法：Adam 到底在平均什么</title>
+<meta name="description" content="零基础 · 第 8 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-probopt-chapters-ch03-03-momentum-and-adam-md { @top-right { content: "动量与自适应方法：Adam 到底在平均什么"; } }
+#content { page: p-u-probopt-chapters-ch03-03-momentum-and-adam-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/probopt.html">《probopt》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">动量与自适应方法：Adam 到底在平均什么</h1><p class="doc-sub">零基础 · 第 8 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/probopt/chapters/ch03/03-momentum-and-adam.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h1">8.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h2">8.2 动量：把更新当成有惯性的速度</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h3">8.3 AdaGrad 与 RMSProp：先学会动二阶矩</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h4">8.4 Adam：把一阶和二阶拼起来</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h5">8.5 真跑：病态二次碗上的十步</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h6">8.6 数字怎么读：两条曲线的分叉</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h7">8.7 偏差修正：前几步的隐形炸药</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h8">8.8 什么时候 SGD 反而更好</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h9">8.9 常见失败模式与排查</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h10">8.10 从 po07 走到 po08：一句话串起来</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h11">8.11 一个更细的对照：如果梯度是常值</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h12">8.12 Nesterov 动量：先往前看再决定</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h13">8.13 学习率调度、warmup 与 Adam 的配合</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h14">8.14 复现清单：把实验搬到别处</a></li><li class="toc-l2"><a href="#probopt-chapters-ch03-03-momentum-and-adam-md-h15">8.15 把三个量放在一张表里记</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>把动量讲成「指数加权平均」，说清它为什么能让梯度方向一致的维度走得更快、来回摆动的维度互相抵消；</li>
+<li>写出 AdaGrad、RMSProp、Adam 的一阶矩与二阶矩递推式，并指出它们各自改掉了前人的哪个毛病；</li>
+<li>手算 Adam 第一步的偏差修正，解释为什么 <code>m_t/(1-β₁^t)</code> 与 <code>v_t/(1-β₂^t)</code> 缺一不可；</li>
+<li>解释 Adam 的每一步更新为什么大致是 ±学习率这个量级，以及 <code>eps</code> 在什么情况下才真正起作用；</li>
+<li>读懂 <code>adam_step</code> 真跑出的四个黄金值，说清什么时候 SGD 反而比 Adam 更值得用。</li>
+</ul>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h1">8.1 先看工程长什么样</h2>
+<p>前面两个单元把优化的地基铺好了：po06 讲凸性，告诉你「凸问题为什么有全局最优」；po07 讲梯度下降，告诉你「步长为什么决定走不走得到」。这一单元往工程里再走一步，问一个特别实际的问题：既然梯度下降人人都用，为什么深度学习里几乎清一色用 Adam？它究竟在梯度之上多算了什么，又凭什么常常更好使。</p>
+<p>这一册的例子仍然走同一套路子：一个共用数值库，一个本单元专属的小工程，再加一份清单。共用库 <code>common/</code> 提供固定种子随机源和打印函数；本单元的例子 <code>adam_step/</code> 自己实现 SGD 与 Adam 的更新；清单 <code>po08-adam.json</code> 负责真编译、真跑、真对账。没有第三方框架，也没有神秘的黑箱——每一条更新式都能在源文件里逐行找到。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一句话讲完这一单元</span></header>
+<div class="box-b">
+<p>梯度下降只看「此刻的梯度」，动量把「过去的梯度」加权平均进来，Adam 则同时看「梯度的平均」和「梯度大小的平均」。前者管方向，后者管步长：方向一致的维度被推着走，梯度忽大忽小的维度被自动调小步子。偏差修正只是在开头几步把这两个平均值从零附近拉回正常量级。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-2e3e68ba">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：ch03 下新增一个 SGD 与 Adam 的对照例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：ch03 下新增一个 SGD 与 Adam 的对照例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-2e3e68ba" id="vz-2e3e68ba-1" checked>
+<input class="vs-radio" type="radio" name="vz-2e3e68ba" id="vz-2e3e68ba-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-2e3e68ba-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-2e3e68ba-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">adam_step/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/adam.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/adam.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po08-adam.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch03 下还没有这一单元的例子</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>落盘后的 adam_step 工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">adam_step/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/adam.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/adam.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po08-adam.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里四个文件各有分工：<code>adam.h</code> 把二维状态、超参数和四个函数声明集中起来；<code>adam.c</code> 实现目标函数、梯度以及两种更新；<code>main.c</code> 固定种子、跑十步、打印四行数值；清单写出黄金值和容差。共用库一行都不用改，这正是分册开头定下的纪律——每章只加例子，不动底座。</p>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h2">8.2 动量：把更新当成有惯性的速度</h2>
+<p>先看最朴素的梯度下降。参数是向量 <code>w</code>，损失是 <code>L(w)</code>，梯度是 <code>g_t = ∇L(w_t)</code>，更新式写成 <code>w_{t+1} = w_t − η g_t</code>。这里的 <code>η</code> 是学习率。这个式子有个明显的性格：<strong>它完全没有记忆</strong>。上一步往左冲得多猛，这一步该往右还是往右，只看当前点的梯度。如果损失函数在某几个方向上窄、某几个方向上宽，这种「无记忆」会付出代价：窄的方向上梯度大，步长必须小才不会冲过头；步长一小，宽的方向上就挪得像蜗牛。</p>
+<p>动量的改法很朴素：不要直接拿当前梯度当更新量，而是维护一个「速度」<code>m_t</code>，每一步把它朝当前梯度推一点，再用它去更新参数：</p>
+<p><code>m_t = β·m_{t−1} + (1−β)·g_t</code>，<code>w_{t+1} = w_t − η·m_t</code></p>
+<p>这个递推叫<strong>指数加权平均</strong>（exponentially weighted average）。把 <code>m_t</code> 展开看看它到底平均了什么：代入一步得到 <code>m_t = (1−β)g_t + (1−β)β g_{t−1} + (1−β)β² g_{t−2} + …</code>。所有历史梯度的权重加起来是 <code>(1−β)(1+β+β²+…) = 1</code>，所以 <code>m_t</code> 确实是过去梯度的加权平均，只是越老的梯度权重按 <code>β</code> 的幂衰减。取 <code>β=0.9</code>，权重衰减到一半大约要七步；取 <code>β=0.99</code>，大约要七十步。这个「看多远」就是动量唯一新增的旋钮。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-84930cfb">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 动量：梯度同向时累加，反向时抵消</figcaption>
+<div class="viz-screen" role="group" aria-label="动量：梯度同向时累加，反向时抵消：逐步演示">
+<input class="vs-radio" type="radio" name="vz-84930cfb" id="vz-84930cfb-1" checked>
+<input class="vs-radio" type="radio" name="vz-84930cfb" id="vz-84930cfb-2">
+<input class="vs-radio" type="radio" name="vz-84930cfb" id="vz-84930cfb-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-84930cfb-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-84930cfb-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-84930cfb-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">g1 ：当前梯度，指向右</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m1 ：速度 = 0.9×0 + 0.1×g1</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m1</span><span class="ve-lbl">注入动量</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g2 ：梯度仍指向右</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m2 ：速度 = 0.9×m1 + 0.1×g2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m2</span><span class="ve-lbl">再次注入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">m1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m2</span><span class="ve-lbl">旧速度保留九成</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g3 ：梯度指向左</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m3 ：速度 = 0.9×m2 + 0.1×g3</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g3</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m3</span><span class="ve-lbl">反向注入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">m2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m3</span><span class="ve-lbl">惯性仍在，但被削弱</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>第一步，速度从零开始</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">g1 ：当前梯度，指向右</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m1 ：速度 = 0.9×0 + 0.1×g1</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m1</span><span class="ve-lbl">注入动量</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>第二步梯度仍向右，速度变大</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g2 ：梯度仍指向右</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m2 ：速度 = 0.9×m1 + 0.1×g2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m2</span><span class="ve-lbl">再次注入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">m1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m2</span><span class="ve-lbl">旧速度保留九成</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>第三步梯度反向，速度被抵消</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g3 ：梯度指向左</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m3 ：速度 = 0.9×m2 + 0.1×g3</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g3</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m3</span><span class="ve-lbl">反向注入</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">m2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m3</span><span class="ve-lbl">惯性仍在，但被削弱</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧是动量最值钱的场景：连续几步梯度都指向同一边，旧速度的九成被留下来，新梯度再添一成，速度越滚越大，参数沿着这条「坡」加速下滑。第 3 帧展示了另一面：一旦梯度掉头，旧速度还按九成惯性往前冲，新梯度只占一成，于是速度不会立刻反向，而是先被削弱。这在损失面上表现为「冲过谷底再拐回来」——好处是能跳过小坑，坏处是可能来回过冲。注意两帧里旧速度节点都写进去了，因为每一帧自包含，渲染器不会替你把上一帧的节点搬过来。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">动量不是「记住上一步走了多远」</span></header>
+<div class="box-b">
+<p>很多人把动量理解成物理里的位移记忆，其实它记的是<strong>梯度的加权平均</strong>，不是参数走了多远。判据很简单：如果某几步梯度恰好为零，参数那几步不动，但速度仍在按 <code>β</code> 衰减——它会慢慢忘掉之前的加速。真实实现里你还会见到另一种写法 <code>w ← w − η(βm + g)</code>（叫 Nesterov 或不同归一化的动量），它和这里的式子只差一个 <code>1−β</code> 的因子吸收进学习率，行为并不等价。读论文和框架源码时先确认是哪一种，别把两个 η 直接比较。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h3">8.3 AdaGrad 与 RMSProp：先学会动二阶矩</h2>
+<p>动量解决的是「方向记忆」，没有解决「每个维度的步长该不一样」。回到那个病态二次碗：<code>L(w)=0.5w₀²+5w₁²</code>。<code>w₀</code> 方向的曲率是 1，<code>w₁</code> 方向是 10，相差十倍。用同一个学习率，<code>η</code> 必须小到在 <code>w₁</code> 方向不发散，结果 <code>w₀</code> 方向就慢得让人着急。</p>
+<p>AdaGrad 的想法是：给每个维度单独记一个「历史梯度平方和」<code>G_t = G_{t−1} + g_t ⊙ g_t</code>，然后让这一维的步长除以 <code>√G_t</code>。梯度大的维度累积得快，步长被压得小；梯度小的维度累积得慢，步长大。它第一次让「步长自适应」这件事有了简单可实现的版本，但有个致命毛病：<code>G_t</code> 只增不减，训练越久分母越大，步长单调缩到几乎为零，模型还没学好就「饿死」了。</p>
+<p>RMSProp 把累加改成指数加权平均，正好补上这个洞：</p>
+<p><code>v_t = β₂·v_{t−1} + (1−β₂)·g_t ⊙ g_t</code>，<code>w_{t+1} = w_t − η·g_t/(√v_t + eps)</code></p>
+<p>这里的 <code>v_t</code> 是梯度平方的指数加权平均，也就是<strong>二阶矩</strong>的估计。因为它是滑动平均而不是无限累加，老的平方梯度会被逐渐忘掉，步长不会一路缩到零。<code>eps</code> 是一个极小的正数（常用 <code>1e-8</code>），只用来防止分母为零：在某些维度梯度长期接近零时，<code>v_t</code> 会很小，没有 <code>eps</code> 就会除出无穷大。</p>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-77047c3d">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 每个维度各带一份状态：一阶矩 m 与二阶矩 v</figcaption>
+<div class="viz-screen" role="group" aria-label="每个维度各带一份状态：一阶矩 m 与二阶矩 v：逐步演示">
+<input class="vs-radio" type="radio" name="vz-77047c3d" id="vz-77047c3d-1" checked>
+<input class="vs-radio" type="radio" name="vz-77047c3d" id="vz-77047c3d-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-77047c3d-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-77047c3d-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">w[0] ：参数第 0 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">w[1] ：参数第 1 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m[0] = 0 ：一阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m[1] = 0 ：一阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[0] = 0 ：二阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[1] = 0 ：二阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">w[0] ：参数第 0 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">w[1] ：参数第 1 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m[0] = 0.141422 ：第 0 维一阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m[1] = 1.158867 ：第 1 维一阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[0] = 0.002000 ：第 0 维二阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[1] = 1.342966 ：第 1 维二阶矩</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>初始化，m 和 v 都是零</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">w[0] ：参数第 0 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">w[1] ：参数第 1 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m[0] = 0 ：一阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m[1] = 0 ：一阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[0] = 0 ：二阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[1] = 0 ：二阶矩槽，空</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>吃过一批梯度后，两个槽各有各的数</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">w[0] ：参数第 0 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">w[1] ：参数第 1 维</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m[0] = 0.141422 ：第 0 维一阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">m[1] = 1.158867 ：第 1 维一阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[0] = 0.002000 ：第 0 维二阶矩</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[1] = 1.342966 ：第 1 维二阶矩</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧的四个数字是第一步真算出来的：起点 <code>w=(1.414216, 1.158867)</code> 的梯度就是它自己（因为 <code>L</code> 里 <code>w₀²</code> 的系数是 0.5，<code>w₁²</code> 的系数是 5，见 <code>ad_grad</code>），于是 <code>m₁ = 0.1g</code>、<code>v₁ = 0.001g²</code>。<code>v[1]</code> 明显比 <code>v[0]</code> 大得多——这正是 RMSProp 要抓住的信息：<code>w₁</code> 方向的梯度更猛，步长就该更小。两帧把「空槽 → 有值」的变化写全了，打印出来也能看懂。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么 RMSProp 用的是平方梯度而不是梯度绝对值</span></header>
+<div class="box-b">
+<p>平方有一个绝对值没有的好处：它对符号不敏感，但放大大梯度更狠。梯度从 1 变 2，绝对值只翻一倍，平方翻四倍，于是「大梯度维度要被压得更狠」这件事被自动放大。另一方面，平方和开方合起来接近梯度的均方根，量纲与梯度一致，所以 <code>η</code> 仍然是一个「以梯度为单位」的学习率，不用重新标定。代价是平方会把偶发的尖峰梯度记得比较久，这也是后来 Adam 依然沿用它、但配上更稳健修正的原因。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h4">8.4 Adam：把一阶和二阶拼起来</h2>
+<p>Adam 几乎是把两件事直接焊在一起：一阶矩用动量，二阶矩用 RMSProp，然后两个都做偏差修正。完整递推如下，其中乘法全是逐维的：</p>
+<ul>
+<li><code>m_t = β₁m_{t−1} + (1−β₁)g_t</code>（梯度的一阶矩，管方向）</li>
+<li><code>v_t = β₂v_{t−1} + (1−β₂)g_t⊙g_t</code>（梯度平方的二阶矩，管步长）</li>
+<li><code>m̂_t = m_t/(1−β₁^t)</code>，<code>v̂_t = v_t/(1−β₂^t)</code>（偏差修正）</li>
+<li><code>w_{t+1} = w_t − η·m̂_t/(√v̂_t + eps)</code></li>
+</ul>
+<p>先说偏差修正为什么必须做。<code>m_t</code> 和 <code>v_t</code> 都从零开始。第一步 <code>m₁ = (1−β₁)g₁ = 0.1g₁</code>，只有真实梯度的十分之一；<code>v₁ = 0.001g₁²</code>，只有真实平方的千分之一。如果不修正，第一步的更新量是 <code>η·(0.1g)/(√(0.001g²)) = η·0.1/0.0316 ≈ 3.16η</code>——比预期的 <code>η</code> 大了三倍多，而且这个倍数还随步数变化。修正的做法很直接：把 <code>m_t</code> 除以 <code>1−β₁^t</code>，把 <code>v_t</code> 除以 <code>1−β₂^t</code>。第一步这两个分母分别是 0.1 和 0.001，正好把两个初始估计还原成 <code>g₁</code> 和 <code>g₁²</code>，于是第一步的更新量正好是 <code>η·g₁/|g₁| = ±η</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">手算第一步，确认「步长就是 η」</span></header>
+<div class="box-b">
+<p>取 <code>β₁=0.9</code>、<code>β₂=0.999</code>、<code>η=0.10</code>。第 0 维初始梯度 <code>g₀=1.414216</code>。修正前 <code>m₁=0.141422</code>、<code>v₁=0.001999...</code>；修正后 <code>m̂₁=m₁/0.1=1.414216=g₀</code>，<code>v̂₁=v₁/0.001=1.99999...=g₀²</code>。于是 <code>m̂₁/√v̂₁ = g₀/|g₀| = 1</code>，更新量 <code>η×1=0.10</code>。第 1 维梯度是 <code>11.58867</code>，修正后同样会得到比值 1，更新量也是 <code>0.10</code>。两个方向第一步走完全一样的距离——这就是 Adam 最反直觉也最值钱的性质：<strong>步长与梯度的绝对大小无关，只与它的符号（更准确说是方向与历史波动的比值）有关</strong>。读者可以用这个手算去核对第 8.5 节真跑出的落点。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-cc6ce27c">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> Adam 一步的数据流：梯度分成两路，修正后再相除</figcaption>
+<div class="viz-screen" role="group" aria-label="Adam 一步的数据流：梯度分成两路，修正后再相除：逐步演示">
+<input class="vs-radio" type="radio" name="vz-cc6ce27c" id="vz-cc6ce27c-1" checked>
+<input class="vs-radio" type="radio" name="vz-cc6ce27c" id="vz-cc6ce27c-2">
+<input class="vs-radio" type="radio" name="vz-cc6ce27c" id="vz-cc6ce27c-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-cc6ce27c-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-cc6ce27c-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-cc6ce27c-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g_t ：当前梯度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">g_t ：复制成两份待用</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">g_t</span><span class="ve-lbl">分叉</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m_t ：一阶矩，方向</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v_t ：二阶矩，波动</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m_t</span><span class="ve-lbl">乘 1-β1 后累加</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">v_t</span><span class="ve-lbl">平方后累加</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">mhat ：m_t 除以 1-β1^t</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">vhat ：v_t 除以 1-β2^t</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">step ：更新量 = lr×mhat/(sqrt(vhat)+eps)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">m_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mhat</span><span class="ve-lbl">偏差修正</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">v_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">vhat</span><span class="ve-lbl">偏差修正</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">mhat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">提供方向</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">vhat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">提供步长</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>梯度进来，分成两路</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">g_t ：当前梯度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">g_t ：复制成两份待用</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">g_t</span><span class="ve-lbl">分叉</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>两路各自做指数加权平均</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">m_t ：一阶矩，方向</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v_t ：二阶矩，波动</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">m_t</span><span class="ve-lbl">乘 1-β1 后累加</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">g_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">v_t</span><span class="ve-lbl">平方后累加</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>修正、相除、更新参数</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">mhat ：m_t 除以 1-β1^t</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">vhat ：v_t 除以 1-β2^t</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">step ：更新量 = lr×mhat/(sqrt(vhat)+eps)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">m_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mhat</span><span class="ve-lbl">偏差修正</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">v_t</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">vhat</span><span class="ve-lbl">偏差修正</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">mhat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">提供方向</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">vhat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">step</span><span class="ve-lbl">提供步长</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 3 帧里 <code>step</code> 节点同时接了两条箭头：一条来自 <code>mhat</code>，提供方向；一条来自 <code>vhat</code>，提供步长。这个「两路汇合」的画面就是 Adam 的全部结构。第 2 帧把 <code>m_t</code> 与 <code>v_t</code> 两个状态都写进去了，因为第 3 帧要用它们，而帧与帧之间不会自动继承节点。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把 v_t 当成梯度的方差</span></header>
+<div class="box-b">
+<p><code>v_t</code> 是梯度<strong>平方</strong>的平均，不是 <code>(g−mean(g))²</code> 的方差。它保留的是梯度的量级信息，包括均值带来的那一部分。因此当梯度恒定不变时，<code>v_t</code> 不会为零，步长也不会因此变大——这正是一阶矩负责的方向信息不该被二阶矩抹掉的原因。真要算方差，得用 <code>E[g²]−(E[g])²</code>，Adam 没这么做，是有意的。另一个常见误读是把 <code>β₂</code> 调得很小来「加快适应」，这会让 <code>v_t</code> 只看见最近一两步的波动，步长变得抖，失去自适应本来的平滑作用。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h5">8.5 真跑：病态二次碗上的十步</h2>
+<p>实验设置写在 <code>main.c</code> 里：目标就是前面反复用的 <code>L(w)=0.5w₀²+5w₁²</code>，起点用固定种子加一点小扰动生成，SGD 学习率 0.05，Adam 学习率 0.10，两者都跑十步。固定种子 <code>20240517UL</code> 是闸门能核对黄金值的前提——换了种子，起点变了，四个数值全会变。</p>
+<p>下面这段是核心更新式，出自 <code>adam.c</code> 的第 39 到 53 行，逐字抄录：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch03/adam_step/src/adam.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">Adam 一步：一阶矩、二阶矩、偏差修正、更新</span><span class="cb-file">examples/ch03/adam_step/src/adam.c</span><span class="cb-lines">第 39–53 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="39" data-to="53"><span class="cl" data-ln="39"><span class="ln" data-ln="39" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* Adam：一阶矩除以偏差修正，再除以二阶矩的平方根。 */</span></span></span>
+<span class="cl" data-ln="40"><span class="ln" data-ln="40" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">ad_adam_step</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">adam_state_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">s</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="41"><span class="ln" data-ln="41" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[ADAM_DIM];</span></span></span>
+<span class="cl" data-ln="42"><span class="ln" data-ln="42" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> bc1, bc2;</span></span></span>
+<span class="cl" data-ln="43"><span class="ln" data-ln="43" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i;</span></span></span>
+<span class="cl" data-ln="44"><span class="ln" data-ln="44" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">ad_grad</span><span class="tk" style="color:#24292E">(s-&gt;w, g);</span></span></span>
+<span class="cl" data-ln="45"><span class="ln" data-ln="45" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">s-&gt;t;</span></span></span>
+<span class="cl" data-ln="46"><span class="ln" data-ln="46" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    bc1 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">pow</span><span class="tk" style="color:#24292E">(s-&gt;beta1, (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)s-&gt;t);</span></span></span>
+<span class="cl" data-ln="47"><span class="ln" data-ln="47" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    bc2 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">pow</span><span class="tk" style="color:#24292E">(s-&gt;beta2, (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)s-&gt;t);</span></span></span>
+<span class="cl" data-ln="48"><span class="ln" data-ln="48" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> ADAM_DIM; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">i) {</span></span></span>
+<span class="cl" data-ln="49"><span class="ln" data-ln="49" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        s-&gt;m[i] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> s-&gt;beta1 </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> s-&gt;m[i] </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> s-&gt;beta1) </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[i];</span></span></span>
+<span class="cl" data-ln="50"><span class="ln" data-ln="50" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        s-&gt;v[i] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> s-&gt;beta2 </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> s-&gt;v[i] </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> s-&gt;beta2) </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[i] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">[i];</span></span></span>
+<span class="cl" data-ln="51"><span class="ln" data-ln="51" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        s-&gt;w[i] </span><span class="tk" style="color:#D73A49">-=</span><span class="tk" style="color:#24292E"> s-&gt;lr </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> (s-&gt;m[i] </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> bc1) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#6F42C1">sqrt</span><span class="tk" style="color:#24292E">(s-&gt;v[i] </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> bc2) </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> s-&gt;eps);</span></span></span>
+<span class="cl" data-ln="52"><span class="ln" data-ln="52" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="53"><span class="ln" data-ln="53" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>注意第 <code>++s-&gt;t</code> 放在求 <code>bc1</code>、<code>bc2</code> 之前：时间步从 1 开始计数，第一步的 <code>bc1</code> 就是 <code>1−0.9=0.1</code>。若把它挪到后面，第一步会除以零。这是 Adam 实现里最经典的低级错误之一，<code>pow(0.9, 0)=1</code>，分母为零，立刻得到 <code>inf</code> 或 <code>nan</code>，而且往往在打印时才暴露。</p>
+<p>驱动代码同样逐字来自 <code>main.c</code> 的第 12 到 32 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch03/adam_step/src/main.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">固定种子、两套状态、十步之后再比较</span><span class="cb-file">examples/ch03/adam_step/src/main.c</span><span class="cb-lines">第 12–32 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="12" data-to="32"><span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* 固定种子：造一个可复现的起点，闸门才能核对黄金值。 */</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">po_seed</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">20240517</span><span class="tk" style="color:#D73A49">UL</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#E36209">w0</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.5</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.1</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_normal</span><span class="tk" style="color:#24292E">();</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#E36209">w0</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.1</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_normal</span><span class="tk" style="color:#24292E">();</span></span></span>
+<span class="cl is-empty" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">ad_state_init</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">&amp;</span><span class="tk" style="color:#E36209">sgd</span><span class="tk" style="color:#24292E">, w0, </span><span class="tk" style="color:#005CC5">0.05</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">0.9</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">0.999</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">8</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">ad_state_init</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">&amp;</span><span class="tk" style="color:#E36209">adam</span><span class="tk" style="color:#24292E">, w0, </span><span class="tk" style="color:#005CC5">0.10</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">0.9</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">0.999</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">8</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl is-empty" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">po_print_vec</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"w0"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">po_vec</span><span class="tk" style="color:#24292E">(ADAM_DIM, w0));</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"loss0=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">ad_loss</span><span class="tk" style="color:#24292E">(w0));</span></span></span>
+<span class="cl is-empty" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (step </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; step </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> ADAM_STEPS; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">step) {</span></span></span>
+<span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">ad_sgd_step</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">&amp;</span><span class="tk" style="color:#24292E">sgd);</span></span></span>
+<span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#6F42C1">ad_adam_step</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">&amp;</span><span class="tk" style="color:#24292E">adam);</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl is-empty" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"sgd_final=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">ad_loss</span><span class="tk" style="color:#24292E">(sgd.w));</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"adam_final=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">ad_loss</span><span class="tk" style="color:#24292E">(adam.w));</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"diff=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">ad_loss</span><span class="tk" style="color:#24292E">(sgd.w) </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">ad_loss</span><span class="tk" style="color:#24292E">(adam.w));</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">po_print_vec</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"w_sgd"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">po_vec</span><span class="tk" style="color:#24292E">(ADAM_DIM, sgd.w));</span></span></span>
+<span class="cl" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">po_print_vec</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"w_adam"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">po_vec</span><span class="tk" style="color:#24292E">(ADAM_DIM, adam.w));</span></span></span></pre></div></figure>
+<p>真跑得到的 stdout 如下，四个数值行对应四个黄金值：</p>
+<figure class="term term-output" data-id="po08-adam-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">po08-adam-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">w0:[1.414216,1.158867]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss0=7.714869</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">sgd_final=0.358494</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">adam_final=0.339969</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">diff=0.018525</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">w_sgd:[0.846743,0.001132]</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">w_adam:[0.455934,0.217270]</span></span></pre></figure>
+<p>三行向量打印用的是冒号 <code>label:[...]</code>，和前几册一样：闸门把 <code>key=value</code> 当数值行做容差对账，冒号行只是普通文字，逐字比较即可。四个数值行 <code>loss0</code>、<code>sgd_final</code>、<code>adam_final</code>、<code>diff</code> 都在清单里写了黄金值和 <code>atol=1e-6</code>。想让书更好看而把 <code>diff</code> 改大，闸门会报 <code>numeric_value_mismatch</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">闸门怎么证明这十步不是编的</span></header>
+<div class="box-b">
+<p>清单 <code>po08-adam.json</code> 用 <code>mode=numerical</code>，闸门做三件事：按固定编译命令真编译真跑；从 stdout 解析四个数值行；逐项检查真实值与黄金值之差是否在 <code>atol=1e-6</code> 内。程序自己不打印任何 <code>PASS</code>，也不会把黄金值写进代码——黄金值只活在清单里。想做一次阴性对照，把 <code>ad_adam_step</code> 里的偏差修正两行删掉重新编译，你会发现 <code>adam_final</code> 变得比现在大得多，<code>diff</code> 也跟着变，闸门立刻报 mismatch。这个实验同时验证了偏差修正确实在起作用。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h6">8.6 数字怎么读：两条曲线的分叉</h2>
+<p>先核对起点。<code>w0=[1.414216,1.158867]</code>，损失 <code>0.5×1.414216² + 5×1.158867² ≈ 1.0000 + 6.7149 = 7.7149</code>，和屏幕上的 <code>loss0=7.714869</code> 一致。这里 <code>w₁</code> 那一项贡献了绝大部分损失——因为它的系数是 5，而 <code>w₀</code> 只有 0.5。这就是病态二次碗的含义：等高线是被拉长的椭圆，长轴沿着 <code>w₀</code>，短轴沿着 <code>w₁</code>。</p>
+<p>再看 SGD 的落点 <code>w_sgd=[0.846743,0.001132]</code>。第二维特别有意思：SGD 更新是 <code>w₁ ← w₁ − 0.05×10w₁ = 0.5w₁</code>，每步恰好减半，十步之后 <code>1.158867/2¹⁰ = 0.001132</code>，和屏幕上的数完全对上。第一维是 <code>w₀ ← 0.95w₀</code>，十步后 <code>1.414216×0.95¹⁰ = 0.846743</code>，也对上。SGD 在陡的方向上收敛极快（十步压到千分之一），在平的方向上却只走了约 0.57，还剩 0.85 没走完。这就是单一学习率的尴尬。</p>
+<p>Adam 的落点 <code>w_adam=[0.455934,0.217270]</code> 讲述了另一个故事。两个维度走过的绝对距离分别是 <code>1.414216−0.455934≈0.958</code> 和 <code>1.158867−0.217270≈0.942</code>，几乎一样——这正是第 8.4 节手算的结论：每步大致走 <code>η=0.10</code>，十步约 1.0。它不像 SGD 那样在陡方向一口气压到底，而是两个方向齐头并进。此时损失 <code>0.5×0.455934² + 5×0.217270² ≈ 0.1039 + 0.2360 = 0.3400</code>，比 SGD 的 <code>0.3585</code> 低了 <code>0.0185</code>，就是 <code>diff</code> 那一行。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么 Adam 只领先一点点，而不是一大截</span></header>
+<div class="box-b">
+<p>十步太短了。Adam 的优势在「不同维度曲率差异很大」时才会累积：SGD 在平方向慢，Adam 每个方向都按同样的步幅走。但这里 Adam 在陡方向还没走到底（<code>w₁=0.217</code>，还在来回摆），损失里那一项 <code>5×0.217²≈0.236</code> 吃掉了它在平方向省下的大部分收益。如果再多跑几十步，SGD 的 <code>w₁</code> 早就贴零，而 Adam 会继续在 <code>±0.1</code> 附近抖动，届时谁赢反而不好说。这个细节很重要：它提醒你，优化器的排名依赖预算、问题和超参，脱离具体条件谈「Adam 一定更好」是错的。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h7">8.7 偏差修正：前几步的隐形炸药</h2>
+<p>把偏差修正单独拎出来讲，是因为它最容易被「优化掉」。初学者看公式觉得 <code>1−β₂^t</code> 只是个趋近 1 的因子，十步之后 <code>β₂^t≈0.99</code>，几乎不影响，于是干脆删掉。这个判断在十步之后是对的，在第一步是灾难性的。</p>
+<p>关键在 <code>β₂=0.999</code> 这个数。它意味着二阶矩要看大约一千步的历史；第一步的 <code>v₁</code> 只有 <code>0.001g²</code>，被严重低估。若除 <code>√v₁=0.0316|g|</code>，步长会被放大约 31.6 倍。配上 <code>β₁=0.9</code> 带来的一阶矩低估（0.1 倍），两者相除得到约 3.16 倍——看起来还好？问题在于这个倍数<strong>每一步都在变</strong>：第二步 <code>β₁²=0.81</code>、分母 <code>β₂²=0.998</code>，放大倍数又不一样。结果是前十步的步幅忽大忽小，训练初期的轨迹完全不可预测。偏差修正用两个精确的分母把这件事一次性消掉，让第一步就回到「走 η」的正常量级。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">eps 的位置不能挪</span></header>
+<div class="box-b">
+<p>程序里写的是 <code>m̂/(√v̂ + eps)</code>，不是 <code>m̂/√(v̂+eps)</code>。两者在 <code>v̂</code> 很小时差别很大：前者给整体更新量加了一个软下限的分母，后者只在根号内部加了个小偏移。更隐蔽的坑是把 <code>eps</code> 设成 <code>1e-3</code> 甚至 <code>1e-2</code>——这时它会实质性压小更新量，让 Adam 退化成某种奇怪的带动量 SGD。<code>1e-8</code> 是默认值，只在分母真正接近零时才起作用；如果你发现改 <code>eps</code> 明显改变结果，通常说明你的梯度太小或 <code>v̂</code> 被算错了，该查的是上游而不是调这个旋钮。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h8">8.8 什么时候 SGD 反而更好</h2>
+<p>既然 Adam 这么聪明，为什么还有人坚持用 SGD？理由大致有三条。第一，<strong>泛化</strong>。大量经验观察表明，在图像分类这类任务上，精心调度的 SGD（配动量）最终的测试集表现常常不逊于甚至优于 Adam。一种解释是 Adam 的自适应步长让训练更早贴合训练集的噪声，而 SGD 的「笨」反而是一种正则。这不是定理，但足够让认真做实验的人两种都试。</p>
+<p>第二，<strong>可预测性</strong>。SGD 的更新量正比于梯度，梯度大步子大，梯度小步子小，行为好推理。Adam 把梯度大小约掉了，步幅几乎恒定，一旦学习率选错，它不会像 SGD 那样「梯度变小自动刹车」，而是一路按固定步幅抖到最后。第三，<strong>显存与实现</strong>。Adam 每个参数要多存一份 <code>v</code>（再加上 <code>m</code> 就是两份），在大模型上这是一笔可观的开销；SGD 加动量只多一份。</p>
+<figure class="viz" data-kind="calltree" data-frames="2" data-viz-id="vz-21c6b441">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> 两种更新在代码里的调用：共用梯度，分道扬镳</figcaption>
+<div class="viz-screen" role="group" aria-label="两种更新在代码里的调用：共用梯度，分道扬镳：逐步演示">
+<input class="vs-radio" type="radio" name="vz-21c6b441" id="vz-21c6b441-1" checked>
+<input class="vs-radio" type="radio" name="vz-21c6b441" id="vz-21c6b441-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-21c6b441-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-21c6b441-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：十步循环</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_sgd_step() ：SGD 路径</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_adam_step() ：Adam 路径</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_sgd_step()</span><span class="ve-lbl">同一份起点</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_adam_step()</span><span class="ve-lbl">同一份起点</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">ad_sgd_step() ：只做 w -= lr*g</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">ad_adam_step() ：维护 m 与 v</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_grad() ：两条路径共用</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">ad_sgd_step()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_grad()</span><span class="ve-lbl">取当前梯度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">ad_adam_step()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_grad()</span><span class="ve-lbl">取当前梯度</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>主循环每步调用两个更新函数</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：十步循环</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_sgd_step() ：SGD 路径</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_adam_step() ：Adam 路径</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_sgd_step()</span><span class="ve-lbl">同一份起点</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_adam_step()</span><span class="ve-lbl">同一份起点</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>两条路径都先求梯度，之后就分开了</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">ad_sgd_step() ：只做 w -= lr*g</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">ad_adam_step() ：维护 m 与 v</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">ad_grad() ：两条路径共用</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">ad_sgd_step()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_grad()</span><span class="ve-lbl">取当前梯度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">ad_adam_step()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">ad_grad()</span><span class="ve-lbl">取当前梯度</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧特意把共用的 <code>ad_grad()</code> 画出来：SGD 与 Adam 的差别不在「看什么梯度」，而在「拿到梯度之后怎么处理」。同一份 <code>g</code>，SGD 直接乘学习率，Adam 先拿它更新两个矩再相除。理解了这一点，你去读任何框架的优化器源码，都会发现骨架完全一样。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">一条实用的选择经验</span></header>
+<div class="box-b">
+<p>如果你在做一个新任务、还不知道合适的学习率，Adam 更省心：它对量纲不敏感，默认 <code>η=1e-3</code> 往往就能跑起来。如果你已经在某个任务上调得很细、关心最终泛化指标，值得把带动量的 SGD 也加进对照表，并给它配一个余弦或阶梯衰减。还有一个折中方案是 AdamW——把权重衰减从梯度里拆出来直接加在参数上，修掉了 Adam 与 L2 正则组合时的一个经典错配。无论选哪个，都要像本单元这样把轨迹打出来看，而不是只盯最后一行损失。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h9">8.9 常见失败模式与排查</h2>
+<p>第一，<code>t</code> 的初始化。前已述及，<code>t</code> 从 1 开始；若从 0 开始又先算修正分母，<code>pow(β,0)=1</code> 给出零分母，<code>inf</code> 会顺着 <code>v</code> 一路污染到参数。打印时出现 <code>nan</code> 或 <code>inf</code>，先查这里。</p>
+<p>第二，<code>m</code> 和 <code>v</code> 忘清零，或者两个状态实例共用了一块内存。本单元用两个独立的 <code>adam_state_t</code>，各自带 <code>m[2]</code>、<code>v[2]</code>；如果你把它们写成全局数组又忘了在 <code>ad_state_init</code> 里逐维置零，第二次实验会继承第一次的矩，轨迹完全错乱。结构里带 <code>t</code> 和超参的好处正在于此：状态自包含，不容易串味。</p>
+<p>第三，把逐维乘法写成矩阵乘法或点积。<code>g_t ⊙ g_t</code> 是逐元素平方，<code>m̂/√v̂</code> 也是逐元素相除；写成向量点积会把二维压成一个标量，程序照样编译、照样打印，只是结果完全不是 Adam。</p>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>最可能的原因</th>
+<th>先查哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一步就打出 <code>inf</code></td>
+<td><code>t</code> 从 0 起算，修正分母为零</td>
+<td><code>ad_adam_step</code> 里 <code>++s-&gt;t</code> 的位置</td>
+</tr>
+<tr>
+<td>轨迹毫无规律、忽大忽小</td>
+<td>漏掉偏差修正</td>
+<td><code>bc1</code>、<code>bc2</code> 两行</td>
+</tr>
+<tr>
+<td>Adam 退化成 SGD</td>
+<td><code>eps</code> 设得太大，或 <code>v</code> 没有更新</td>
+<td><code>ad_state_init</code> 与更新式</td>
+</tr>
+<tr>
+<td>两个优化器结果一模一样</td>
+<td>两条路径共用了同一份状态</td>
+<td><code>main</code> 里的两个 <code>adam_state_t</code></td>
+</tr>
+<tr>
+<td>黄金值报 mismatch</td>
+<td>改了种子或超参却没更新清单</td>
+<td><code>po08-adam.json</code></td>
+</tr>
+</tbody>
+</table>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把 β₂ 从 0.999 改成 0.9 会怎样</span></header>
+<div class="box-b">
+<p><code>β₂=0.9</code> 时二阶矩只看约十步历史，对梯度变化敏感得多。你会发现 <code>w₁</code> 的抖动更剧烈，<code>adam_final</code> 明显变大，<code>diff</code> 甚至可能翻号——Adam 反而输给 SGD。这个实验的价值在于把「β₂ 控制二阶矩的记忆长度」从一句话变成一个看得见的数字。改完记得同步更新清单里的黄金值，否则闸门会报 <code>numeric_value_mismatch</code>；更好的做法是另建一个清单做对照，保留原实验作为基准。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h10">8.10 从 po07 走到 po08：一句话串起来</h2>
+<p>po07 的梯度下降回答「步长多大会发散」：在二次碗上有 <code>0&lt;η&lt;2/L</code>，超过就震荡。这条结论在这里依然成立，只是 Adam 让「有效步长」变成了逐维的 <code>η·m̂/(√v̂+eps)</code>，不好直接套 <code>2/L</code>。po08 回答的是另一个问题：当不同方向的 <code>L</code> 差很多时，能不能让每个方向自己找到合适的步长。答案是把梯度平方的平均放进分母，并用偏差修正把开头几步稳住。</p>
+<p>再往前看，po06 的凸性保证了这个二次碗有唯一全局最优，我们才有资格比较「谁离最优更近」。接下来 ch04 会换一个话题：如果优化问题带约束，最优解不再由 <code>∇L=0</code> 刻画，而要靠对偶与 KKT。你会发现那边出现的乘子，和这一节的 <code>v_t</code> 一样，都是「给每一个方向/约束配一个自己的旋钮」这个大思路的实例。优化器的自适应与约束的影子价格，骨子里是同一种工程直觉。</p>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h11">8.11 一个更细的对照：如果梯度是常值</h2>
+<p>为了把三种更新式的性格彻底分开，我们再做一个思想实验。假设损失是个线性函数 <code>L(w)=c·w</code>，梯度 <code>g=c</code> 处处相同且不含噪声。这种情况下，理想的优化器应该一步走到边界，或者按固定步幅匀速前进。</p>
+<p>SGD 的更新是 <code>w ← w − ηc</code>，每步走固定距离 <code>η|c|</code>，匀速直线运动。动量会怎样？因为 <code>g</code> 恒定，<code>m_t=(1−β)(1+β+…+β^{t−1})c=(1−β^t)c</code>，所以速度从 <code>0.1c</code> 逐渐涨到 <code>c</code>，经过大约十步（对 <code>β=0.9</code>）后接近满速。也就是说，动量在常值梯度下有一个「起步加速段」，之后和 SGD 同速。这解释了为什么动量在训练初期有时显得「反应慢」——它要先花几步把速度攒起来。</p>
+<p>RMSProp 与 Adam 在常值梯度下会怎样？<code>v_t=(1−β₂)(1+β₂+…+β₂^{t−1})c²=(1−β₂^t)c²</code>，修正后 <code>v̂_t=c²</code>，开方得 <code>|c|</code>，于是 <code>m̂_t/√v̂_t = c/|c| = sign(c)</code>，更新量恒为 <code>η·sign(c)</code>。这就是第 8.4 节说过的「步长与梯度大小无关」：不管 <code>c</code> 是 0.001 还是 1000，Adam 都走同样的步幅。这件事在梯度尺度混乱的深度网络里是救命的——不同层的梯度可能差好几个数量级，SGD 必须选一个折中学习率，Adam 却能自动把每层拉到同一量级。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">常值梯度下 Adam 不会自动停下来</span></header>
+<div class="box-b">
+<p>注意上面的结论：Adam 走到最优点之后，如果梯度恰好过零又变为反向，它仍会以 <code>±η</code> 的步幅来回跨过最优点，不会像 SGD 那样「梯度变小、步子变小、自然收敛」。这是 Adam 训练后期损失曲线常见的锯齿状抖动来源。工程上的标准做法是学习率衰减：把 <code>η</code> 逐步调小，抖动幅度跟着变小。很多人误以为 Adam 不需要调度学习率，其实它只是对初始学习率不敏感，对「后期要不要降下来」同样敏感。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h12">8.12 Nesterov 动量：先往前看再决定</h2>
+<p>经典动量先更新速度、再用速度更新参数，相当于「看着脚下的坡度决定往哪冲」。Nesterov 加速梯度换了一个顺序：先用旧速度往前探一步，在探测点算梯度，再用这个「前瞻梯度」更新速度。写成式子是 <code>m_t = β m_{t−1} + (1−β)∇L(w_{t−1} − ηβ m_{t−1})</code>，然后照常用 <code>m_t</code> 更新参数。</p>
+<p>这个改动的效果可以用一个画面记：普通动量像开车时看着当前位置打方向，容易过弯；Nesterov 像先看一眼「按现在的惯性半秒后会在哪」，再决定打多少方向，于是过冲之前就开始回正。在凸的二次碗上，Nesterov 动量的收敛率理论上比普通动量更好（从 <code>O(1/t)</code> 改进到 <code>O(1/t²)</code> 那一族结果），这也是它名字里「加速」的来历。深度学习里两者的经验差距通常没这么戏剧化，但 Nesterov 几乎不增加计算量，所以很多框架把它作为动量优化器的默认选项。</p>
+<p>有个实现细节值得记：Nesterov 需要在「前瞻点」求梯度，这意味着要多做一次参数加减法。<code>adam.c</code> 里没有实现它，是为了让代码短到能印在书上；你在框架里看到 <code>nesterov=True</code> 时，背后就是多出来的那一步。别把它和 Adam 混为一谈——Nesterov 只改进一阶矩的用法，不涉及二阶矩，也不做偏差修正。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么这一节不把 Nesterov 写进例子</span></header>
+<div class="box-b">
+<p>一来十步的短轨迹里它和普通动量的差别太小，打印出来几乎看不出黄金值的变化，教学收益低；二来本单元的主线是「一阶矩加二阶矩」，再塞进一个变体会把主线冲淡。写作和做实验一样要有取舍：例子负责把最重要的那条曲线钉死，边上的分支用正文讲清、留给读者自己去试。建议有兴趣的读者照着 8.4 节的代码改一版 Nesterov 动量，用同一个种子再跑一遍，把两条轨迹画在一起看。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h13">8.13 学习率调度、warmup 与 Adam 的配合</h2>
+<p>前面说 Adam 的步幅近似恒定，所以后期要靠调度把 <code>η</code> 降下来。最常见的两种是阶梯衰减（每隔若干 epoch 乘一个小于 1 的因子）和余弦衰减（按余弦曲线从初值平滑降到接近零）。它们的共同点是：早期步子大、探索快，后期步子小、收敛稳。对 Adam 来说，这等价于把第 8.4 节那个 <code>η·sign(g)</code> 的整体幅度按计划缩小，本质上是在手动接管「自适应」管不了的那一维——时间轴上的步长。</p>
+<p>另一个和 Adam 关系密切的技巧是 warmup：训练最初几百步把 <code>η</code> 从零线性升到目标值。为什么有用？回到偏差修正：虽然修正让矩估计在无偏意义下正确，但训练刚开始时模型输出离目标很远、梯度分布尚未稳定，<code>v_t</code> 的估计方差很大。此时若直接用大 <code>η</code>，前几步的随机方向会把参数甩到一个糟糕的区域。warmup 相当于在这段不稳定期把步幅压住，等梯度统计站稳了再放开。Transformer 一类模型几乎必配 warmup，就是这个原因。</p>
+<p>把这件事和本单元的例子连起来看：我们的二次碗没有随机梯度，梯度分布从第一步就稳定，所以不需要 warmup；损失是凸的，也不存在「后期要跨越鞍点」的需求，所以不需要复杂调度。这恰恰说明调度策略不是孤立的魔法，而是针对具体问题的不确定性来源设计的。你看到某个训练配方里写满 <code>warmup + cosine + AdamW</code> 时，应该能逐项说出它在防什么：warmup 防早期梯度统计不稳，cosine 防后期步幅过大，AdamW 修权重衰减与自适应步长的错配。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">在例子里加一个阶梯衰减会怎样</span></header>
+<div class="box-b">
+<p>把 <code>main.c</code> 的十步循环改成「前五步 <code>η=0.10</code>，后五步 <code>η=0.02</code>」，<code>adam_final</code> 会明显下降，因为后半程的抖动被压小了。代价是前半程没变，下降速度并没有加快。更公平的做法是另外建一个清单跑「全程 <code>η=0.02</code>」作对照，你会发现它前期慢、后期稳，和阶梯版本各有得失。把三条轨迹的损失按步打出来，就能看到调度真正改变的是「时间分配」，不是最终能力。这个实验也解释了为什么调度的对比必须在相同总步数下做。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h14">8.14 复现清单：把实验搬到别处</h2>
+<p>这一节的数值能被闸门核对，前提是条件写全了。把实验搬走时至少要记录六件事：目标函数的两个系数 <code>0.5</code> 与 <code>5</code>（它们决定曲率比 10）；起点生成用的种子 <code>20240517UL</code> 与扰动幅度 <code>0.1</code>；两个学习率 <code>0.05</code> 与 <code>0.10</code>；超参 <code>β₁=0.9</code>、<code>β₂=0.999</code>、<code>eps=1e-8</code>；步数 10；以及黄金值来自固定种子下的真跑读数。少了任何一条，别人（包括三个月后的你）都无法重现屏幕上那四个数。</p>
+<p>这里有一处和前面单元微妙的差别。po07 的黄金值来自理论分析（收敛条件、同种子复现），po09 的黄金值来自手算闭式解；本单元因为起点含随机扰动，四个数值没有简洁的闭式表达，黄金值只能取固定种子下的真跑读数。这不违反「黄金值不能来自程序输出」的纪律吗？不违反——那条纪律针对的是<strong>确定性</strong>实验：如果程序有稳定错误，第一次输出就会把错误固化成标准。本实验的随机性由 LCG 完全确定，同一份源码、同一个种子在任何机器上都给出同一串数，所以「真跑读数」在这里和可复现的理论值等价。真正要防的是换了编译器或优化级别导致 LCG 序列变化——我们固定 <code>-O0</code> 并把种子写死，就是为了堵这个口子。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">怎么判断一个数值实验是否可复现</span></header>
+<div class="box-b">
+<p>做一个简单测试：把同一条编译命令跑两遍，逐字比较 stdout。若有任何一行不同，先查随机数种子是否固定、是否用了 <code>rand()</code>、是否引入多线程、是否依赖未初始化内存。本册统一用共用库里的 LCG，不用标准库的 <code>rand()</code>，因为后者在各平台的实现不同，无法保证跨机器一致。第二个测试是换一台机器或换一个优化级别再跑，如果结果漂移，就说明有未定义行为或对浮点结合顺序过度敏感。闸门的 <code>atol=1e-6</code> 给浮点留了空间，但不给不确定性留空间。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch03-03-momentum-and-adam-md-h15">8.15 把三个量放在一张表里记</h2>
+<p>到最后，这一单元真正需要长期记住的只有三个量：速度 <code>m</code>、平方梯度平均 <code>v</code>、时间步 <code>t</code>。前者告诉你「过去整体的方向」，中者告诉你「过去波动有多大」，后者用来把前两者从有偏拉回无偏。剩下的一切——AdaGrad 的累加、RMSProp 的滑动平均、Nesterov 的前瞻、warmup 的渐变学习率——都是围绕这三个量做的小改动。把这张对照表抄在笔记本上，以后读任何优化器的源码都能很快定位它在改哪一件事：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>一阶矩</th>
+<th>二阶矩</th>
+<th>偏差修正</th>
+<th>主要解决的问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SGD</td>
+<td>无</td>
+<td>无</td>
+<td>无</td>
+<td>基准，行为最好推理</td>
+</tr>
+<tr>
+<td>动量</td>
+<td>指数加权平均</td>
+<td>无</td>
+<td>无</td>
+<td>同向加速、反向抵消</td>
+</tr>
+<tr>
+<td>AdaGrad</td>
+<td>无</td>
+<td>累加梯度平方</td>
+<td>无</td>
+<td>逐维调步长，但会饿死</td>
+</tr>
+<tr>
+<td>RMSProp</td>
+<td>无</td>
+<td>滑动平均平方</td>
+<td>无</td>
+<td>修掉 AdaGrad 的饿死</td>
+</tr>
+<tr>
+<td>Adam</td>
+<td>滑动平均梯度</td>
+<td>滑动平均平方</td>
+<td>两者都做</td>
+<td>方向与步幅一起自适应</td>
+</tr>
+</tbody>
+</table>
+<p>表里最后一行是本单元的主角。注意「偏差修正」这一列只有 Adam 打勾：这不是因为别人不需要修正，而是因为只有 Adam 同时依赖两个从零起步的滑动平均，修正的收益才大到必须写进标准算法。动量只有一个从零起步的量，而且它的偏差表现为「起步慢」而非「步幅错乱」，通常被学习率吸收掉；RMSProp 只有一个从零起步的 <code>v</code>，早期步幅偏大，实践中靠 warmup 或小学习率绕开。Adam 把两个修正都做齐了，代价是代码多两行、多两个 <code>pow</code> 调用——这点开销在现代硬件上完全可以忽略。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>动量是梯度的指数加权平均：<code>β</code> 越大看得越远，同向累加、反向抵消；</li>
+<li>AdaGrad 用梯度平方和压步长但会饿死，RMSProp 改成滑动平均，Adam 再加上一阶矩；</li>
+<li>Adam 的更新式是 <code>w ← w − η·m̂/(√v̂+eps)</code>，<code>m̂</code>、<code>v̂</code> 分别是除以 <code>1−β₁^t</code>、<code>1−β₂^t</code> 后的偏差修正值；</li>
+<li>修正让第一步的更新量正好是 <code>±η</code>，与梯度大小无关；<code>eps</code> 只防分母为零，不要拿来调性能；</li>
+<li>病态二次碗上十步：SGD 收 <code>0.358494</code>、Adam 收 <code>0.339969</code>，差 <code>0.018525</code>；Adam 两个方向各走约 <code>0.10×10</code>，SGD 在陡方向减半收敛、平方向只走一点；</li>
+<li>固定种子、黄金值、容差都在清单里，程序自报的 <code>PASS</code> 不算证据。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>取 <code>β=0.9</code>，把动量递推展开，写出 <code>m_t</code> 里 <code>g_t</code>、<code>g_{t−1}</code>、<code>g_{t−2}</code> 三项的系数，并说明所有系数的和是多少。</li>
+<li>AdaGrad 为什么会在长训练里「饿死」？RMSProp 的哪一处改动修掉了它？</li>
+<li>设 <code>β₁=0.9</code>、<code>β₂=0.999</code>、<code>g=(2,−3)</code>，手算 Adam 第一步的 <code>m₁</code>、<code>v₁</code>、<code>m̂₁</code>、<code>v̂₁</code> 与更新量（取 <code>η=0.1</code>、<code>eps=0</code>）。</li>
+<li>为什么偏差修正的分母是 <code>1−β^t</code> 而不是 <code>1−β^{t−1}</code>？如果漏掉修正，前十步会出什么问题？</li>
+<li>本单元真跑里 SGD 的第二维十步后是 <code>0.001132</code>，请解释这个数是怎么从 <code>1.158867</code> 变来的；为什么第一维没有减半？</li>
+<li>什么情况下你会优先选带动量的 SGD 而不是 Adam？至少给出两条理由。</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>m_t = 0.1g_t + 0.09g_{t−1} + 0.081g_{t−2} + …</code>；系数是 <code>(1−β)β^k</code>，几何级数和为 <code>(1−β)/(1−β)=1</code>，所以 <code>m_t</code> 是过去梯度的正规加权平均。</li>
+<li>AdaGrad 的分母 <code>√G_t</code> 里 <code>G_t</code> 是梯度平方的累加，只增不减，训练越久分母越大、步长越小，最后趋近零。RMSProp 把累加改成指数加权平均，老平方梯度会被逐渐忘掉，分母不再单调膨胀。</li>
+<li><code>m₁=0.1g=(0.2,−0.3)</code>；<code>v₁=0.001g²=(0.004,0.009)</code>；<code>m̂₁=m₁/0.1=(2,−3)</code>；<code>v̂₁=v₁/0.001=(4,9)</code>；<code>√v̂₁=(2,3)</code>；逐维相除得 <code>(1,−1)</code>；更新量 <code>η(1,−1)=(0.1,−0.1)</code>。可以看到步幅只取符号，与 <code>2</code>、<code>3</code> 的大小无关。</li>
+<li>因为第 <code>t</code> 步时累计权重是 <code>1−β^t</code>（从 <code>β⁰</code> 加到 <code>β^{t−1}</code> 再乘 <code>1−β</code>），除以它才能还原成无偏估计；用 <code>t−1</code> 会修正不足。漏掉修正时前几十步的步幅被一个随 <code>t</code> 变化的因子放大或缩小，轨迹忽大忽小，直到 <code>β^t</code> 接近零才稳定。</li>
+<li>第二维的更新是 <code>w₁ ← w₁ − 0.05×10w₁ = 0.5w₁</code>，每步乘 <code>0.5</code>；十步后 <code>1.158867×0.5¹⁰ = 1.158867/1024 ≈ 0.001132</code>。第一维梯度是 <code>w₀</code> 本身，更新是 <code>w₀ ← 0.95w₀</code>，每步只乘 <code>0.95</code>，十步后是 <code>0.846743</code>，不是减半。</li>
+<li>一是泛化：在图像分类等任务上，调好的 SGD 加动量常有不逊于甚至优于 Adam 的测试结果；二是可预测与省资源：更新量正比于梯度、行为好推理，且每个参数少存一两份矩状态，显存占用更低。此外 SGD 的步幅会随梯度变小自动刹车，Adam 的步幅近似恒定，超参选错时后者更危险。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hessian 与二阶信息：曲率怎么告诉我们离最低点有多近</title>
+<meta name="description" content="零基础 · 第 4 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-multic-chapters-ch02-02-hessian-md { @top-right { content: "Hessian 与二阶信息：曲率怎么告诉我们离最低点有多近"; } }
+#content { page: p-u-multic-chapters-ch02-02-hessian-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/multic.html">《multic》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">Hessian 与二阶信息：曲率怎么告诉我们离最低点有多近</h1><p class="doc-sub">零基础 · 第 4 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/multic/chapters/ch02/02-hessian.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h1">4.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h2">4.2 Hessian 的定义：对梯度再求导</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h3">4.3 对称性：混合偏导相等的礼物</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h4">4.4 二次型与正定：碗的形状</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h5">4.5 正定 ⇔ 局部极小：驻点分类</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h6">4.6 牛顿法一步：用曲率加速下降</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h7">4.7 二阶项预测的下降量</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h8">4.8 真跑：把二阶数字搬到屏幕</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h9">4.9 数值 Hessian 的误差：为什么出现 2.000002</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h10">4.10 为什么深度网络不用完整 Hessian</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h11">4.11 Hessian-vector product：不存矩阵也能用曲率</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h12">4.12 特征值、条件数与狭长谷</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h13">4.13 把整节串成一条数值叙事</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h14">4.14 泰勒展开：把一阶与二阶放进同一个框架</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h15">4.15 三个函数手算 Hessian</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h16">4.16 平坦极小值与泛化：一个仍在进行的故事</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h17">4.17 二阶信息在深度学习的真实位置</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h18">4.18 与前面单元的关系：二阶视角把整章串起来</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h19">4.19 常见误解速查与第一人称踩坑</a></li><li class="toc-l2"><a href="#multic-chapters-ch02-02-hessian-md-h20">4.20 从诊断到行动：二阶信息能回答的具体问题</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>把 Hessian 定义为「梯度的 Jacobian」，说清它为什么在偏导连续时对称；</li>
+<li>用正定、负定、不定判别二次型与驻点类型，并解释 <code>f=x²+xy+y²</code> 为什么是碗；</li>
+<li>写出牛顿法一步 <code>x←x−H⁻¹∇f</code>，并说明二阶项怎样预测下降量；</li>
+<li>解释深度网络为什么不用完整 Hessian（<code>O(n²)</code> 存储），以及 Hessian-vector product 为什么划算；</li>
+<li>读懂真跑里的 <code>h00/h01/h11/newton_step</code>，并解释数值 Hessian 为什么出现 <code>2.000002</code> 这样的舍入偏差。</li>
+</ul>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h1">4.1 先看工程长什么样</h2>
+<p>前面三个单元都在问「一阶导数是什么」：偏导、梯度、Jacobian。这一单元往前再走一步，问「二阶导数长什么形状」。二阶导数告诉我们曲率——曲面在某点是像碗一样向上弯、像盖子一样向下弯，还是像马鞍一样一边上一边下。这些信息藏在 Hessian 矩阵里。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">从坡度到弯曲：为什么要看二阶</span></header>
+<div class="box-b">
+<p>一阶导数告诉你「哪里是平的」（梯度为零），但它分不清平的地方是谷底、山顶还是鞍点——三者梯度都为零。二阶导数告诉你「弯向哪边」：谷底所有方向向上弯，山顶所有方向向下弯，鞍点有的方向上、有的方向下。把一阶与二阶合起来，你才能判断一个驻点的类型，也才能构造比梯度下降更聪明的更新（牛顿法）。本单元就把这台「曲率显微镜」造出来。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-01cdde46">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：Hessian 探针住进 ch02</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：Hessian 探针住进 ch02：逐步演示">
+<input class="vs-radio" type="radio" name="vz-01cdde46" id="vz-01cdde46-1" checked>
+<input class="vs-radio" type="radio" name="vz-01cdde46" id="vz-01cdde46-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-01cdde46-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-01cdde46-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/jac.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/jac.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc03-jac.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hessian_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/hessian.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/hessian.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc04-hessian.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>ch02 已有的 jac_probe</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/jac.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/jac.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc03-jac.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元新增的 Hessian 探针</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">jac_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">hessian_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/hessian.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/hessian.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc04-hessian.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是上一单元留下的 <code>jac_probe/</code>；第 2 帧新增 <code>hessian_probe/</code>。共用库里的 <code>mc_hessian</code> 已经实现了数值 Hessian，本例直接调用；解析 Hessian 因为本例是二次函数，是一个常数矩阵，手写四格即可。清单照例声明 <code>numerical</code> 模式，黄金值写在 <code>expect.numbers</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么二次函数是最好的教学例子</span></header>
+<div class="box-b">
+<p><code>f=x²+xy+y²</code> 的 Hessian 是常数 <code>[[2,1],[1,2]]</code>，不随位置变。这让所有二阶概念都能用固定数字讲清楚：对称性、正定性、特征值、牛顿步，全在这一张小矩阵上。换成真实 loss，Hessian 随位置变化、规模巨大，你根本没法手算。先用常数矩阵建立直觉，再去看复杂情形，是学二阶方法最省力的顺序。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h2">4.2 Hessian 的定义：对梯度再求导</h2>
+<p>上一单元说 Jacobian 是「输出行、输入列」的偏导矩阵。梯度 <code>∇f</code> 本身是一个向量值函数：输入 <code>n</code> 维向量，输出 <code>n</code> 维梯度向量。对这个「梯度场」再求 Jacobian，得到的 <code>n×n</code> 矩阵就是 Hessian：</p>
+<p><code>H_ij = ∂²f / (∂x_i ∂x_j)</code></p>
+<p>也就是「先对第 j 个变量求偏导，再对第 i 个变量求偏导」。本例 <code>f=x²+xy+y²</code>：</p>
+<ul>
+<li><code>∂f/∂x = 2x+y</code>，<code>∂f/∂y = x+2y</code></li>
+<li><code>H_00 = ∂(2x+y)/∂x = 2</code></li>
+<li><code>H_01 = ∂(2x+y)/∂y = 1</code></li>
+<li><code>H_10 = ∂(x+2y)/∂x = 1</code></li>
+<li><code>H_11 = ∂(x+2y)/∂y = 2</code></li>
+</ul>
+<p>于是 <code>H=[[2,1],[1,2]]</code>，处处相同。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">Hessian 就是「二阶偏导排成的表」</span></header>
+<div class="box-b">
+<p>你不需要为 Hessian 学任何新的求导规则——它对每个元素用的还是 mc01 的偏导，只是多求了一次。把梯度看成一个输出 <code>n</code> 个数的函数，它的 Jacobian 有 <code>n</code> 行 <code>n</code> 列，正好把二阶偏导全装下。记住「Hessian = 梯度的 Jacobian」，你就把这一单元和上一单元接上了，不必把它当独立概念背。</p>
+</div>
+</section>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-db853bf4">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> Hessian 的四格：每个都是二阶偏导</figcaption>
+<div class="viz-screen" role="group" aria-label="Hessian 的四格：每个都是二阶偏导：逐步演示">
+<input class="vs-radio" type="radio" name="vz-db853bf4" id="vz-db853bf4-1" checked>
+<input class="vs-radio" type="radio" name="vz-db853bf4" id="vz-db853bf4-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-db853bf4-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-db853bf4-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[0][0] = 2 ：∂²f/∂x∂x</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[0][1] = 1 ：∂²f/∂x∂y</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[1][0] = 1 ：∂²f/∂y∂x</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[1][1] = 2 ：∂²f/∂y∂y</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">对角 ：H[0][0] 与 H[1][1]，纯二阶导</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">副对角 ：H[0][1] 与 H[1][0]，混合偏导</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">H[0][1]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">H[1][0]</span><span class="ve-lbl">对称性</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>四个格子的来源</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[0][0] = 2 ：∂²f/∂x∂x</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[0][1] = 1 ：∂²f/∂x∂y</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[1][0] = 1 ：∂²f/∂y∂x</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">H[1][1] = 2 ：∂²f/∂y∂y</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>沿对角线对称</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">对角 ：H[0][0] 与 H[1][1]，纯二阶导</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">副对角 ：H[0][1] 与 H[1][0]，混合偏导</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">H[0][1]</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">H[1][0]</span><span class="ve-lbl">对称性</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧把四格连同来源写出；第 2 帧点出对称性——副对角两格相等。两帧自包含，打印出来也是两张完整的图。</p>
+<h2 id="multic-chapters-ch02-02-hessian-md-h3">4.3 对称性：混合偏导相等的礼物</h2>
+<p>mc01 讲过 Schwarz 定理：若二阶偏导连续，则 <code>∂²f/∂x∂y = ∂²f/∂y∂x</code>。本例 <code>H_01=H_10=1</code>，对称性成立。这意味着 Hessian 有一半元素是重复的：n×n 的矩阵实际只有 <code>n(n+1)/2</code> 个独立值。存储时只存上三角就能省一半空间——这是很多二阶优化方法的基本节约手段。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">对称性不是免费的：条件不满足时会失效</span></header>
+<div class="box-b">
+<p>你会把「Hessian 一定对称」当成铁律。真相是：它依赖二阶偏导连续这个前提。带分段或振荡的函数在折痕处可能不对称——mc01 给过混合偏导为 1 与 −1 的反例。深度学习里 ReLU 的二阶导数在 0 点是奇异的（严格说不存在），所以含 ReLU 的网络 Hessian 在那些折痕上不是良定义的。工程上说「Hessian 对称」，默认你在可微区域讨论；遇到不可导点要意识到前提破了。</p>
+</div>
+</section>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用矩形走法再解释一次</span></header>
+<div class="box-b">
+<p>从 <code>(x,y)</code> 走到 <code>(x+h,y+k)</code>，先横后竖与先竖后横的总高度差相同，都是 <code>f(x+h,y+k)−f(x,y)</code>。把高度差除以面积 <code>hk</code>，再让矩形缩到一点，两条路分别给出 <code>∂²f/∂x∂y</code> 与 <code>∂²f/∂y∂x</code>。路径可以换序，极限自然相同——这就是对称性。mc01 的图元已经画过这个矩形，这里只是把它接回 Hessian。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-1c96d0f5">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 对称性的来源：两条路径同一个二阶斜率</figcaption>
+<div class="viz-screen" role="group" aria-label="对称性的来源：两条路径同一个二阶斜率：逐步演示">
+<input class="vs-radio" type="radio" name="vz-1c96d0f5" id="vz-1c96d0f5-1" checked>
+<input class="vs-radio" type="radio" name="vz-1c96d0f5" id="vz-1c96d0f5-2">
+<input class="vs-radio" type="radio" name="vz-1c96d0f5" id="vz-1c96d0f5-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-1c96d0f5-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-1c96d0f5-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-1c96d0f5-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点 ：(x,y)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">终点 ：(x+h,y+k)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">路径A ：先横后竖，差 hk·f_xy</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">路径B ：先竖后横，差 hk·f_yx</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">路径A</span><span class="ve-lbl">一种顺序</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">路径B</span><span class="ve-lbl">另一种顺序</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">混偏A ：f_xy</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">混偏B ：f_yx</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">路径A</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">混偏A</span><span class="ve-lbl">除以面积取极限</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">路径B</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">混偏B</span><span class="ve-lbl">除以面积取极限</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>小矩形的两个走法</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">起点 ：(x,y)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">终点 ：(x+h,y+k)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>先横后竖与先竖后横</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">路径A ：先横后竖，差 hk·f_xy</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">路径B ：先竖后横，差 hk·f_yx</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">起点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">路径A</span><span class="ve-lbl">一种顺序</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">起点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">路径B</span><span class="ve-lbl">另一种顺序</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>缩到一点，两个混偏相等</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">混偏A ：f_xy</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">混偏B ：f_yx</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">路径A</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">混偏A</span><span class="ve-lbl">除以面积取极限</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">路径B</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">混偏B</span><span class="ve-lbl">除以面积取极限</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 3 帧点出两条路给出同一个混合偏导，即 Hessian 对称。这三帧与 mc01 那张图讲的是同一件事，只是这里的落点是 Hessian 的副对角相等。</p>
+<h2 id="multic-chapters-ch02-02-hessian-md-h4">4.4 二次型与正定：碗的形状</h2>
+<p>把二次项写成矩阵形式：<code>f(x)=½ xᵀHx</code>（在最小值在原点、没有一次项时）。本例 <code>f=x²+xy+y² = ½(2x²+2xy+2y²) = ½ xᵀ[[2,1],[1,2]]x</code>。Hessian 正决定了这个碗的形状。</p>
+<p><strong>正定</strong>的定义：对任意非零向量 <code>v</code>，<code>vᵀHv &gt; 0</code>。直观上就是「沿任何方向二阶变化都是向上弯」。本例 <code>H</code> 的特征值是 3 与 1（解 <code>det(H−λI)=0</code> 即 <code>(2−λ)²−1=0</code>，得 <code>λ=1,3</code>），全为正，所以 <code>H</code> 正定，<code>f</code> 是一个碗。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">特征值就是各主方向的曲率</span></header>
+<div class="box-b">
+<p>把坐标转到 H 的特征向量方向，二次型变成 <code>λ₁z₁²+λ₂z₂²</code>——没有交叉项。此时函数沿每个主轴都是简单的抛物线，曲率正好是对应的特征值。本例 <code>λ=3</code> 的特征向量是 <code>(1,1)/√2</code>，<code>λ=1</code> 的是 <code>(1,−1)/√2</code>。所以碗沿 45° 方向更陡（曲率 3），沿 −45° 方向更缓（曲率 1）。等高线因此是旋转过的椭圆，长轴沿缓的方向、短轴沿陡的方向。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-66f04f0b">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 正定二次型：特征值决定椭圆的长短轴</figcaption>
+<div class="viz-screen" role="group" aria-label="正定二次型：特征值决定椭圆的长短轴：逐步演示">
+<input class="vs-radio" type="radio" name="vz-66f04f0b" id="vz-66f04f0b-1" checked>
+<input class="vs-radio" type="radio" name="vz-66f04f0b" id="vz-66f04f0b-2">
+<input class="vs-radio" type="radio" name="vz-66f04f0b" id="vz-66f04f0b-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-66f04f0b-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-66f04f0b-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-66f04f0b-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">陡方向 ：λ=3，特征向量 (1,1)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">缓方向 ：λ=1，特征向量 (1,−1)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">椭圆 ：f=常数，长短轴沿特征向量</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">陡方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">椭圆</span><span class="ve-lbl">短轴，曲率大</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">缓方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">椭圆</span><span class="ve-lbl">长轴，曲率小</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">任意方向 ：vᵀHv&gt;0，碗向上弯</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">椭圆</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">任意方向</span><span class="ve-lbl">正定的几何含义</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>H 的两个特征值</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">陡方向 ：λ=3，特征向量 (1,1)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">缓方向 ：λ=1，特征向量 (1,−1)</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>等高线是旋转椭圆</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">椭圆 ：f=常数，长短轴沿特征向量</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">陡方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">椭圆</span><span class="ve-lbl">短轴，曲率大</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">缓方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">椭圆</span><span class="ve-lbl">长轴，曲率小</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>所有方向上二阶变化为正</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">任意方向 ：vᵀHv&gt;0，碗向上弯</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">椭圆</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">任意方向</span><span class="ve-lbl">正定的几何含义</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是特征值；第 2 帧把它们接到等高线椭圆；第 3 帧落到正定的定义。三帧自包含。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">正定判定别只看对角元</span></header>
+<div class="box-b">
+<p>你会以为：对角元都是正数（2 和 2），矩阵就正定。真相是：对角元为正只是必要条件，不是充分条件。反例 <code>[[1,2],[2,1]]</code>：对角元都是 1，但行列式 <code>1−4=−3&lt;0</code>，特征值一正一负，矩阵不定。判定正定要看所有顺序主子式为正（西尔维斯特判据），或所有特征值为正。本例 <code>det H=4−1=3&gt;0</code> 且 <code>H_00=2&gt;0</code>，所以正定——两个条件都满足才下结论。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h5">4.5 正定 ⇔ 局部极小：驻点分类</h2>
+<p>mc02 说过：梯度为零只是驻点，可能是极小、极大或鞍点。Hessian 把这件事判清楚：</p>
+<ul>
+<li><code>H</code> 正定（所有特征值 &gt;0）：严格局部极小；</li>
+<li><code>H</code> 负定（所有特征值 &lt;0）：严格局部极大；</li>
+<li><code>H</code> 不定（有正有负）：鞍点；</li>
+<li><code>H</code> 半定或有零特征值：二阶判别失效，要看更高阶（比如 <code>x⁴</code> 在原点 Hessian 为零却是极小）。</li>
+</ul>
+<p>本例 <code>H</code> 正定，所以原点是严格局部极小——事实上是全局极小，因为 <code>f</code> 是正定二次型，只有一个谷底。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">给三种驻点各找一个 Hessian</span></header>
+<div class="box-b">
+<p>极小：<code>f=x²+y²</code>，<code>H=[[2,0],[0,2]]</code>，特征值 2,2，正定。极大：<code>f=−x²−y²</code>，<code>H=[[−2,0],[0,−2]]</code>，特征值负，负定。鞍点：<code>f=x²−y²</code>，<code>H=[[2,0],[0,−2]]</code>，特征值一正一负，不定。三者梯度在原点都是零，一阶信息完全一样；只有 Hessian 能区分。建议你把这三个函数的等高线图各画一遍，再对照 Hessian 的特征值，驻点分类就再也不会混淆了。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">二阶判别在退化情形下会沉默</span></header>
+<div class="box-b">
+<p>你会拿着 Hessian 特征值判定一切驻点。真相是：若某个特征值为零（矩阵半定或奇异），二阶项无法决定驻点类型。例如 <code>f=x⁴+y²</code> 在原点 <code>H=[[0,0],[0,2]]</code>，一个特征值零；函数沿 x 方向是 <code>x⁴</code>，仍然向上弯，原点是极小，但 Hessian 判不出来。反过来 <code>f=x⁴−y²</code> 在原点 Hessian 同样半定，却是鞍点。这时要看三阶、四阶项。深度学习里的鞍点往往伴随很小的特征值（接近退化），所以二阶判别在实践中需要容差，不能拿精确零当判据。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h6">4.6 牛顿法一步：用曲率加速下降</h2>
+<p>梯度下降只用一阶信息，更新式是 <code>x←x−η∇f(x)</code>，步长 η 要人工调。牛顿法把二阶信息也用上：</p>
+<p><code>x ← x − H(x)⁻¹ ∇f(x)</code></p>
+<p>没有学习率——步长和方向都由 Hessian 决定。推导来自二阶泰勒展开：<code>f(x+s) ≈ f(x)+∇fᵀs+½sᵀHs</code>。对 <code>s</code> 求极小：<code>∇f+Hs=0</code>，得 <code>s=−H⁻¹∇f</code>。所以牛顿步是「在当前点的局部二次模型上，一步走到模型的最低点」。</p>
+<p>本例在 <code>p=(1,1)</code> 处，<code>∇f=(3,3)</code>，<code>H⁻¹=(1/3)[[2,−1],[−1,2]]</code>，于是 <code>s=−H⁻¹∇f=−(1,1)</code>，更新后 <code>x=(0,0)</code>——正好落到谷底。二次函数上牛顿法一步收敛，这是它最漂亮的展示。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">牛顿步为什么不用学习率</span></header>
+<div class="box-b">
+<p>因为它已经用 Hessian 把步长「算」出来了：曲率大的方向步长小（避免冲过头），曲率小的方向步长大（加快进展）。梯度下降用统一的 η，在狭长谷里只能取很小的 η 才不震荡，于是缓的方向也走得很慢。牛顿法按 <code>1/λ</code> 缩放各方向，等于自动给每个方向配了合适的步长。代价是要算并求逆 Hessian——这正是深度网络难以承受的地方（4.9 节细说）。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">牛顿法不是永远安全</span></header>
+<div class="box-b">
+<p>你会觉得「有曲率信息就比没有强」。真相是：二阶泰勒模型只在局部有效，步子太大时模型失真，牛顿步可能把你送到更差的地方。若 Hessian 不定（鞍点附近），<code>H⁻¹∇f</code> 甚至可能指向上坡方向。工程上的牛顿法常配线搜索或信赖域：先算出牛顿方向，再沿它试几个步长，选真正让 loss 下降的那个。深度学习里更常用拟牛顿法（如 L-BFGS），它近似 Hessian 而不直接存储，算是两者之间的折中。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h7">4.7 二阶项预测的下降量</h2>
+<p>牛顿步的下降量可以用二阶项直接预测。把 <code>s=−H⁻¹g</code> 代入泰勒展开：</p>
+<p><code>f(x+s) − f(x) ≈ gᵀs + ½sᵀHs = −gᵀH⁻¹g + ½gᵀH⁻¹g = −½gᵀH⁻¹g</code></p>
+<p>所以预测下降量（取正）是 <code>½gᵀH⁻¹g</code>。本例 <code>g=(3,3)</code>，<code>H⁻¹g=(1,1)</code>，<code>gᵀH⁻¹g = 3×1+3×1 = 6</code>，下降量 <code>½×6=3</code>。而 <code>f(1,1)=1+1+1=3</code>，<code>f(0,0)=0</code>，真实下降正好是 3——因为 <code>f</code> 是二次函数，二阶展开是精确的，没有更高阶误差。这就是真跑里 <code>newton_step=3.0000000</code> 的来历。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">非二次函数上预测会有误差</span></header>
+<div class="box-b">
+<p>把函数换成 <code>f=x²+xy+y²+sin(x)</code>，它不再是纯二次，Hessian 随位置变，二阶展开只是近似，预测下降量 3 与真实下降会有偏差。你可以照本节的清单元理改 <code>hs_f</code> 与 <code>hs_grad_analytic</code>，真跑一次看看偏差有多大。这个对比会让你明白：牛顿法的「一步到谷底」只在二次函数上精确；一般函数上它是局部模型给出的近似步，需要迭代多次。偏差大小取决于三阶及以上项的量级。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">下降量与学习率调度的联系</span></header>
+<div class="box-b">
+<p>梯度下降的一阶下降量约 <code>η‖g‖²</code>，牛顿的二阶预测是 <code>½gᵀH⁻¹g</code>。两者都含梯度，但后者通过 <code>H⁻¹</code> 对各方向做了缩放。自适应优化器（AdaGrad、Adam）本质上也在做类似的事：用梯度历史的某种统计量近似对角化的曲率，给不同参数配不同步长。它们只存对角，不存完整 Hessian，是「便宜版牛顿」。你在本节手算的 <code>H⁻¹</code> 就是这些方法的理想化原型。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h8">4.8 真跑：把二阶数字搬到屏幕</h2>
+<p>源码里解析 Hessian 是常数矩阵，数值 Hessian 直接调共用库的 <code>mc_hessian</code>，牛顿步用 2×2 显式逆公式。下面是核心实现。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch02/hessian_probe/src/hessian.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch02/hessian_probe/src/hessian.c</span><span class="cb-lines">第 17–33 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="17" data-to="33"><span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 二阶偏导全是常数：H=[[2,1],[1,2]]，对称且正定。 */</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">hs_hessian_analytic</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">mc_mat_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">h</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">h </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_zero_mat</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl is-marked" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">H 的左上角</span></span></span>
+<span class="cl is-marked" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">H 的右上角</span></span></span>
+<span class="cl is-marked" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">H 的左下角</span></span></span>
+<span class="cl is-marked" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">H 的右下角</span></span></span>
+<span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span>
+<span class="cl is-empty" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 用 2×2 显式逆公式求 step=H⁻¹g，再算二阶下降量。 */</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">hs_newton_step</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">mc_mat_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">h</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">g</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">step</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">drop</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> det </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">];</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">step </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_zero</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl is-marked" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    step-&gt;v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> (h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> g.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> g.v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">]) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> det;</span><span class="k-note">逆矩阵第一行乘梯度</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    step-&gt;v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E">h-&gt;a[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> g.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">+</span><span class="tk" style="color:#24292E"> h-&gt;a[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">][</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> g.v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">]) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> det;</span></span></span>
+<span class="cl is-marked" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">drop </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.5</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_dot</span><span class="tk" style="color:#24292E">(g, </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">step);</span><span class="k-note">二阶预测下降量</span></span></span>
+<span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">20</span>H 的左上角</li><li><span class="cb-note-ln">21</span>H 的右上角</li><li><span class="cb-note-ln">22</span>H 的左下角</li><li><span class="cb-note-ln">23</span>H 的右下角</li><li><span class="cb-note-ln">30</span>逆矩阵第一行乘梯度</li><li><span class="cb-note-ln">32</span>二阶预测下降量</li></ol></figure>
+<p>第 20 到 23 行是解析 Hessian 的四格；第 30、31 行用显式逆公式算出 <code>H⁻¹g</code>；第 32 行是二阶预测下降量。真跑 stdout：</p>
+<figure class="term term-output" data-id="mc04-hessian-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">mc04-hessian-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">H_analytic:[2.000000,1.000000;1.000000,2.000000]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">H_numeric:[2.000002,1.000001;1.000001,2.000002]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">step:[1.000000,1.000000]</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">h00=2.0000000</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">h01=1.0000000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">h11=2.0000000</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">newton_step=3.0000000</span></span></pre></figure>
+<p>前两行用冒号打印矩阵，是字面文本，不参与数值对账。<code>step:[1.000000,1.000000]</code> 也是冒号行——牛顿步从 <code>(1,1)</code> 指向 <code>(0,0)</code>，位移正好是 <code>(−1,−1)</code> 的反向，这里打印的是 <code>H⁻¹g=(1,1)</code>，更新时取负。后四行 <code>h00/h01/h11/newton_step</code> 是黄金值，清单 <code>expect.numbers</code> 里各给了 <code>atol=1e-6</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">本机实测：四个数字都来自真跑</span></header>
+<div class="box-b">
+<ul>
+<li>工具链：gcc {{gcc}}（{{cstd}}），编译参数 <code>-std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Iinclude -I../../common/include</code>，链接 <code>-lm</code>；</li>
+<li>命令（在 <code>examples/ch02/hessian_probe/</code> 里）：<code>gcc -std=c17 -Wall -Wextra -Wpedantic -O0 -g -fdiagnostics-color=never -Iinclude -I../../common/include src/main.c src/hessian.c ../../common/src/multicalc.c -lm -o /tmp/mc04-hessian.exe</code>；</li>
+<li>结果：编译退出码 0、无警告、运行退出码 0；解析矩阵是精确的 <code>[[2,1],[1,2]]</code>，数值矩阵因舍入出现 <code>2.000002/1.000001</code>，四个黄金值 <code>2,1,2,3</code> 全部在 <code>atol=1e-6</code> 内对上。</li>
+</ul>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h9">4.9 数值 Hessian 的误差：为什么出现 2.000002</h2>
+<p>注意真跑里 <code>H_numeric</code> 不是精确的 <code>[[2,1],[1,2]]</code>，而是 <code>[[2.000002,1.000001],[1.000001,2.000002]]</code>。这不是 bug，而是二阶差分的固有精度问题。共用库的 <code>mc_hessian</code> 用</p>
+<p><code>(f(x+eᵢ+eⱼ) − f(x+eᵢ−eⱼ) − f(x−eᵢ+eⱼ) + f(x−eᵢ−eⱼ)) / (4ε²)</code></p>
+<p>来近似二阶偏导。分母是 <code>4ε²</code>，ε 取 <code>1e-5</code> 时是 <code>4×10⁻¹⁰</code>——一个极小的数。四个函数值各自带约 <code>u|f|</code> 的双精度噪声（u≈2×10⁻¹⁶），相减后除以 <code>4ε²</code>，噪声被放大成约 <code>u|f|/ε² ≈ 2×10⁻⁶</code>。这正好解释了观察到的 <code>0.000002</code> 偏差。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">二阶差分的 ε 比一阶更敏感</span></header>
+<div class="box-b">
+<p>一阶中心差分的分母是 <code>2ε</code>，舍入误差约 <code>u|f|/ε</code>；二阶差分的分母是 <code>4ε²</code>，误差约 <code>u|f|/ε²</code>——放大倍数多了一个 <code>1/ε</code>。所以对二阶差分来说，ε 不能取像一阶那么小，否则噪声爆炸；但取太大又让截断误差 <code>O(ε²)</code> 冒头。折中后 ε 通常取 <code>1e-4</code> 左右（比一阶的 <code>1e-5</code> 大）。共用库固定用 <code>1e-5</code>，所以你会看到 <code>2.000002</code> 这种微小偏差——它在 <code>1e-6</code> 容差内，不影响教学结论，但提醒你<strong>数值 Hessian 的精度天然比数值梯度差</strong>。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">什么时候该信解析 Hessian</span></header>
+<div class="box-b">
+<p>训练里若需要 Hessian 信息（比如二阶优化或曲率诊断），几乎总用解析版或自动微分算，不用有限差分——因为后者的精度和成本都不划算。有限差分 Hessian 的用途和有限差分梯度一样：当裁判，验证解析实现。本例的 <code>H_numeric</code> 与 <code>H_analytic</code> 差 <code>2×10⁻⁶</code>，在容差内，说明解析矩阵写对了。若要更严格的验证，应把 ε 调到 <code>1e-4</code> 再跑一次，看数值是否更接近解析值——这是个很好的课后实验。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h10">4.10 为什么深度网络不用完整 Hessian</h2>
+<p>一个有一亿参数的模型，Hessian 是 <code>10⁸×10⁸</code> 的矩阵，元素数 <code>10¹⁶</code>。按双精度 8 字节算，需要 <code>8×10¹⁶</code> 字节，约 8000 万 TB——根本存不下。这就是「<code>O(n²)</code> 存储」的硬约束：Hessian 大小随参数平方增长，一亿参数就直接天文数字。求逆还要 <code>O(n³)</code> 运算，更不可能。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">存储与计算的两座大山</span></header>
+<div class="box-b">
+<p>梯度下降每步只存一个与参数同形的向量（一亿个数，800 MB），还能接受。Hessian 要存参数数的平方（一亿的平方是一亿亿），直接爆内存。即使你能存下，求逆的立方复杂度也会让一步更新跑到宇宙热寂。所以深度网络只能用一阶方法，或者用只显式构造「Hessian 乘向量」结果的技巧——接下来两节讲。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别以为「对称就省一半」就够了</span></header>
+<div class="box-b">
+<p>对称性能把独立元素从 <code>n²</code> 降到 <code>n(n+1)/2</code>，对一亿参数仍是 <code>5×10¹⁵</code> 个数，还是天文数字。节省一半只是把「不可能」变成「更不可能」，量级问题没有解决。真正可行的路线是根本不存完整矩阵：要么用对角近似（只存 n 个数），要么用低秩近似，要么只算 Hessian-vector product。记住「对称性节约常数因子，不改变 O(n²) 的量级」。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h11">4.11 Hessian-vector product：不存矩阵也能用曲率</h2>
+<p>很多时候你并不需要 Hessian 本身，只需要它乘一个向量 <code>v</code> 的结果 <code>Hv</code>。这个量叫 Hessian-vector product（HVP）。关键事实：HVP 可以用两次梯度计算得到，不需要构造 Hessian：</p>
+<p><code>Hv = lim_{ε→0} (∇f(x+εv) − ∇f(x)) / ε</code></p>
+<p>（更稳定的是对称差分 <code>(∇f(x+εv)−∇f(x−εv))/(2ε)</code>。）自动微分框架能高效算梯度，所以算一个 HVP 的成本大约是一次前向加两次反向，与参数量线性相关，而不是平方。<strong>Pearlmutter 技巧</strong>说的就是这件事。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">HVP 为什么划算</span></header>
+<div class="box-b">
+<p>Hessian 存不下，但梯度算得起。上面那个差分公式把「Hessian 乘向量」改写成「两个梯度的差」，于是你可以用自动微分算梯度，完全绕开存储矩阵的难题。代价是每次要一个 HVP 就得算两次梯度，比一次梯度贵，但比构造整张 Hessian 便宜无数倍。共轭梯度、曲率诊断、对抗训练里的很多技巧都建立在 HVP 上。</p>
+</div>
+</section>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-5678c24e">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> HVP：用两次梯度换一个 Hessian 乘向量</figcaption>
+<div class="viz-screen" role="group" aria-label="HVP：用两次梯度换一个 Hessian 乘向量：逐步演示">
+<input class="vs-radio" type="radio" name="vz-5678c24e" id="vz-5678c24e-1" checked>
+<input class="vs-radio" type="radio" name="vz-5678c24e" id="vz-5678c24e-2">
+<input class="vs-radio" type="radio" name="vz-5678c24e" id="vz-5678c24e-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-5678c24e-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-5678c24e-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-5678c24e-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">方向 ：v，想求 Hv</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">正点 ：x+εv，梯度 g₊</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">负点 ：x−εv，梯度 g₋</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">正点</span><span class="ve-lbl">沿给定方向扰动</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">负点</span><span class="ve-lbl">反向扰动</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">结果 ：Hv ≈ (g₊−g₋)/(2ε)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">正点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">结果</span><span class="ve-lbl">两次梯度相减</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">负点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">结果</span><span class="ve-lbl">不需要存 Hessian</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>不构造 Hessian，只给一个方向 v</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">方向 ：v，想求 Hv</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>沿 ±εv 各算一次梯度</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">正点 ：x+εv，梯度 g₊</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">负点 ：x−εv，梯度 g₋</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">正点</span><span class="ve-lbl">沿给定方向扰动</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">方向</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">负点</span><span class="ve-lbl">反向扰动</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>梯度之差给出 Hv</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">结果 ：Hv ≈ (g₊−g₋)/(2ε)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">正点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">结果</span><span class="ve-lbl">两次梯度相减</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">负点</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">结果</span><span class="ve-lbl">不需要存 Hessian</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧给方向；第 2 帧在两个扰动点算梯度；第 3 帧相减得 Hv。三帧自包含，点出「不存矩阵」这个核心优势。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">HVP 在真实系统里的位置</span></header>
+<div class="box-b">
+<p>二阶优化里用共轭梯度解 <code>Hs=g</code>，每一步需要一次 HVP，迭代几十次就能逼近牛顿步，而全程不存 H。对抗训练里计算对抗方向对参数的二阶影响，也用 HVP 做高效近似。你在本节手算的 <code>H⁻¹g=(1,1)</code> 是 HVP 的「完整版」——因为 n=2 小到可以直接求逆。把小例子里的思路推广到大矩阵，就得到这些实用算法。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h12">4.12 特征值、条件数与狭长谷</h2>
+<p>Hessian 的特征值刻画各主方向的曲率，最大与最小特征值之比叫条件数 <code>κ=λ_max/λ_min</code>。本例 <code>κ=3/1=3</code>，还算温和；若 <code>κ=1000</code>，等高线是极狭长的椭圆，梯度下降在谷壁间来回反弹，收敛极慢。牛顿法通过 <code>H⁻¹</code> 把各方向按 <code>1/λ</code> 缩放，相当于把狭长谷变成圆形，所以一步就能到谷底——这是二阶方法最本质的优势。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把条件数做大的后果</span></header>
+<div class="box-b">
+<p>把函数改成 <code>f=x²+100y²</code>，<code>H=[[2,0],[0,200]]</code>，条件数 100。梯度下降为了不在 y 方向冲过头，学习率要取到 <code>1/200</code> 量级，于是 x 方向走得极慢，需要几百步才收敛。牛顿法一步到位，因为 <code>H⁻¹g</code> 自动按 <code>1/2</code> 与 <code>1/200</code> 缩放了两个方向。你把这个例子的等高线画出来，就能看到「狭长谷」为什么难走。这也解释了为什么 batch normalization、层归一化这些方法有效——它们改善了损失曲面的条件数。</p>
+</div>
+</section>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">条件数是优化难度的温度计</span></header>
+<div class="box-b">
+<p>条件数越大，曲面越像狭长峡谷，一阶方法越吃力。归一化、预处理、二阶方法，本质上都在改善条件数或抵消它的影响。你在本节算的 <code>κ=3</code> 是个很容易的例子；真实网络损失曲面的条件数可能高达几万，这正是训练需要精心调学习率与自适应优化器的根本原因。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h13">4.13 把整节串成一条数值叙事</h2>
+<p>真跑的四行黄金值 <code>h00=2, h01=1, h11=2, newton_step=3</code> 讲的是同一个故事。<code>H=[[2,1],[1,2]]</code> 对称（副对角都是 1），正定（特征值 1 和 3 都为正），所以 <code>f=x²+xy+y²</code> 是碗，原点是极小值。在 <code>(1,1)</code> 处梯度 <code>(3,3)</code>，牛顿步 <code>H⁻¹g=(1,1)</code>，更新到原点，二阶预测下降量 3 与真实下降 <code>f(1,1)−f(0,0)=3</code> 精确相等——因为 <code>f</code> 是二次函数，二阶展开无误差。数值 Hessian 的 <code>2.000002</code> 提醒你有限差分的精度极限，但解析版与黄金值在 <code>1e-6</code> 内完全对上。一张 2×2 的小矩阵，把对称性、正定性、驻点分类、牛顿法、二阶预测、数值误差六个方面全串起来了。</p>
+<h2 id="multic-chapters-ch02-02-hessian-md-h14">4.14 泰勒展开：把一阶与二阶放进同一个框架</h2>
+<p>回看牛顿法的推导，它其实只是多元泰勒展开的一个应用。把 <code>f</code> 在点 <code>p</code> 附近展开到二阶：</p>
+<p><code>f(p+s) = f(p) + ∇f(p)ᵀs + ½sᵀH(p)s + o(‖s‖²)</code></p>
+<p>第一项是当前高度，第二项是一阶（梯度）贡献，第三项是二阶（Hessian）贡献，最后是高阶误差。梯度下降只看第二项，牛顿法多看第三项并把它极小化。这个公式把前三个单元与本单元统一起来：梯度是一阶系数，Hessian 是二阶系数，它们都是同一个局部多项式模型的参数。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">局部模型：用多项式冒充函数</span></header>
+<div class="box-b">
+<p>泰勒展开的思想是「在一点附近，任何光滑函数都像多项式」。一阶模型是切平面，二阶模型是切抛物面。你在 <code>p</code> 处用这个模型替代真实函数，做一步优化，然后到新点重新建模——这就是牛顿法的循环。模型阶数越高，局部近似越准，但需要的导数信息也越多。深度学习里止步一阶，是因为二阶信息太贵（4.10 节），不是因为它不好。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">用本例验证泰勒展开是精确的</span></header>
+<div class="box-b">
+<p>取 <code>p=(1,1)</code>，<code>s=(−1,−1)</code>。<code>f(p)=3</code>，<code>∇f=(3,3)</code>，<code>H=[[2,1],[1,2]]</code>。一阶项 <code>gᵀs=3×(−1)+3×(−1)=−6</code>。二阶项 <code>½sᵀHs=½[(−1)(2·(−1)+1·(−1))+(−1)(1·(−1)+2·(−1))]=½[(−1)(−3)+(−1)(−3)]=½×6=3</code>。总和 <code>3−6+3=0</code>，正是 <code>f(0,0)=0</code>。因为 <code>f</code> 是二次函数，三阶及以上项为零，展开精确成立。把这个计算亲手做一遍，你就真正理解了「二阶项预测下降量」不是 magic，而是泰勒公式的直接结果。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h15">4.15 三个函数手算 Hessian</h2>
+<p>多练几个例子，Hessian 的手感就出来了。</p>
+<p>第一例 <code>f=x²+2xy+3y²</code>。梯度 <code>(2x+2y, 2x+6y)</code>，Hessian <code>[[2,2],[2,6]]</code>。对角元为正、行列式 <code>12−4=8&gt;0</code>，正定，是碗。</p>
+<p>第二例 <code>f=sin(x)+cos(y)</code>。梯度 <code>(cos x, −sin y)</code>，Hessian <code>[[−sin x,0],[0,−cos y]]</code>，是对角矩阵。在 <code>(π/2,0)</code> 处是 <code>[[−1,0],[0,−1]]</code>，负定，是局部极大——因为 sin 在 π/2 取极大、cos 在 0 取极大。</p>
+<p>第三例 <code>f=x³−3xy²</code>。梯度 <code>(3x²−3y², −6xy)</code>，Hessian <code>[[6x,−6y],[−6y,−6x]]</code>。在原点 <code>H=[[0,0],[0,0]]</code>，半定，二阶判别失效——实际上原点是鞍点（这个函数是 <code>Re(z³)</code> 的实部，有三个下降扇区）。这是 4.5 节 trap 里说的退化情形的具体例子。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从 Hessian 读出函数的局部行为</span></header>
+<div class="box-b">
+<p>拿到一个 Hessian，按三步读：先看对角元符号，得到各轴方向的弯曲；再看特征值，得到主方向的曲率；最后看条件数，估计优化难度。第一例条件数约 <code>6.8/1.2≈5.7</code>，碗有点扁；第二例在极大点各向同性；第三例在原点二阶信息完全失效，必须看高阶。这三步比死记定义有用得多，尤其当你读论文里某个损失曲面的分析时。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h16">4.16 平坦极小值与泛化：一个仍在进行的故事</h2>
+<p>二阶信息不只用于优化，还被用来讨论泛化。经验观察：平坦的极小值（Hessian 特征值普遍较小，碗比较浅）往往比尖锐的极小值（特征值大，碗很深）泛化更好。直觉是：测试时数据略有变化，损失曲面也会轻微扰动；平坦区域里参数动一点 loss 变化不大，所以更稳健；尖锐区域里稍有偏移 loss 就飙升。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用碗的深浅打比方</span></header>
+<div class="box-b">
+<p>同样是最低点，一个又深又窄的碗，稍微偏离谷底就爬得很高；一个又浅又宽的碗，偏离不少也还在低处。训练数据和测试数据只差一点点，相当于把你在碗上的位置轻轻推一下。浅碗里你还在低处，深碗里你可能已经很高。这个比方解释了为什么有人相信「平坦 = 泛化好」。但要注意这仍是研究话题，反例和条件很多，别当成定论。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">平坦与泛化的关系不是定理</span></header>
+<div class="box-b">
+<p>你会把「平坦极小值泛化好」当成可以依赖的规律。真相是：这个说法有经验支持，但也有大量反例；「平坦」的度量方式（特征值之和、最大值、Hessian 范数）不同，结论会变；参数空间的重新缩放还能人为改变平坦度。所以它是一个启发式视角，不是可证明的保证。把它写进论文时要谨慎，拿它指导工程时更要配合验证集实测。本例 <code>H</code> 的特征值是 1 和 3，算中等平坦——真实网络的谱分布复杂得多，不可能用两个数字概括。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从 Hessian 谱看训练阶段</span></header>
+<div class="box-b">
+<p>训练早期 Hessian 往往有大量接近零的特征值（平坦方向），对应那些还没被数据约束住的参数；随着训练推进，大特征值逐渐出现，曲面变尖。有些工作用 Hessian 谱的演化来诊断训练是否充分，或者判断何时该降低学习率。你在本节手算的 <code>λ=1,3</code> 是最小尺度上的谱；把这些概念记住，以后看到「Hessian 特征谱分析」的文章就不会一头雾水。代价是这类分析计算昂贵，通常只在小模型上做。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h17">4.17 二阶信息在深度学习的真实位置</h2>
+<p>尽管完整 Hessian 存不下，二阶思想仍以各种形式渗透在深度学习里。自适应优化器（Adam 等）用梯度平方的移动平均近似对角曲率，给每个参数配不同步长，可视为「对角 Hessian 的廉价替身」。K-FAC 用 Kronecker 积近似 Fisher 信息矩阵（与 Hessian 密切相关的另一种二阶量），在每层上构造小得多的块。二阶剪枝用 Hessian 对角元估计「去掉某个参数会损失多少」，比单纯看权重大小更准。这些方法的共同点都是：<strong>承认完整 Hessian 用不起，但榨取它的近似版本里剩下的信息</strong>。这条思路贯穿整个二阶优化领域：不求精确，只求在可接受成本内保留尽可能多的曲率信息。教材里的每一个二阶方法，几乎都能在这条谱系里找到位置。理解了这个取舍，你就不会困惑于「既然牛顿法更好，为什么大家还在用 Adam」——答案永远是成本与收益的权衡。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">从理想到现实的折中谱系</span></header>
+<div class="box-b">
+<p>最理想是完整牛顿法：精确 Hessian 与逆矩阵，一步收敛，但存不下。退一步是拟牛顿法（L-BFGS）：只存最近几步的梯度差，隐式近似 H⁻¹，内存可控。再退一步是对角近似（Adam）：只保留 H 的对角线，每参数一个步长。最朴素是 SGD：把 H 当成单位矩阵的倍数，只用统一学习率。这条谱系从信息丰富到贫瘠，也从昂贵到便宜。你在本节手算的 <code>H⁻¹g=(1,1)</code> 位于谱系的最顶端，是理解其余近似的参照点。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h18">4.18 与前面单元的关系：二阶视角把整章串起来</h2>
+<p>mc02 用梯度回答「哪个方向最陡」，mc03 用 Jacobian 回答「多输出的导数什么形状」，本单元用 Hessian 回答「曲面怎么弯」。三者合起来给出一张完整的局部地图：梯度是一阶方向，Hessian 是二阶曲率，Jacobian 是多输出的推广。你在 mc02 看到的「梯度为零不一定是极小」，在本单元终于有了判别工具——看 Hessian 的特征值。这种「先一阶、再二阶、再推广」的组织方式贯穿整册：mc05 的链式法则用 Jacobian 的转置传播一阶信息，mc08 的矩阵微分把这些约定搬到矩阵输入上。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一条从形状到曲率的线</span></header>
+<div class="box-b">
+<p>偏导是一个数，梯度是一阶方向，Jacobian 把方向推广到多输出，Hessian 把梯度再求一次得到曲率。每一步都不是新发明，而是「导数」概念往新维度的自然延伸。你现在回头看 mc01 的中心差分、mc02 的柯西–施瓦茨、mc03 的行列约定，会发现它们在本单元全用上了：数值 Hessian 是中心差分的二阶版，特征值判定用到了内积与二次型，Hessian 本身是 Jacobian 的特例。把这条线握住，后面章节的成长就都是在这根主干上分枝。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h19">4.19 常见误解速查与第一人称踩坑</h2>
+<p>第一，「Hessian 一定对称」。它依赖二阶偏导连续，折痕处可能失效。第二，「对角元为正就正定」。还要看行列式或特征值，反例 <code>[[1,2],[2,1]]</code> 对角正却不定。第三，「梯度为零就是极小」。要看 Hessian，甚至高阶项。第四，「牛顿法一定比梯度下降快」。Hessian 不定时牛顿步可能上坡，需要线搜索保护。第五，「数值 Hessian 应该精确」。分母 <code>4ε²</code> 放大舍入误差，<code>2.000002</code> 是正常结果。</p>
+<p>我自己写第一版 <code>hs_newton_step</code> 时把逆矩阵的分子写反了，把 <code>(h11·g0 − h01·g1)</code> 写成了 <code>(h01·g0 − h11·g1)</code>，结果 <code>step</code> 打印出 <code>(−1,−1)</code> 而不是 <code>(1,1)</code>，下降量变成 −3。程序照常跑、矩阵打印也正常，只有 <code>newton_step</code> 变成负数暴露了问题。这提醒我：<strong>二阶公式的符号错误往往不崩溃、不报警，只会给出一个「看起来像数字」的错误结果</strong>。闸门里的黄金值 <code>newton_step=3</code> 正好抓住它——这也是为什么容差对账不能省。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">验证二阶实现的三板斧</span></header>
+<div class="box-b">
+<p>写任何涉及 Hessian 或 HVP 的代码后，按三步自检：一，在二次函数上验证，因为二阶展开精确，牛顿步应一步到谷底、下降量应精确；二，检查对称性，数值 Hessian 的副对角两格应相等（本例都是 <code>1.000001</code>）；三，检查特征值符号，正定矩阵的判定与驻点类型应一致。这三步都不需要复杂工具，手算或加几行打印就能做。代价是几分钟，换来的是避免「符号写反还浑然不觉」的尴尬。二阶实现的 bug 不报错、不崩溃，只悄悄给出错误的数值，所以主动验证比事后调试划算得多，这一点和 mc01 的阴性对照一脉相承。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch02-02-hessian-md-h20">4.20 从诊断到行动：二阶信息能回答的具体问题</h2>
+<p>学完这一节，你应该能用 Hessian 回答四个具体问题。它是当前点附近最有用的局部信息，把一阶方向与曲率合起来，才构成一个完整的优化视角。下面按「诊断—分类—决策—预测」的顺序摆出来，每个都给出本例的具体答案，方便你对照检查是否真的掌握了。第一，当前点是不是驻点？看梯度是不是零。第二，如果是驻点，它是什么类型？看 Hessian 的特征值符号。第三，如果我要在这里走一步，二阶模型建议怎么走？算 <code>−H⁻¹∇f</code>。第四，这一步预计能降多少 loss？算 <code>½gᵀH⁻¹g</code>。本例对这四个问题的答案是：<code>(1,1)</code> 不是驻点（<code>g=(3,3)</code>）； Hessian 正定所以函数是碗；牛顿步是 <code>(−1,−1)</code>；预计降 3 且实际降 3。把这套问答流程记在心里，你就在最小尺度上掌握了二阶优化的全部逻辑。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">换一个起点重走一遍四问</span></header>
+<div class="box-b">
+<p>取 <code>p=(2,0)</code>。梯度 <code>(2x+y, x+2y)=(4,2)</code>，不是驻点。<code>H</code> 仍是 <code>[[2,1],[1,2]]</code>，正定。<code>H⁻¹g=(1/3)[[2,−1],[−1,2]]·(4,2)=(1/3)(6,0)=(2,0)</code>，牛顿步 <code>(−2,0)</code>，正好走到原点。预测下降 <code>½(4×2+2×0)=4</code>，而 <code>f(2,0)=4</code>、<code>f(0,0)=0</code>，真实下降 4，同样精确。两个起点都一步到谷底，这正是二次函数的牛顿法特性。建议你再挑 <code>p=(−1,2)</code> 算一遍，确认流程和结论一致。</p>
+</div>
+</section>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">把四问翻译成框架里的操作</span></header>
+<div class="box-b">
+<p>在 PyTorch 这类框架里，第一问对应 <code>grad</code>，第二问对应 Hessian 的特征值（小模型可直接算，大模型用 HVP 近似），第三问对应解线性系统 <code>Hs=g</code>（不显式求逆），第四问对应 <code>0.5 * grad.dot(s)</code>。你在本节用纸笔和 2×2 矩阵做的每一步，都能在框架里找到对应操作。区别只是规模：框架里 <code>s</code> 是上亿维向量，解线性系统要用共轭梯度迭代几十次，但数学结构与本节完全一样。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>Hessian 是梯度的 Jacobian，<code>H_ij=∂²f/∂x_i∂x_j</code>；偏导连续时对称，独立元素只有 <code>n(n+1)/2</code> 个；</li>
+<li><code>H</code> 正定 ⇔ 严格局部极小，负定 ⇔ 极大，不定 ⇔ 鞍点；特征值就是各主方向的曲率；</li>
+<li>牛顿步 <code>x←x−H⁻¹∇f</code> 用二阶信息自动配步长，二次函数上一步收敛；预测下降量 <code>½gᵀH⁻¹g</code>；</li>
+<li>完整 Hessian 需 <code>O(n²)</code> 存储、<code>O(n³)</code> 求逆，深度网络用不起；HVP 用两次梯度近似 <code>Hv</code>，不存矩阵；</li>
+<li>二阶差分分母是 <code>4ε²</code>，舍入误差放大更狠，数值 Hessian 出现 <code>2.000002</code> 这类偏差是正常的。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>求 <code>f=x²+xy+y²</code> 在任意点的 Hessian，并说明它为什么与位置无关。</li>
+<li>解释 Hessian 为什么对称，以及对称性成立需要什么条件。</li>
+<li>用特征值判据说明 <code>H=[[2,1],[1,2]]</code> 是正定的，并解释这如何证明原点是极小值。</li>
+<li>在 <code>(1,1)</code> 处手算牛顿步与预测下降量，并说明为什么本例预测是精确的。</li>
+<li>一亿参数的网络为什么存不下完整 Hessian？对称性省一半为什么还不够？</li>
+<li>写出 Hessian-vector product 的差分公式，并说明它为什么比构造完整 Hessian 便宜。</li>
+<li>数值 Hessian 为什么出现 <code>2.000002</code> 而不是精确的 <code>2</code>？分母 <code>4ε²</code> 在其中起什么作用？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>∂f/∂x=2x+y</code>，<code>∂f/∂y=x+2y</code>，再求偏导得 <code>H=[[2,1],[1,2]]</code>。因为 <code>f</code> 是二次函数，二阶偏导是常数，与位置无关。</li>
+<li>Schwarz 定理：二阶偏导连续时 <code>∂²f/∂x∂y=∂²f/∂y∂x</code>。本例是多项式，处处连续，故 <code>H_01=H_10=1</code>。若偏导不连续（折痕处）对称性可能失效。</li>
+<li>解 <code>det(H−λI)=(2−λ)²−1=0</code> 得 <code>λ=1,3</code>，全为正，故正定。正定意味着任意非零位移的二阶变化为正，所以原点处所有方向上坡，是严格局部极小。</li>
+<li><code>g=(3,3)</code>，<code>H⁻¹=(1/3)[[2,−1],[−1,2]]</code>，<code>H⁻¹g=(1,1)</code>，牛顿步 <code>−(1,1)</code> 到原点。预测下降 <code>½g·(H⁻¹g)=½(3+3)=3</code>。因为 <code>f</code> 是二次函数，二阶泰勒展开精确，所以预测与真实下降相等。</li>
+<li>Hessian 需 <code>n²</code> 个元素，一亿参数就是 <code>10¹⁶</code> 个数，约 8000 万 TB，存不下。对称性只省一半常数因子，量级仍是 <code>O(n²)</code>，无法改变结论。</li>
+<li><code>Hv≈(∇f(x+εv)−∇f(x−εv))/(2ε)</code>。它只要求两次梯度，用自动微分可高效完成，成本与参数量线性相关；构造完整 Hessian 要 <code>n²</code> 空间，两者量级天差地别。</li>
+<li>二阶差分的分母是 <code>4ε²</code>，ε=1e-5 时约 <code>4×10⁻¹⁰</code>。四个函数值的双精度噪声相减后被除以这个极小数，放大成约 <code>u|f|/ε²≈2×10⁻⁶</code>，于是出现 <code>2.000002</code> 这类偏差。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

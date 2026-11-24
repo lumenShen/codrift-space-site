@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>拉格朗日乘子与约束优化</title>
+<meta name="description" content="零基础 · 第 7 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-multic-chapters-ch03-02-lagrange-md { @top-right { content: "拉格朗日乘子与约束优化"; } }
+#content { page: p-u-multic-chapters-ch03-02-lagrange-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/multic.html">《multic》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">拉格朗日乘子与约束优化</h1><p class="doc-sub">零基础 · 第 7 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/multic/chapters/ch03/02-lagrange.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h1">7.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h2">7.2 问题：在圆上最大化一个线性函数</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h3">7.3 为什么极值处有 ∇f = λ∇g</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h4">7.4 代数推导与 λ 的符号</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h5">7.5 KKT 直觉：把不等式约束也装进来</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h6">7.6 本例手算：把四个数算到小数点后六位</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h7">7.7 numerical 闸门：四个黄金值与一个容差</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h8">7.8 影子价格：λ 在 SVM 与 RLHF 里的样子</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h9">7.9 常见错误清单</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h10">7.10 为什么这样的玩具例子值得真跑</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h11">7.11 拉格朗日量：把方程组装进一个函数</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h12">7.12 对偶问题：从乘子那一侧看同一个优化</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h13">7.13 残差的误差预算：为什么 1e-6 是合适的容差</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h14">7.14 换个约束再算一遍：推广的直觉</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h15">7.15 从几何到算法：大问题上怎么求 λ</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h16">7.16 数值实验的复现清单</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h17">7.17 从二维图到高维代数：法空间与秩</a></li><li class="toc-l2"><a href="#multic-chapters-ch03-02-lagrange-md-h18">7.18 收敛判据：残差比目标值更值得盯</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>从「等高线与约束曲线相切」讲清为什么极值处有 <code>∇f = λ∇g</code>；</li>
+<li>手算圆上最大化线性函数的拉格朗日乘子与切点，并解释 λ 的符号怎么区分最大与最小；</li>
+<li>说出 KKT 条件里驻点、原始可行、对偶可行、互补松弛四条各管什么；</li>
+<li>用共用库的数值梯度独立验证 <code>∇f − λ∇g = 0</code> 与 <code>g = 0</code>，读懂 <code>check</code> 这个残差；</li>
+<li>解释拉格朗日乘子作为「影子价格」的含义，以及它在 SVM、RLHF 一类问题里扮演的角色。</li>
+</ul>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h1">7.1 先看工程长什么样</h2>
+<p>前面几节优化的都是「自由变量」：参数可以往任何方向动，只要损失下降就行。这一单元加一条规矩：变量必须待在某个曲面上。最经典的例子是在单位圆上找一个线性函数最大的点。这个问题简单到能徒手算完，却把约束优化最关键的那张图——两组等高线相切——讲得清清楚楚。</p>
+<p>清单这一节回到 <code>mode=numerical</code>：程序打印 <code>lambda</code>、<code>x0</code>、<code>x1</code>、<code>check</code> 四个数值行，清单给四个黄金值和统一的 <code>atol=1e-6</code>。没有阴性对照，因为这里没有解析梯度与数值梯度的对拍；取而代之的是「残差必须接近零」这一独立验证：就算解是从闭式公式算出来的，<code>check</code> 也要用数值梯度重新验一遍驻点条件与约束条件。</p>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-192975bd">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元新增：ch03 下的约束优化例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元新增：ch03 下的约束优化例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-192975bd" id="vz-192975bd-1" checked>
+<input class="vs-radio" type="radio" name="vz-192975bd" id="vz-192975bd-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-192975bd-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-192975bd-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/multic/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">gd_train/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">gd_train/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">lagrange/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/lagrange.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/lagrange.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc07-lagrange.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch03 下已有上一节的训练例子</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/multic/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">gd_train/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch03/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">gd_train/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">lagrange/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/lagrange.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/lagrange.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">mc07-lagrange.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧里 ch03 已有 <code>gd_train/</code>，第 2 帧新增 <code>lagrange/</code>。头文件把问题写死为「二维、单位圆、线性目标」，源文件给出闭式求解与残差验证，<code>main.c</code> 打印四行数值，清单声明黄金值与容差。共用库继续提供 <code>mc_vec</code>、<code>mc_zero</code>、<code>mc_grad</code>、<code>mc_norm</code> 与冒号打印——这一节会真正用到数值梯度和范数，是前几节积累的工具的一次集中亮相。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一句话讲完约束优化</span></header>
+<div class="box-b">
+<p>自由优化时，最优点的梯度必须是零；有约束时，最优点可以在约束曲面上「顶着走不动」。此时梯度不必为零，但它必须垂直于约束曲面——否则你还能沿曲面切线方向挪一点，让目标继续变大。梯度垂直于曲面，等价于它和约束函数的梯度平行，那个比例系数就是拉格朗日乘子 λ。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h2">7.2 问题：在圆上最大化一个线性函数</h2>
+<p>取目标 <code>f(x₀, x₁) = 3x₀ + 4x₁</code>，约束 <code>g(x₀, x₁) = x₀² + x₁² − 1 = 0</code>，也就是点必须落在单位圆上。没有约束时，f 是一个斜平面，沿着 <code>(3,4)</code> 方向一直增大，根本没有有限的最大值。加上圆这个约束后，问题变成：圆周上哪个点让 <code>3x₀+4x₁</code> 最大？</p>
+<p>凭直觉也能猜到答案：f 的等值线是斜率为 <code>−3/4</code> 的平行直线，把这样一条直线沿 <code>(3,4)</code> 方向往外推，最后离开圆的位置一定是与圆相切的那条直线。切点处圆的半径方向是 <code>(x₀,x₁)</code>，而 f 的梯度方向是 <code>(3,4)</code>，两者平行。单位圆上和 <code>(3,4)</code> 同向的点就是 <code>(3,4)/5 = (0.6, 0.8)</code>，此时 f 的值是 <code>3×0.6+4×0.8 = 5</code>。反方向 <code>(-0.6,-0.8)</code> 给出最小值 <code>−5</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么线性目标 + 圆形约束是理想教具</span></header>
+<div class="box-b">
+<p>它同时满足三个条件：第一，几何图像能画出来，等高线是直线、约束是圆，相切一眼可见；第二，闭式解能徒手算，<code>‖(3,4)‖=5</code> 是勾股数，切点坐标干净；第三，λ 有明确数值 <code>2.5</code>，符号还能区分最大与最小。初学约束优化时，最怕一上来就遇到十个约束、非线性目标的例子——那样只能背公式，没法验证每一步。把这个玩具例子吃透，再去看一般形式就有了锚点。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h3">7.3 为什么极值处有 ∇f = λ∇g</h2>
+<p>先看几何。设 x* 是约束曲面上的一个点，沿曲面的任意一条光滑曲线 <code>γ(t)</code> 都满足 <code>g(γ(t))=0</code>，且 <code>γ(0)=x*</code>。把约束对 t 求导：</p>
+<p><code>d/dt g(γ(t)) |_{t=0} = ∇g(x*)·γ′(0) = 0</code></p>
+<p>这说明 <code>∇g(x*)</code> 垂直于曲面在 x* 处的所有切线方向，也就是曲面的法向。现在假设 x* 是 f 在约束上的极值点。沿同一条曲线考察 f：</p>
+<p><code>d/dt f(γ(t)) |_{t=0} = ∇f(x*)·γ′(0) = 0</code></p>
+<p>极值点处沿任何切线方向的一阶变化都必须为零，否则往某个方向走一点还能让 f 变大或变小。于是 <code>∇f(x*)</code> 也垂直于所有切线方向。在二维里，垂直于同一条切线的向量必然共线，所以存在 λ 使 <code>∇f = λ∇g</code>。在更高维里，只要约束的梯度张成法空间，结论同样成立。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-89c801bf">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 相切的两组等高线：切点处梯度共线</figcaption>
+<div class="viz-screen" role="group" aria-label="相切的两组等高线：切点处梯度共线：逐步演示">
+<input class="vs-radio" type="radio" name="vz-89c801bf" id="vz-89c801bf-1" checked>
+<input class="vs-radio" type="radio" name="vz-89c801bf" id="vz-89c801bf-2">
+<input class="vs-radio" type="radio" name="vz-89c801bf" id="vz-89c801bf-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-89c801bf-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-89c801bf-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-89c801bf-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">circle ：约束 g=0，单位圆</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">normal ：(0.6, 0.8)，圆的法向</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">circle ：单位圆仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">line ：3x0+4x1=5，恰好相切</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">normal</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">line</span><span class="ve-lbl">切点处相遇</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">circle ：单位圆</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">line ：目标等值线</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">grads ：∇f=(3,4)，∇g=(1.2,1.6)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">grads ：λ=2.5，两者相差 2.5 倍</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>先只有圆的等高线，法向指向圆心外</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">circle ：约束 g=0，单位圆</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">normal ：(0.6, 0.8)，圆的法向</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>推入目标的等值线，斜率 -3/4</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">circle ：单位圆仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">line ：3x0+4x1=5，恰好相切</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">normal</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">line</span><span class="ve-lbl">切点处相遇</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>两条梯度共线，乘子给出比例</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">circle ：单位圆</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">line ：目标等值线</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">grads ：∇f=(3,4)，∇g=(1.2,1.6)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">grads ：λ=2.5，两者相差 2.5 倍</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧的 <code>normal</code> 是圆在切点的半径方向。第 2 帧把目标等值线推进到与圆相切——再往外推就与圆没有交点，再往里推目标值更小。第 3 帧的关键数字是 <code>∇g = 2x = (1.2, 1.6)</code>，而 <code>∇f = (3,4)</code>，两者确实相差 <code>2.5</code> 倍。这就是 λ 的几何意义：<strong>把约束曲面的法向量拉伸到与目标梯度重合所需的倍数</strong>。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">梯度为零不是有约束问题的驻点条件</span></header>
+<div class="box-b">
+<p>自由优化时我们习惯找 <code>∇f = 0</code>；有约束时这个条件完全不对。本例在最优点 <code>(0.6,0.8)</code> 处 <code>∇f=(3,4)</code>，根本不是零。如果你用无约束的思路去解，会去找 <code>(3,4)=0</code> 的点，永远找不到。正确的驻点条件是 <code>∇f = λ∇g</code>，再加上约束 <code>g=0</code> 本身——两个方程一起才把解钉住。λ 是新引入的未知数，数量与约束个数相同。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h4">7.4 代数推导与 λ 的符号</h2>
+<p>把条件写成方程组：</p>
+<ul>
+<li>驻点：<code>3 = 2λx₀</code>，<code>4 = 2λx₁</code></li>
+<li>可行：<code>x₀² + x₁² = 1</code></li>
+</ul>
+<p>由前两式得 <code>x₀ = 3/(2λ)</code>、<code>x₁ = 4/(2λ)</code>。代入约束：<code>(9+16)/(4λ²) = 1</code>，即 <code>25 = 4λ²</code>，所以 <code>λ = ±2.5</code>。正号给出 <code>x = (0.6, 0.8)</code>，这是最大值点；负号给出 <code>x = (-0.6, -0.8)</code>，最小值点。<strong>同一个驻点条件会给出多个候选，必须逐个比较目标值才能确定最大还是最小。</strong></p>
+<p>λ 的符号还回答一个实用问题：如果目标变大一点，最优值会怎么变？把约束改成 <code>x₀²+x₁² = c</code>，同样的推导给出 <code>λ = 5/(2√c)</code>，最优值 <code>f* = 5√c</code> 的倒数关系对应 <code>∂f*/∂c = λ</code>（在这里因为约束写成 <code>=c</code> 而出现符号约定差异，规范写法下 λ 正是对约束右端的敏感度）。这种「λ 告诉你约束松动一点值多少」的解读，就是下一节要讲的影子价格。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">多一个约束就多一个 λ</span></header>
+<div class="box-b">
+<p>如果同时有 <code>g₁=0</code> 和 <code>g₂=0</code>，驻点条件变成 <code>∇f = λ₁∇g₁ + λ₂∇g₂</code>。几何上，两个约束曲面的法向量张成一个法空间，目标梯度必须落在这个空间里。每个约束自带一个乘子，乘子的个数永远与约束个数相同。这个结构在带约束的深度学习问题里也一样：每个等式约束对应一个对偶变量，优化时一起更新。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h5">7.5 KKT 直觉：把不等式约束也装进来</h2>
+<p>现实里的约束常常是不等式，比如「概率必须非负」「资源用量不能超过预算」。把 <code>g(x)=0</code> 推广成 <code>g(x) ≤ 0</code>，最优点分两种情况：约束没被顶住（<code>g(x) &lt; 0</code>），此时它根本不起作用，相当于无约束问题，乘子 λ=0；约束正好顶住（<code>g(x) = 0</code>），此时它像等式约束一样提供法向，λ 非零。把两种情况合在一起，就是互补松弛条件：</p>
+<p><code>λ ≥ 0</code>，<code>g(x) ≤ 0</code>，<code>λ·g(x) = 0</code></p>
+<p>最后一条的意思是「两者至少有一个为零」：约束松着则乘子为零，乘子非零则约束必须紧。这四条——驻点、原始可行、对偶可行、互补松弛——合起来叫 Karush-Kuhn-Tucker（KKT）条件。它是约束优化的一阶必要条件，凸问题下还是充分条件。</p>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-4578e842">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> KKT 四件套：每一条都在管一件事</figcaption>
+<div class="viz-screen" role="group" aria-label="KKT 四件套：每一条都在管一件事：逐步演示">
+<input class="vs-radio" type="radio" name="vz-4578e842" id="vz-4578e842-1" checked>
+<input class="vs-radio" type="radio" name="vz-4578e842" id="vz-4578e842-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-4578e842-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-4578e842-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">stationarity ：∇f = λ∇g，梯度共线</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">primal ：g(x) ≤ 0，点必须合法</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">dual ：λ ≥ 0，乘子不能是任意数</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">complement ：λ·g = 0，松紧二选一</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">primal</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">complement</span><span class="ve-lbl">约束状态决定乘子</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dual</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">complement</span><span class="ve-lbl">乘子状态决定约束</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>primal 与 stationarity</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">stationarity ：∇f = λ∇g，梯度共线</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">primal ：g(x) ≤ 0，点必须合法</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>对偶与互补把乘子也管住</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">dual ：λ ≥ 0，乘子不能是任意数</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">complement ：λ·g = 0，松紧二选一</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">primal</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">complement</span><span class="ve-lbl">约束状态决定乘子</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">dual</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">complement</span><span class="ve-lbl">乘子状态决定约束</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧的两条管「点在哪、梯度怎么摆」；第 2 帧的两条管「乘子取什么值、什么时候该为零」。反过来从乘子看原问题，就得到对偶问题：原问题在最小化（或最大化）f，对偶问题在优化 λ，两边的最优值在凸情形下相等。这个对偶视角不只是理论装饰——它直接给出了分布式优化和很多机器学习算法的构造方式。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">互补松弛的想法到处都是</span></header>
+<div class="box-b">
+<p>SVM 里每个训练样本带一个 αᵢ，只有支持向量的 αᵢ 非零，其余样本「约束松着、乘子为零」——这正是互补松弛。带不等式约束的强化学习里，策略更新要满足安全约束，对应的对偶变量只在约束快被违反时才变大。甚至经济学里的供需均衡也可用同一套语言描述。你不必记住 KKT 的完整证明，但要认得这个模式：<strong>每个约束配一个乘子，松弛时乘子归零，顶住时乘子为正。</strong></p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h6">7.6 本例手算：把四个数算到小数点后六位</h2>
+<p>现在按程序的实现走一遍。程序的做法是：先用共用库的 <code>mc_grad</code> 对线性目标求数值梯度，得到 <code>∇f = (3,4)</code>（线性函数的中心差分没有截断误差）；再用 <code>mc_norm</code> 算出范数 5，于是 <code>λ = 5/2 = 2.5</code>；最后 <code>x = ∇f/(2λ) = (3,4)/5 = (0.6, 0.8)</code>。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch03/lagrange/src/lagrange.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">闭式求解：梯度给出方向，范数给出乘子</span><span class="cb-file">examples/ch03/lagrange/src/lagrange.c</span><span class="cb-lines">第 13–21 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="13" data-to="21"><span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">lg_solve</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">lg_solution_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">sol</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> gf </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_grad</span><span class="tk" style="color:#24292E">(lg_f, </span><span class="tk" style="color:#6F42C1">mc_zero</span><span class="tk" style="color:#24292E">(LG_N), </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> norm </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_norm</span><span class="tk" style="color:#24292E">(gf);</span></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> k;</span></span></span>
+<span class="cl is-empty" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">    /* 切点处 ∇f = λ∇g = 2λx，且 ‖x‖ = 1，所以 ‖∇f‖ = 2λ。 */</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    sol-&gt;lambda </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> norm </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (k </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; k </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> LG_N; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">k) sol-&gt;x[k] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> gf.v[k] </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> sol-&gt;lambda);</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>第 14 行在零点求 f 的梯度。为什么在零点求也行？因为 f 是线性的，梯度处处相同，<code>mc_grad</code> 的中心差分把 <code>f(p)-f(m)</code> 里的常数项抵消掉，只留下 <code>2eps×3</code> 与 <code>2eps×4</code>，除以 <code>2eps</code> 正好是 <code>(3,4)</code>。第 18 行的注释是整段推导的压缩版：<code>∇g = 2x</code>，在单位圆上 <code>‖x‖=1</code>，所以 <code>‖∇f‖ = λ‖∇g‖ = 2λ</code>。</p>
+<p>验证代码走的是完全独立的另一条路：它把解代入数值梯度，检查驻点残差与约束残差。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch03/lagrange/src/lagrange.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">残差验证：用数值梯度重验驻点条件与约束</span><span class="cb-file">examples/ch03/lagrange/src/lagrange.c</span><span class="cb-lines">第 24–33 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="24" data-to="33"><span class="cl" data-ln="24"><span class="ln" data-ln="24" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">lg_check</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">lg_solution_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">sol</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_vec</span><span class="tk" style="color:#24292E">(LG_N, sol-&gt;x);</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> gf </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_grad</span><span class="tk" style="color:#24292E">(lg_f, x, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#005CC5">mc_vec_t</span><span class="tk" style="color:#24292E"> gg </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">mc_grad</span><span class="tk" style="color:#24292E">(lg_g, x, </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#D73A49">e-</span><span class="tk" style="color:#005CC5">5</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> e0 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">fabs</span><span class="tk" style="color:#24292E">(gf.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> sol-&gt;lambda </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> gg.v[</span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> e1 </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">fabs</span><span class="tk" style="color:#24292E">(gf.v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#24292E"> sol-&gt;lambda </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> gg.v[</span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> ec </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">fabs</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#6F42C1">lg_g</span><span class="tk" style="color:#24292E">(x));</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> worst </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> e0 </span><span class="tk" style="color:#D73A49">&gt;</span><span class="tk" style="color:#24292E"> e1 </span><span class="tk" style="color:#D73A49">?</span><span class="tk" style="color:#24292E"> e0 </span><span class="tk" style="color:#D73A49">:</span><span class="tk" style="color:#24292E"> e1;</span></span></span>
+<span class="cl" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> worst </span><span class="tk" style="color:#D73A49">&gt;</span><span class="tk" style="color:#24292E"> ec </span><span class="tk" style="color:#D73A49">?</span><span class="tk" style="color:#24292E"> worst </span><span class="tk" style="color:#D73A49">:</span><span class="tk" style="color:#24292E"> ec;</span></span></span>
+<span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>第 26、27 行分别数值求出两个梯度；第 28、29 行检查 <code>∇f − λ∇g</code> 的两个分量；第 30 行检查 <code>g(x)=0</code>；最后取三者中的最大值作为总体残差。为什么取最大值而不是和？因为我们要的是「最坏的一条有没有超标」，和会把三个小误差加起来，掩盖某一条明显不合格的情况。这种「取最坏」的写法在数值验证里很常见。</p>
+<p>真跑的 stdout 如下，四个数值行对应四个黄金值：</p>
+<figure class="term term-output" data-id="mc07-lagrange-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">mc07-lagrange-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">x:[0.600000,0.800000]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">lambda=2.500000</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">x0=0.600000</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">x1=0.800000</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">check=0.000000</span></span></pre></figure>
+<p><code>x:[...]</code> 还是冒号格式，闸门按普通文字逐字比较；<code>lambda</code>、<code>x0</code>、<code>x1</code>、<code>check</code> 四行是数值行，各按 <code>atol=1e-6</code> 对账。<code>check=0.000000</code> 说明最大残差小于 <code>5e-7</code>，实际上数值梯度在这里精确到 <code>1e-11</code> 量级，打印成六位小数就是零。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把 λ 改错一位会怎样</span></header>
+<div class="box-b">
+<p>把 <code>lg_solve</code> 里的 <code>sol-&gt;lambda = norm / 2.0</code> 改成 <code>norm / 2.1</code>，重新编译运行。此时 <code>x</code> 会变成约 <code>(0.5714, 0.7619)</code>，<code>x0</code>、<code>x1</code> 两行不再匹配黄金值；更重要的是 <code>check</code> 会从 <code>0.000000</code> 变成约 <code>0.038</code>，因为驻点条件不再成立。注意程序依然打印 <code>PASS</code> 吗？不，程序根本没打印 PASS——它只打印数字，闸门自己判断。这正是数值模式的纪律：证据由闸门从 stdout 重算，不由被测程序自报。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h7">7.7 numerical 闸门：四个黄金值与一个容差</h2>
+<p>清单里 <code>expect.numbers</code> 写了四项：<code>lambda=2.5</code>、<code>x0=0.6</code>、<code>x1=0.8</code>、<code>check=0.0</code>，每项 <code>atol=1e-6</code>。闸门做三件事：从真实 stdout 里解析出这四个 key；逐项与黄金值比较，判定式 <code>|actual − expected| ≤ atol + rtol×|expected|</code>（这里没写 rtol，用默认的 <code>1e-4</code>，但 <code>atol=1e-6</code> 主导）；同时把正文 output 块的四行与实际输出逐行对账，防止正文被改成好看的假数字。</p>
+<p>为什么黄金值要写四个而不是只写 <code>x0</code>、<code>x1</code>？因为「切点对了」和「整套推导对了」不是一回事。一个程序可以硬编码 <code>x=(0.6,0.8)</code> 却把 λ 算错；加上 <code>lambda</code> 这一行就能抓住。再加 <code>check</code> 是第三道保险：即使三个输出都蒙对了，残差验证还能独立确认它们满足数学条件。黄金值越多，作弊或出错后还能全部蒙对的可能性越小。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">check 不能由被检查的量直接算出来</span></header>
+<div class="box-b">
+<p>如果把 <code>lg_check</code> 写成「用 <code>sol-&gt;x</code> 和 <code>sol-&gt;lambda</code> 再算一遍闭式公式，然后返回 0」，残差就永远为零，这道验证形同虚设。本节的 <code>lg_check</code> 刻意走另一条路：调用 <code>mc_grad</code> 从函数值重新求梯度，完全不使用 <code>lg_solve</code> 里的推导。两条路径越独立，验证越有价值。这和梯度对拍里「解析梯度 vs 中心差分」是同一条原则：裁判不能和运动员共用同一套公式。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h8">7.8 影子价格：λ 在 SVM 与 RLHF 里的样子</h2>
+<p>拉格朗日乘子最实用的解读是「约束松一点的代价」。假设你在分配有限预算，约束是总花费不超过 B，最优解对应的 λ 告诉你：预算 B 每增加一元，最优目标大约能改善多少。λ 大说明这条约束卡得紧、放宽它很值钱；λ 为零说明预算根本没用完，再多加也没用。这就是影子价格这个名字的由来。</p>
+<p>支持向量机是教科书级的例子。软间隔 SVM 的目标是在分类间隔与违规惩罚之间折中，每个训练样本带一个不等式约束和对应的乘子 αᵢ。KKT 的互补松弛保证：只有那些正好卡在间隔边界上或越界的样本才有非零 αᵢ——它们就是支持向量。其余样本即使删掉，训练结果也不变。今天看大规模 SVM 的训练算法，核心就是如何高效找出这批非零乘子。</p>
+<p>RLHF（基于人类反馈的强化学习）里也能看到同一个模式。给策略加一条 KL 约束，限制它不要偏离参考模型太远，对应的拉格朗日乘子控制「偏离」与「奖励」之间的兑换率。实际系统常把这个乘子做成自适应控制器：奖励上升太快就加大惩罚，约束太松就减小乘子。你看到的是一堆工程调节，本质仍是本节那条 <code>∇f = λ∇g</code> 和对偶变量的更新。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">对偶变量是「谈判代表」</span></header>
+<div class="box-b">
+<p>把约束看成一条硬性规定，原问题在规定的框框里尽量优化目标。对偶问题则派出一个「谈判代表」λ，负责给这条规定定价：定得太高，原问题会过度保守；定得太低，规定会被无视。两边的最优值在凸问题下汇合，谈判结束。这个视角让很多算法变得自然：交替更新原变量和对偶变量，让定价与实际松紧互相适应。本节那个小小的 λ=2.5，就是这条思路的最小样本。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h9">7.9 常见错误清单</h2>
+<p>第一，把驻点条件写成 <code>∇f = 0</code>。前面说过，那是无约束问题的条件。第二，忽略 λ 的符号，把最大与最小的候选混在一起；算出 <code>λ=±2.5</code> 后必须代回比较目标值。第三，约束函数写成 <code>1 − x₀² − x₁² = 0</code> 而不是 <code>x₀²+x₁²−1=0</code>，∇g 整体变号，λ 的符号跟着翻转——数值解没错，但影子价格的解读反了。写约束时先固定一个约定，并在正文里写明。</p>
+<p>第四，只验证驻点条件，不验证可行性。一个点可以让 <code>∇f = λ∇g</code> 成立却不在圆上，此时 λ 再漂亮也没有意义。本节的 <code>check</code> 特意把约束残差也包进去。第五，用单侧差分求梯度：<code>mc_grad</code> 用中心差分不是巧合，线性函数下两种都精确，但换成非线性约束，单侧差分的 <code>O(eps)</code> 误差会直接污染 <code>check</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从二维推广到 n 维</span></header>
+<div class="box-b">
+<p>本例只有两个变量、一个约束，维数低到可以画图。推广到 n 维时，几何图像仍然存在，只是画不出来：<code>∇g</code> 变成一个 n 维法向量，<code>∇f</code> 必须落在由所有约束梯度张成的法空间里。KKT 条件的代码形式也不变——仍然是「算梯度、检查共线、检查可行」。真正变麻烦的是求解：二维可以徒手解方程，n 维需要数值方法（对偶上升、增广拉格朗日、内点法）。但无论用什么方法，检验解好坏的还是本节这几条残差。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h10">7.10 为什么这样的玩具例子值得真跑</h2>
+<p>有人会问：既然答案徒手就能算到 <code>(0.6,0.8)</code>，为什么还要写 C 程序、建清单、跑闸门？理由和前几节一样：<strong>手算是推导，真跑是证据</strong>。手算可能把 λ 的符号搞反、把 <code>∇g=2x</code> 的 2 漏掉，自己还浑然不觉；程序把闭式解与数值梯度两条路并排放在一起，残差一旦不为零就当场暴露。更重要的是，程序把「求解」和「验证」分成了两个函数，这种分工在更大规模的问题里会救命——当你解不出闭式解、只能靠优化器迭代时，验证代码依然可以原封不动地用。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h11">7.11 拉格朗日量：把方程组装进一个函数</h2>
+<p>把驻点条件和可行性塞进同一个函数，就得到拉格朗日量 <code>ℒ(x,λ) = f(x) − λ·g(x)</code>（符号约定可正可负，不影响解）。对它分别求偏导：</p>
+<ul>
+<li><code>∂ℒ/∂x = ∇f − λ∇g = 0</code>，这就是驻点条件；</li>
+<li><code>∂ℒ/∂λ = −g(x) = 0</code>，这就是约束本身。</li>
+</ul>
+<p>于是「在约束下优化 f」变成了「在无约束的 (x,λ) 联合空间里找 ℒ 的驻点」。这个改写不只是记号游戏：它让同一套无约束优化工具（梯度下降、牛顿法）可以用于带约束问题，只要把 λ 也当作一个变量来更新。实践中常见的增广拉格朗日法还在 ℒ 上加一项 <code>ρ·g(x)²/2</code>，把约束违反变成实实在在的惩罚，让迭代更稳。</p>
+<p>ℒ 的驻点一般是<strong>鞍点</strong>而不是极小点：对 x 是极小、对 λ 是极大（或相反，取决于符号约定）。这也解释了为什么约束优化不能简单套用「沿负梯度走」：对 λ 那一维要往上走，对 x 那一维要往下走。对偶算法就是这种「分方向走」的系统化版本。</p>
+<figure class="viz" data-kind="calltree" data-frames="3" data-viz-id="vz-7ab77bb4">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> 求解与验证：两条独立路径在同一个 main 里汇合</figcaption>
+<div class="viz-screen" role="group" aria-label="求解与验证：两条独立路径在同一个 main 里汇合：逐步演示">
+<input class="vs-radio" type="radio" name="vz-7ab77bb4" id="vz-7ab77bb4-1" checked>
+<input class="vs-radio" type="radio" name="vz-7ab77bb4" id="vz-7ab77bb4-2">
+<input class="vs-radio" type="radio" name="vz-7ab77bb4" id="vz-7ab77bb4-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-7ab77bb4-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-7ab77bb4-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-7ab77bb4-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印数值行</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">lg_solve() ：闭式求出 x 与 lambda</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">lg_solve()</span><span class="ve-lbl">拿解</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">lg_solve() ：求 f 的梯度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">mc_grad() ：中心差分，得到 (3,4)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">mc_norm() ：范数 5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mc_grad()</span><span class="ve-lbl">取梯度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mc_norm()</span><span class="ve-lbl">取范数</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：已有解</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">lg_check() ：重算两个梯度与约束</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="ret"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回解与乘子</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">lg_check()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回最大残差</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>main 先要一个解</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印数值行</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">lg_solve() ：闭式求出 x 与 lambda</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">lg_solve()</span><span class="ve-lbl">拿解</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>闭式路径内部只依赖数值梯度与范数</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">lg_solve() ：求 f 的梯度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">mc_grad() ：中心差分，得到 (3,4)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">mc_norm() ：范数 5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mc_grad()</span><span class="ve-lbl">取梯度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">mc_norm()</span><span class="ve-lbl">取范数</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>验证路径重新求梯度，不复用上面的结果</p><div class="viz-canvas" data-kind="calltree" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：已有解</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">lg_check() ：重算两个梯度与约束</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="ret"><span class="ve-a">lg_solve()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回解与乘子</span></div>
+<div class="ve" data-arrow="ret"><span class="ve-a">lg_check()</span><span class="ve-arrow" aria-hidden="true">⇒</span><span class="ve-b">main()</span><span class="ve-lbl">返回最大残差</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧是求解路径：用 <code>mc_grad</code> 与 <code>mc_norm</code> 得到梯度和范数，按闭式公式给出解。第 3 帧是验证路径：<code>lg_check()</code> 自己的 <code>mc_grad</code> 调用从头再算一遍，完全不看求解路径用过的中间量。两帧的调用结构画在一起，就能一眼看出「裁判与运动员分离」这件事在代码层面是怎么落实的。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h12">7.12 对偶问题：从乘子那一侧看同一个优化</h2>
+<p>把 ℒ 对 x 最小化后得到的函数称为对偶函数 <code>d(λ) = min_x ℒ(x,λ)</code>。原问题是在约束下优化 f，对偶问题则是在 λ 上最大化 d(λ)。对任意 λ，<code>d(λ)</code> 都是原问题最优值的下界（对最小化问题而言），所以最大化这个下界是在从下方逼近真实最优值——这叫弱对偶。凸问题加上合适的约束资格条件时，两边最优值相等，叫强对偶。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">下界是怎么来的</span></header>
+<div class="box-b">
+<p>对任意满足约束的可行点 x 与任意对偶变量 λ，因为 <code>g(x)=0</code>，有 <code>ℒ(x,λ)=f(x)</code>。于是 <code>d(λ)=min_x ℒ(x,λ) ≤ ℒ(x_feasible,λ)=f(x_feasible)</code>。也就是说，无论 λ 取什么值，d(λ) 都不会超过任何可行点的目标值，当然也不会超过最优值。把 d(λ) 最大化，就是把这条下界抬得尽可能高。这个证明只用到了「最小值不大于任一取值」，不需要任何凸性假设——所以弱对偶永远成立。</p>
+</div>
+</section>
+<p>强对偶不是免费的。非凸问题里常常出现对偶间隙：对偶最优值严格低于原问题最优值。深度学习里大量问题是非凸的，所以当你看到某个算法「通过对偶求解」时，要问一句它在什么条件下与原本问题等价。不过即便有间隙，对偶变量仍常常是有用的正则化旋钮——比如 RLHF 里那个 KL 乘子，工程师未必在意强对偶，只在意它能不能把策略约束在合理范围内。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h13">7.13 残差的误差预算：为什么 1e-6 是合适的容差</h2>
+<p><code>check</code> 用数值梯度，而数值梯度带误差。中心差分求 <code>∇g</code> 时，<code>g</code> 是二次函数，<code>g(p)-g(m)</code> 里的二次项精确抵消，分子只剩 <code>4eps·x_i</code>，除以 <code>2eps</code> 得到 <code>2x_i</code>，误差只来自浮点舍入，量级在 <code>1e-11</code> 附近。求 <code>∇f</code> 时 f 是线性函数，同样只有舍入误差。因此 <code>check</code> 的理论残差应该在 <code>1e-11</code> 量级，远小于清单的 <code>atol=1e-6</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">容差要按误差来源定，不是拍脑袋</span></header>
+<div class="box-b">
+<p>如果目标换成 <code>f = exp(x₀) + sin(x₁)</code>，中心差分的截断误差是 <code>O(eps²)</code>，在 <code>eps=1e-5</code> 下约 <code>1e-10</code>，仍在 <code>1e-6</code> 之内；若换成不光滑的函数（比如带 <code>abs</code> 或 <code>max</code>），中心差分在折点附近会给出完全错误的梯度，残差可能跳到 <code>1e-2</code>。此时该改的是验证方法（用解析梯度或自动微分），而不是把容差放宽到 <code>0.1</code>——放宽容差等于取消检查。容差是误差预算的数字化，必须先弄清误差从哪里来。</p>
+</div>
+</section>
+<p>还有一个容易忽略的点：容差写在清单，但黄金值本身也要可信。本节的四个黄金值来自手算的闭式解：勾股数 <code>(3,4,5)</code> 保证 λ=2.5 与切点 <code>(0.6,0.8)</code> 没有舍入问题；<code>check=0</code> 是因为残差在打印精度下为零。如果黄金值来自「第一次跑出来的输出」，就有循环论证的风险——程序算错了，黄金值也跟着错。正确做法是先手算或用独立方法算出期望值，再用真跑确认。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h14">7.14 换个约束再算一遍：推广的直觉</h2>
+<p>把约束从单位圆改成椭圆 <code>x₀²/4 + x₁² = 1</code>，目标仍是 <code>3x₀+4x₁</code>。方法可以照搬：等值线沿 <code>(3,4)</code> 方向外推，最后与椭圆相切。<code>∇g = (x₀/2, 2x₁)</code>，驻点条件是 <code>(3,4)=λ(x₀/2,2x₁)</code>，解出 <code>x₀=6/λ</code>、<code>x₁=2/λ</code>，代入椭圆得 <code>9/λ² + 4/λ² = 1</code>，于是 <code>λ=√13≈3.6056</code>，切点约 <code>(1.664, 0.555)</code>。可见 λ 的数值随约束形状改变，但「梯度共线 + 约束可行」这两条永不变。</p>
+<p>多个约束时，驻点条件变成梯度线性组合：<code>∇f = Σⱼ λⱼ∇gⱼ</code>。几何上，目标梯度必须落在所有约束法向量张成的空间里；如果某个约束的法向量与其余共线，对应的乘子就不唯一——这叫约束资格条件不满足，数值求解会变得病态。不等式约束再叠加互补松弛，就组成完整的 KKT 体系。把这些推广记在心里，本节这个圆上的玩具例子就成了一把通用钥匙。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h15">7.15 从几何到算法：大问题上怎么求 λ</h2>
+<p>本例能徒手解出 λ，是因为约束是圆、目标是线性函数。一般问题不能这么幸运，需要一套迭代办法。最朴素的是对偶上升：固定当前 λ，对 x 做一步（或若干步）无约束下降，最小化 <code>ℒ(x,λ)=f(x)−λg(x)</code>；然后用当前的约束违反量更新乘子，<code>λ ← λ + α·g(x)</code>（符号取决于 ℒ 的写法）。如果约束被违反得多，乘子就变大，下一轮对 x 的惩罚更强，逼它回到可行域。两个变量交替更新，直到约束满足且 x 不再变化。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">对偶上升的步长不好调</span></header>
+<div class="box-b">
+<p>对 λ 的更新步长 α 与对 x 的学习率不是一回事：α 太大，乘子会在正负之间剧烈震荡；α 太小，约束违反量收敛得极慢。更麻烦的是，当 ℒ 对 x 不是严格凸时，<code>min_x ℒ</code> 这一步可能根本没唯一解，对偶函数不光滑，朴素梯度更新会卡住。增广拉格朗日法在 ℒ 里再加 <code>ρ·g(x)²/2</code>，让 x 子问题更良态，乘子更新也稳得多；代价是引入一个惩罚系数 ρ 要调。现代约束优化库大多以增广拉格朗日为核心，不是偶然。</p>
+</div>
+</section>
+<p>在深度学习里，约束往往不是几何曲面，而是「概率非负且和为 1」「策略与参考模型的 KL 小于 δ」这类条件。处理办法分两派。一派把约束做成硬投影：每步更新后把参数或输出投影回可行域，比如把负值截断为 0 再重新归一化；简单，但投影会引入偏差。另一派把约束做成软惩罚：把 <code>ρ·g(x)²</code> 加进损失，让训练自己学会满足约束；灵活，但永远不能保证严格可行。拉格朗日乘子法介于两者之间——它保留硬约束的目标，同时用可学习的乘子代替固定的大惩罚系数，因此在 RLHF、安全强化学习和带约束的生成控制里越用越多。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从本节到「用 PyTorch 写约束优化」</span></header>
+<div class="box-b">
+<p>如果将来你在框架里实现类似算法，会发现代码结构和本节很像：主网络输出 x，另有一个标量参数 λ 通过 <code>λ = λ + α·g(x).item()</code> 更新；训练循环里既记录任务损失，也记录约束残差。本节教你的是「为什么这两个量要一起更新」，框架只负责自动求导。不要因为看不到显式的 <code>∇f = λ∇g</code> 就以为公式没用——它藏在优化器的更新规则里。</p>
+</div>
+</section>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h16">7.16 数值实验的复现清单</h2>
+<p>把这一节的实验搬到别处时，最好把条件写全，否则别人（包括未来的你）无法复现。至少要记录：目标函数的系数 <code>(3,4)</code>；约束函数 <code>x₀²+x₁²−1=0</code> 的写法；中心差分步长 <code>1e-5</code>；黄金值的来源（勾股数手算，不是第一次运行的输出）；容差 <code>1e-6</code> 的依据（残差理论量级 <code>1e-11</code> 远小于容差）。清单保存了容差和「程序该打印什么」，源码保存了实验怎么做，两者合起来才是一份可复现记录。</p>
+<p>再列一遍常见失败模式，方便对照排查：</p>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>最可能的原因</th>
+<th>先查哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>x0/x1 对了，lambda 错了</td>
+<td>把 <code>‖∇f‖=2λ</code> 漏掉因子 2</td>
+<td><code>lg_solve</code> 第 19 行</td>
+</tr>
+<tr>
+<td>check 很大但 x 看起来对</td>
+<td>约束残差被漏掉，或 ∇g 的系数写错</td>
+<td><code>lg_check</code> 第 30 行</td>
+</tr>
+<tr>
+<td>λ 的符号反了</td>
+<td>约束函数整体变号，约定没写清</td>
+<td><code>lg_g</code> 的定义</td>
+</tr>
+<tr>
+<td>黄金值报 mismatch</td>
+<td>改了源码条件却没更新清单</td>
+<td><code>mc07-lagrange.json</code></td>
+</tr>
+<tr>
+<td>切点跑到圆外</td>
+<td>只解了驻点方程，忘了代回约束</td>
+<td><code>lg_solve</code> 第 20 行</td>
+</tr>
+</tbody>
+</table>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把约束函数整体变号，观察符号翻转</span></header>
+<div class="box-b">
+<p>把 <code>lg_g</code> 改成 <code>1.0 - x.v[0]*x.v[0] - x.v[1]*x.v[1]</code>，其余不动，重新编译运行。你会看到 <code>lambda=-2.500000</code>，而 <code>x</code> 仍是 <code>(0.6,0.8)</code>，<code>check</code> 仍是零。四个黄金值里只有一个不匹配，闸门报 <code>numeric_value_mismatch</code>。这个实验说明：约束的写法是一种约定，它决定 λ 的符号；解本身不变，但「影子价格」的解读会跟着翻转。所以写约束时一定把约定写进注释和正文，不要留给读者猜。</p>
+</div>
+</section>
+<p>最后强调一句贯穿本册的纪律：黄金值必须来自独立的推导，不能来自程序输出。本节之所以敢把 <code>lambda=2.5</code> 写进清单，是因为 <code>3²+4²=5²</code> 这个勾股数让人一眼就能验算；<code>check=0</code> 则来自误差量级分析。要是把「第一次运行的输出」直接抄成黄金值，程序里一个稳定的错误就会被固化成标准答案，之后每次对拍都会 green——但 green 的是错误。这与第 5、8 单元的阴性对照是同一条原则的不同侧面。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h17">7.17 从二维图到高维代数：法空间与秩</h2>
+<p>二维图很好用，但别让它把你限制住。在 n 维空间里，单个等式约束 <code>g(x)=0</code> 定义的是一张 n−1 维曲面；<code>∇g(x)</code> 是这张曲面的法向量，所有切线方向都与它垂直。<code>∇f=λ∇g</code> 的意思是目标梯度只能沿法向，没有任何切向分量——否则沿那个切向走一点，f 还会变化，当前点就不是极值。</p>
+<p>多个约束时，每个 <code>∇gⱼ</code> 贡献一个法向，它们的线性组合张成法空间。驻点条件 <code>∇f = Σⱼλⱼ∇gⱼ</code> 说的是目标梯度落在这个法空间里。用线性代数的语言：<code>∇f</code> 必须在 <code>span{∇gⱼ}</code> 中。如果这些法向量线性相关——比如两个约束其实是同一个圆写了两遍——那么法空间的维数小于约束个数，乘子不唯一。数值求解器遇到这种情况会报「约束资格条件不满足」或者给出巨大的乘子，工程上要先删掉冗余约束。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">用投影的视角看同一件事</span></header>
+<div class="box-b">
+<p>把约束想成一张曲面，优化过程可以分成两步：先按 unconstrained 的方式走一步，再把落点投影回曲面。投影方向就是法向，而投影量正好与 <code>λ∇g</code> 成正比——乘子在这里变成了「需要往法向拉回多远」的度量。这个视角把拉格朗日乘子与数值线性代数里的投影矩阵联系了起来：法空间投影矩阵是 <code>N(NᵀN)⁻¹Nᵀ</code>，其中 N 的列是各个约束梯度。你不必在代码里真的构造它，但知道它的存在，就能理解为什么约束越多、法向越接近共线，求解越不稳定。</p>
+</div>
+</section>
+<p>最后回到本例。圆在 <code>(0.6,0.8)</code> 处的法向是 <code>(0.6,0.8)</code>，目标梯度 <code>(3,4)</code> 正好是它的 5 倍；而 <code>∇g=2x=(1.2,1.6)</code>，所以 λ=2.5。三个数字之间的倍数关系一目了然。把这张图记牢：以后不管约束变成椭圆、超平面还是复杂的神经网络输出流形，你脑海里都应该浮现同一幅画面——两组等高线相切，法向对齐，乘子就是对齐的比例系数。</p>
+<h2 id="multic-chapters-ch03-02-lagrange-md-h18">7.18 收敛判据：残差比目标值更值得盯</h2>
+<p>数值求解约束优化时，很多人习惯盯目标值是否还在变化。但目标值停滞不一定意味着收敛：算法可能卡在一个约束严重不可行的点上，此时目标值当然不再改善。可靠的判据是同时看三类残差：驻点残差 <code>‖∇f − λ∇g‖</code>、约束违反量 <code>‖g(x)‖</code>、以及互补残差 <code>‖λ·g(x)‖</code>。三者都降到阈值以下，才能说找到了一个近似 KKT 点。本节的 <code>check</code> 把前两类合并成一个数，正是这个思想的最小版本。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么互补残差也不能漏</span></header>
+<div class="box-b">
+<p>只看驻点与可行性，会漏掉「乘子取了不该取的值」的情形。举例说，一个不等式约束明明松着（<code>g&lt;0</code>），却配了一个很大的正乘子，驻点方程可能被这个乘子强行满足，点也确实可行，但互补条件被破坏。此时影子价格的解读完全错误：预算根本没花完，报告却说放宽预算很值钱。把互补残差加进监控列表，几行代码就能挡住这种误导。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>有约束极值处 <code>∇f = λ∇g</code>：目标梯度与约束梯度共线，几何上是两组等高线相切；</li>
+<li>本例 <code>∇f=(3,4)</code>、<code>∇g=2x</code>，解得 <code>λ=2.5</code>、<code>x=(0.6,0.8)</code>，λ 取负号给出最小值点；</li>
+<li>KKT 四条件：驻点、原始可行、对偶可行、互补松弛；每个不等式约束配一个非负乘子；</li>
+<li><code>check</code> 用数值梯度独立重验 <code>∇f−λ∇g=0</code> 与 <code>g=0</code>，取最坏残差，不能由被验证的量直接算出；</li>
+<li><code>mode=numerical</code> 给四个黄金值与 <code>atol=1e-6</code>，程序自报不算证据；</li>
+<li>λ 是影子价格：SVM 的支持向量、RLHF 的 KL 约束乘子都是同一个对偶变量的实例。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>为什么极值处 <code>∇f</code> 必须垂直于约束曲线的切线方向？把 <code>g(γ(t))=0</code> 对 t 求导写出来。</li>
+<li>手算本节问题的 λ 与切点，并说明 <code>λ=-2.5</code> 对应什么解。</li>
+<li>若把约束写成 <code>1−x₀²−x₁²=0</code>，∇g 与 λ 会怎么变？数值解 x 会不会变？</li>
+<li>KKT 四条分别是什么？互补松弛 <code>λ·g=0</code> 在「约束没顶住」时意味着什么？</li>
+<li>为什么 <code>check</code> 取三个残差的最大值而不是和？为什么它必须走与 <code>lg_solve</code> 不同的计算路径？</li>
+<li>把 <code>lambda</code> 的黄金值从 2.5 改成 2.6，程序输出不变，闸门会报什么？这说明了什么？</li>
+<li>影子价格是什么意思？SVM 的支持向量为什么正好对应非零乘子？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>沿约束曲线 <code>γ(t)</code> 有 <code>g(γ(t))=0</code>，求导得 <code>∇g(x*)·γ′(0)=0</code>，所以 ∇g 垂直于切线。极值处同理 <code>d f(γ(t))/dt|₀ = ∇f(x*)·γ′(0)=0</code>，∇f 也垂直切线；二维里垂直同一方向的向量必共线，于是 <code>∇f=λ∇g</code>。</li>
+<li><code>3=2λx₀</code>、<code>4=2λx₁</code> 给出 <code>x=(3,4)/(2λ)</code>；代入 <code>x₀²+x₁²=1</code> 得 <code>25/(4λ²)=1</code>，<code>λ=±2.5</code>。<code>λ=2.5</code> 给出 <code>(0.6,0.8)</code>，最大值 5；<code>λ=-2.5</code> 给出 <code>(-0.6,-0.8)</code>，最小值 −5。</li>
+<li>新约束的梯度是 <code>−2x</code>，与原 ∇g 反号，所以 λ 也反号。点 x 仍满足驻点比例关系，数值解不变；但影子价格的符号解读跟着约定翻转，必须固定一种写法。</li>
+<li>驻点 <code>∇f=λ∇g</code>、原始可行 <code>g≤0</code>、对偶可行 <code>λ≥0</code>、互补松弛 <code>λg=0</code>。约束没顶住时 <code>g&lt;0</code>，互补条件逼出 <code>λ=0</code>，说明这条约束在该解处不起作用。</li>
+<li>取最大值检验的是最坏一条是否超标，求和会让三个小误差互相掩盖。走不同路径是为了让验证独立于推导：若 <code>check</code> 复用闭式公式，残差恒为零，等于没有验证。</li>
+<li>报 <code>numeric_value_mismatch</code>：真实 stdout 的 <code>lambda=2.500000</code> 与清单黄金值 2.6 相差 0.1，远超 <code>atol=1e-6</code>。说明容差与黄金值只由清单决定，正文写「约等于」或程序打印什么都无效。</li>
+<li>影子价格是约束右端变化时最优值的变化率，衡量「放宽约束值多少」。软间隔 SVM 里只有卡在间隔边界或越界的样本约束是紧的，由互补松弛它们的 αᵢ 非零；其余样本 αᵢ=0，对决策没有贡献，因此得以和支持向量区分开。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

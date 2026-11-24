@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>采样：逆变换与拒绝采样</title>
+<meta name="description" content="零基础 · 第 10 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-probopt-chapters-ch04-02-sampling-methods-md { @top-right { content: "采样：逆变换与拒绝采样"; } }
+#content { page: p-u-probopt-chapters-ch04-02-sampling-methods-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/probopt.html">《probopt》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">采样：逆变换与拒绝采样</h1><p class="doc-sub">零基础 · 第 10 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/probopt/chapters/ch04/02-sampling-methods.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h1">10.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h2">10.2 逆变换法：会算 CDF 就能采样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h3">10.3 拒绝采样：只会算密度也能采</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h4">10.4 接受率：它是效率的仪表盘</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h5">10.5 真跑：四种采样数字并排</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h6">10.6 数字怎么读：四个层次</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h7">10.7 高维为什么失效，以及 MCMC 想救什么</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h8">10.8 采样在 dropout 与生成里的角色</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h9">10.9 常见失败模式与排查</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h10">10.10 黄金值来源与复现清单</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h11">10.11 从 LCG 到真随机数：种子到底固定了什么</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h12">10.12 逆变换法的更多例子与数值稳定</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h13">10.13 接受率的误差预算与实验设计</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h14">10.14 和前面单元的连接：采样是期望的执行器</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h15">10.15 一句话收束</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h16">10.16 手算核对：不靠程序也能验的三组数</a></li><li class="toc-l2"><a href="#probopt-chapters-ch04-02-sampling-methods-md-h17">10.17 再想一步：采样与优化的分工</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清逆变换法的适用条件，并把三角分布 <code>p(x)=2x</code> 的 CDF 与反函数手算出来；</li>
+<li>画出拒绝采样的「提议—包络—接受」三步图，证明接受概率为什么是 <code>1/M</code>；</li>
+<li>用固定种子真跑，读懂 <code>accept_rate</code>、<code>sample_mean</code>、<code>true_mean</code> 三个数各自的误差来源；</li>
+<li>解释为什么高维拒绝采样的接受率按 <code>(1/2)^d</code> 塌下去，并说出 MCMC 要解决的核心困难；</li>
+<li>认出采样在 dropout、生成模型里的角色，知道什么时候该用逆变换、什么时候只能用拒绝或 MCMC。</li>
+</ul>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h1">10.1 先看工程长什么样</h2>
+<p>前面九个单元，我们一直在跟「期望」「似然」「熵」「损失」打交道。这些量都是对分布做的积分或求和。po01 里已经埋过一句话：期望可以用采样均值来估计。这一单元把那句话兑现——真正把样本从分布里抽出来。</p>
+<p>采样不是有趣的小技巧，而是深度学习的日常。训练时的 dropout 是对伯努利分布采样；变分自编码器从后验里采一个隐向量；扩散模型的生成过程是一连串条件采样；强化学习里按策略概率选动作也是采样。不会采样，这些模型连前向跑一遍都做不到。本册不搞测度论，只讲两种最基础、能真跑能对拍的办法：逆变换法和拒绝采样。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">一句话讲完这一单元</span></header>
+<div class="box-b">
+<p>如果会算分布的累计函数 <code>F</code>，就从均匀数 <code>u</code> 反解 <code>x=F⁻¹(u)</code>；如果只会算密度 <code>p</code>、不会算 <code>F</code>，就在一个包络住 <code>p</code> 的简单分布上采样，再按 <code>p/(Mq)</code> 的概率决定留不留。前者精确且高效，后者通用但会随维度迅速失效。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-512b1ec0">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：ch04 下新增一个采样对拍例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：ch04 下新增一个采样对拍例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-512b1ec0" id="vz-512b1ec0-1" checked>
+<input class="vs-radio" type="radio" name="vz-512b1ec0" id="vz-512b1ec0-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-512b1ec0-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-512b1ec0-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">rejection_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/rejection.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/rejection.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po10-sampling.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch04 下已有上一单元的对偶例子</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的 rejection_probe 工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch04/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">duality_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">rejection_probe/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/rejection.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/rejection.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po10-sampling.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里新工程的结构和前两单元一致。<code>rejection.h</code> 声明三种采样方式：三角分布的拒绝采样、<code>d</code> 维乘积目标的接受率、逆变换采样；<code>rejection.c</code> 实现它们；<code>main.c</code> 给每种方法固定种子、跑够次数、打印结果；清单写黄金值与容差。注意同一个 <code>main</code> 里用了两个不同的种子——拒绝采样用 <code>20240519UL</code>，逆变换用 <code>990099UL</code>，各自独立，互不干扰。</p>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h2">10.2 逆变换法：会算 CDF 就能采样</h2>
+<p>先看最容易的一种。设目标密度是三角分布 <code>p(x)=2x</code>，定义域 <code>0≤x≤1</code>。它的累计分布函数（CDF）是</p>
+<p><code>F(x) = ∫₀ˣ 2t dt = x²</code>，<code>0≤x≤1</code></p>
+<p>CDF 单调地从 0 涨到 1，正好是均匀分布的值域。逆变换法的做法是：抽一个 <code>u ~ Uniform(0,1)</code>，令 <code>x = F⁻¹(u) = √u</code>，那么 <code>x</code> 就服从 <code>p</code>。证明只要一行：<code>P(x ≤ a) = P(√u ≤ a) = P(u ≤ a²) = a² = F(a)</code>，与定义吻合。</p>
+<p>这个方法的条件很明确：你得能写出 <code>F</code> 的<strong>显式反函数</strong>。指数分布的 <code>F(x)=1−e^{−λx}</code> 好反解，得到 <code>x=−ln(1−u)/λ</code>；标准正态的 CDF 没有初等反函数，逆变换就不直接可用（实践中用 Box–Muller 或数值近似）；离散分布更容易——把概率累加成区间，抽一个 <code>u</code> 看它落在哪一段。本册共用库里的 <code>po_normal()</code> 用的正是 Box–Muller，把两个均匀数变成一个正态样本；<code>po_categorical()</code> 则是离散版的逆变换。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么 `√u` 会把样本往大的方向推</span></header>
+<div class="box-b">
+<p>均匀数 <code>u</code> 在 <code>[0,1]</code> 上平坦，<code>√u</code> 却是凹函数：它把小区间拉宽、大区间压窄。具体地，<code>u≤0.25</code> 只占四分之一的概率，却对应 <code>x≤0.5</code> 这一半的区间——样本有更多机会落在小 x 吗？反过来想：<code>p(x)=2x</code> 在 x 大时密度高，所以大 x 应该更常见。取 <code>x≤0.5</code> 的概率是 <code>F(0.5)=0.25</code>，确实只有四分之一；<code>u≤0.25</code> 也正好是四分之一。凹变换把 <code>[0,0.25]</code> 这段 u 映射到 <code>[0,0.5]</code> 这段 x，看起来区间变宽了，但概率没变——这正是密度 <code>2x</code> 在小 x 处低、大 x 处高的表现。手算期望 <code>E[x]=∫₀¹ x·2x dx=2/3</code>，明显大于均匀分布的 1/2，与这个直觉一致。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h3">10.3 拒绝采样：只会算密度也能采</h2>
+<p>现在把条件放宽：假设你只知道密度 <code>p(x)</code> 的函数值，不知道它的 CDF，甚至不知道归一化常数。拒绝采样只需要另找一个<strong>提议分布</strong> <code>q(x)</code>（要会采样、会算密度），以及一个常数 <code>M</code>，使得对所有 x 都有 <code>M·q(x) ≥ p(x)</code>——也就是 <code>Mq</code> 这张「毯子」把 <code>p</code> 整个盖住。算法两步循环：</p>
+<ol>
+<li>从 <code>q</code> 抽一个候选 <code>x</code>，再从 <code>Uniform(0,1)</code> 抽一个 <code>u</code>；</li>
+<li>若 <code>u ≤ p(x)/(M q(x))</code>，接受这个 x；否则丢弃，回到第一步。</li>
+</ol>
+<p>直觉上很朴素：在 <code>p</code> 高的地方，<code>p/(Mq)</code> 接近 1，候选几乎都留下；在 <code>p</code> 低的地方，这个比值小，候选大多被扔掉。剩下的样本密度自然正比于 <code>p</code>。证明也短：候选密度为 <code>q(x)</code>，接受概率为 <code>p(x)/(Mq(x))</code>，所以接受点的联合密度是 <code>q(x)·p(x)/(Mq(x)) = p(x)/M</code>。再除以总接受概率 <code>∫p(x)/M dx = 1/M</code>（假设 p 已归一化），得到的条件密度正好是 <code>p(x)</code>。</p>
+<p>本例取 <code>q</code> 为 <code>[0,1]</code> 上的均匀分布（<code>q(x)=1</code>），目标 <code>p(x)=2x</code>，它的最大值是 2，所以取 <code>M=2</code>。接受概率简化为 <code>p(x)/(Mq(x)) = 2x/2 = x</code>。程序里那行 <code>if (po_uniform() &lt; x)</code> 就是它。总接受率是 <code>∫₀¹ q(x)·x dx = ∫₀¹ x dx = 1/2</code>——每两个候选大约留下一个。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-7f24a747">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 拒绝采样的包络图：毯子盖住目标，按高度比决定去留</figcaption>
+<div class="viz-screen" role="group" aria-label="拒绝采样的包络图：毯子盖住目标，按高度比决定去留：逐步演示">
+<input class="vs-radio" type="radio" name="vz-7f24a747" id="vz-7f24a747-1" checked>
+<input class="vs-radio" type="radio" name="vz-7f24a747" id="vz-7f24a747-2">
+<input class="vs-radio" type="radio" name="vz-7f24a747" id="vz-7f24a747-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-7f24a747-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-7f24a747-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-7f24a747-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">q ：均匀提议，高度恒为 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">envelope ：M=2 的包络，高度恒为 2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">q</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">envelope</span><span class="ve-lbl">乘 M 得到上界</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p ：目标密度，从 0 斜升到 2</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">q ：均匀提议仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">envelope ：包络仍在</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">p</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">envelope</span><span class="ve-lbl">处处不越过毯子</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p ：目标仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">envelope ：包络仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">x ：候选点，高度 p(x)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">u ：均匀随机数</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">u</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">x</span><span class="ve-lbl">u &lt; p/M 则接受</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>先铺好提议与包络</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">q ：均匀提议，高度恒为 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">envelope ：M=2 的包络，高度恒为 2</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">q</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">envelope</span><span class="ve-lbl">乘 M 得到上界</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>放入目标密度 p(x)=2x</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p ：目标密度，从 0 斜升到 2</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">q ：均匀提议仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">envelope ：包络仍在</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">p</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">envelope</span><span class="ve-lbl">处处不越过毯子</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>在 x 处抽 u，决定留不留</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p ：目标仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">envelope ：包络仍在</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">x ：候选点，高度 p(x)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">u ：均匀随机数</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">u</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">x</span><span class="ve-lbl">u &lt; p/M 则接受</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧的 <code>p -&gt; envelope</code> 那条边是本方法的前提：<code>p(x)=2x</code> 在 <code>x=1</code> 处刚好触到包络高度 2，其余位置都在毯子下面。若你选的 <code>M</code> 太小，毯子被 <code>p</code> 戳破，接受概率 <code>p/(Mq)</code> 会超过 1，数学上不成立，程序里表现为「本来该接受的点被以大于 1 的概率接受」——当然概率不可能大于 1，于是分布被扭曲。第 3 帧把候选点 <code>x</code> 与随机数 <code>u</code> 画在同一个画面里，<code>u &lt; x</code> 就收下这个候选。三帧各自重复了 <code>q</code>、<code>envelope</code>、<code>p</code> 这些仍然成立的元素，符合「每帧自包含」的规矩。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">M 不是越小越好，也不是越大越好</span></header>
+<div class="box-b">
+<p><code>M</code> 必须满足 <code>Mq ≥ p</code>，这是硬约束；在这个前提下，接受率恰是 <code>1/M</code>，所以 <code>M</code> 越小效率越高。但「刚好等于最大值」的 M 往往难求，实际中常取一个略大的保守值。取太大不会让分布变错——<code>p/(Mq)</code> 变小只是让更多候选被丢掉，留下的样本仍然服从 <code>p</code>——但会让实验慢得无法忍受。真正致命的是取小了导致毯子被戳破，这时接受概率公式失效，采样分布出错，而且程序不会报任何错误。所以调 <code>M</code> 时宁大勿小。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h4">10.4 接受率：它是效率的仪表盘</h2>
+<p>把「接受率」定义成「留下的候选数 / 总候选数」。对本例，理论值是 <code>1/M = 0.5</code>。但真跑时你看到的是 <code>0.499500</code>，不是恰好 <code>0.5</code>——因为它是随机数。每个候选是否留下是一次伯努利试验，成功率 <code>0.5</code>；抽 <code>N=2,000,000</code> 次，接受数的标准差是 <code>√(N·0.5·0.5) ≈ 707</code>，除以 N 得到接受率的标准误约 <code>0.000354</code>。观测值 <code>0.499500</code> 离理论值 0.0005，约 1.4 个标准误，完全在正常波动范围内。这就是清单里 <code>accept_rate</code> 的容差放宽到 <code>atol=1e-3</code> 的原因：蒙特卡洛量自带统计噪声，容差必须比噪声大，否则每次跑都可能因为正常波动而误报。</p>
+<p>样本均值 <code>sample_mean</code> 也有误差，但来源不同。留下的 <code>999,000</code> 个样本近似独立地服从 <code>p</code>，单个样本的方差是 <code>E[x²]−(E[x])² = 1/2 − 4/9 = 1/18 ≈ 0.0556</code>；均值的标准误是 <code>√(0.0556/999000) ≈ 0.000236</code>。观测值 <code>0.666581</code> 与理论 <code>2/3≈0.666667</code> 相差约 0.000086，不到半个标准误。注意这里容差是 <code>atol=1e-6</code>，比标准误小得多——为什么不被噪声搞挂？因为种子固定后，这串随机数完全确定，真跑值就是一个确定的数；清单的黄金值直接取这个固定种子下的读数，闸门核对的是「程序有没有跑对这套算法」，不是「估计值有多接近理论值」。理论值另有一行 <code>true_mean=0.666667</code>，它才是用来对照的。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把种子换掉会怎样</span></header>
+<div class="box-b">
+<p>把 <code>main.c</code> 里拒绝采样的种子从 <code>20240519UL</code> 改成别的值，重新编译运行：<code>accept_rate</code>、<code>sample_mean</code>、<code>num_accepted</code> 三个数都会变，但都还在理论值附近。此时闸门会报 <code>numeric_value_mismatch</code>，因为清单里的黄金值对应的是旧种子。这个实验同时说明两件事：一是蒙特卡洛的波动是真实的、可复现的；二是黄金值与种子是绑定的，换种子必须同步更新黄金值，或者另建一个清单做对照。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h5">10.5 真跑：四种采样数字并排</h2>
+<p>程序里 <code>rejection.c</code> 负责所有采样逻辑。先看三角分布的核心循环，逐字来自第 7 到 23 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch04/rejection_probe/src/rejection.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">拒绝采样的主循环：两个随机数，一个接受判定</span><span class="cb-file">examples/ch04/rejection_probe/src/rejection.c</span><span class="cb-lines">第 7–23 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="7" data-to="23"><span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* 目标 p(x)=2x (0&lt;=x&lt;=1)，提议 q=Uniform(0,1)，上界 M=2，故接受概率 p/M=x。 */</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">rej_triangle</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">first</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">first_n</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">long</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">accepted</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">mean_out</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">long</span><span class="tk" style="color:#24292E"> acc </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> sum </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i;</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> REJ_N; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">i) {</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> x </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_uniform</span><span class="tk" style="color:#24292E">();</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#6F42C1">po_uniform</span><span class="tk" style="color:#24292E">() </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> x) {</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (acc </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> first_n) </span><span class="tk" style="color:#E36209">first</span><span class="tk" style="color:#24292E">[acc] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> x;</span></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">acc;</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">            sum </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> x;</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        }</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">accepted </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> acc;</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">mean_out </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> sum </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)acc;</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)acc </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)REJ_N;</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>第 13 行抽候选 <code>x</code>，第 14 行抽 <code>u</code> 并比较——注意比较用的是 <code>x</code> 本身，因为 <code>p/(Mq)=x</code>。第 15 行只保留最先接受的八个样本，供 <code>main</code> 用冒号格式打印；第 17 行累加所有接受样本的和，最后除以接受数得到样本均值。整个循环不保存全部样本，内存占用是常数级的，这点在需要上亿样本的场合很重要。</p>
+<p>第二个函数是维度实验，来自第 25 到 35 行：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch04/rejection_probe/src/rejection.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">d 维乘积目标：接受率是各维接受概率的乘积</span><span class="cb-file">examples/ch04/rejection_probe/src/rejection.c</span><span class="cb-lines">第 25–35 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="25" data-to="35"><span class="cl" data-ln="25"><span class="ln" data-ln="25" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#6A737D">/* d 维目标 ∏(2x_j)，提议各维独立均匀，M=2^d，接受概率是 ∏x_j。 */</span></span></span>
+<span class="cl" data-ln="26"><span class="ln" data-ln="26" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">rej_product_accept</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">dim</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">n</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="27"><span class="ln" data-ln="27" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">long</span><span class="tk" style="color:#24292E"> acc </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="28"><span class="ln" data-ln="28" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i, j;</span></span></span>
+<span class="cl" data-ln="29"><span class="ln" data-ln="29" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> n; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">i) {</span></span></span>
+<span class="cl" data-ln="30"><span class="ln" data-ln="30" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> ratio </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="31"><span class="ln" data-ln="31" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (j </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; j </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> dim; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">j) ratio </span><span class="tk" style="color:#D73A49">*=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_uniform</span><span class="tk" style="color:#24292E">();</span></span></span>
+<span class="cl" data-ln="32"><span class="ln" data-ln="32" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#6F42C1">po_uniform</span><span class="tk" style="color:#24292E">() </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> ratio) </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">acc;</span></span></span>
+<span class="cl" data-ln="33"><span class="ln" data-ln="33" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl" data-ln="34"><span class="ln" data-ln="34" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)acc </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)n;</span></span></span>
+<span class="cl" data-ln="35"><span class="ln" data-ln="35" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>这里目标换成 <code>p(x)=∏ⱼ(2xⱼ)</code>，每维独立均匀提议，<code>M=2^d</code>，接受概率是 <code>∏xⱼ</code>。第 31 行把 d 个均匀数连乘成 <code>ratio</code>，第 32 行再抽一个 u 比较。理论接受率正好是 <code>(1/2)^d</code>：每维平均贡献 1/2，d 维相乘。三维、五维的数字就是这样塌下去的。</p>
+<p>真跑得到的 stdout 如下：</p>
+<figure class="term term-output" data-id="po10-sampling-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">po10-sampling-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">first8:[0.615284,0.585258,0.764720,0.937866,0.421860,0.490989,0.716767,0.567572]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">accept_rate=0.499500</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">sample_mean=0.666581</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">true_mean=0.666667</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">num_accepted=999000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">accept_2d=0.249510</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">accept_5d=0.031241</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">inv_mean=0.666773</span></span></pre></figure>
+<p>第一行向量用冒号打印，<code>first8:[...]</code> 是普通文字行，闸门逐字比较；其余七个数值行都在清单里写了黄金值与容差。程序不打印 <code>PASS</code>，证据由闸门从 stdout 重算。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">闸门怎么证明这些数不是编的</span></header>
+<div class="box-b">
+<p>清单 <code>po10-sampling.json</code> 用 <code>mode=numerical</code>，闸门按固定命令真编译真跑，解析七个数值行，逐项检查与黄金值之差是否在容差内。<code>accept_rate</code>、<code>accept_2d</code>、<code>accept_5d</code> 三项用 <code>atol=1e-3</code>，专门容纳蒙特卡洛噪声；其余四项用 <code>atol=1e-6</code>，因为它们由固定种子完全确定。想做一次阴性对照，把第 14 行的比较改成 <code>po_uniform() &lt; 0.5</code>（无条件按固定概率接受），<code>accept_rate</code> 仍会接近 0.5，但 <code>sample_mean</code> 会掉到 0.5 附近——闸门立刻报 mismatch。这说明只核对接受率是不够的，样本均值才是「采出来的确实是目标分布」的证据。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h6">10.6 数字怎么读：四个层次</h2>
+<p>把七行输出分四层看。第一层是 <code>first8</code>，八个接受样本全在 0 到 1 之间，且偏大的多（<code>0.937866</code>、<code>0.764720</code>、<code>0.716767</code>），这正是 <code>p(x)=2x</code> 把密度推向大 x 的表现。第二层是接受率：<code>0.499500</code> 对理论 <code>0.5</code>，<code>num_accepted=999000</code> 就是 <code>2,000,000×0.4995</code>，两者互相印证。</p>
+<p>第三层是样本均值与理论均值：<code>0.666581</code> 对 <code>0.666667</code>，差约 <code>8.6e-5</code>。<code>true_mean</code> 这一行是程序里写的常数 <code>2.0/3.0</code>，不是从样本算的——它的作用是给读者一把独立的尺子。第四层是维度实验：<code>accept_2d=0.249510</code> 对理论 <code>0.25</code>，<code>accept_5d=0.031241</code> 对理论 <code>0.03125</code>，都落在允许波动里。最后 <code>inv_mean=0.666773</code> 来自逆变换法，用另一串种子独立抽一百万个 <code>√u</code> 样本得到，与拒绝采样的 <code>0.666581</code> 不同但都贴近 <code>2/3</code>。两种方法的样本均值各自带噪声，差 <code>0.000192</code> 约为合并标准误的两倍以内，完全正常。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么逆变换的结果看起来「更准」</span></header>
+<div class="box-b">
+<p><code>inv_mean=0.666773</code> 离 <code>2/3</code> 的距离是 <code>0.000106</code>，确实比拒绝采样的 <code>0.000086</code> 略大，所以它并不更准。真正的差别在效率：逆变换每个均匀数直接产生一个样本，零浪费；拒绝采样每接受一个样本平均要抽两个候选，而且每次接受判定还要多抽一个 u。若要生成同样多的有效样本，逆变换大约只用一半的随机数。当然，这个优势的前提是 <code>F⁻¹</code> 存在且便宜——本例 <code>√u</code> 只需一次开方，恰好成立。</p>
+</div>
+</section>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-1ab8c803">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 接受率随维度塌方：每加一维就打对折</figcaption>
+<div class="viz-screen" role="group" aria-label="接受率随维度塌方：每加一维就打对折：逐步演示">
+<input class="vs-radio" type="radio" name="vz-1ab8c803" id="vz-1ab8c803-1" checked>
+<input class="vs-radio" type="radio" name="vz-1ab8c803" id="vz-1ab8c803-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-1ab8c803-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-1ab8c803-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d1 ：一维，理论 0.5，真跑 0.499500</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d2 ：二维，理论 0.25，真跑 0.249510</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d2</span><span class="ve-lbl">乘 0.5</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d2 ：二维，0.25</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d5 ：五维，理论 0.03125，真跑 0.031241</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d10 ：十维，理论 0.0009766</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d5</span><span class="ve-lbl">再乘三次 0.5</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">d5</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d10</span><span class="ve-lbl">再乘五次 0.5</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>低维时的理论接受率</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d1 ：一维，理论 0.5，真跑 0.499500</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d2 ：二维，理论 0.25，真跑 0.249510</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d2</span><span class="ve-lbl">乘 0.5</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>维度上去后，样本变得极其昂贵</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">d2 ：二维，0.25</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d5 ：五维，理论 0.03125，真跑 0.031241</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">d10 ：十维，理论 0.0009766</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">d2</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d5</span><span class="ve-lbl">再乘三次 0.5</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">d5</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">d10</span><span class="ve-lbl">再乘五次 0.5</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧的 <code>d10</code> 没有真跑，是按 <code>(1/2)^10</code> 手算出来的——真实实验里这个数意味着每百万个候选只留下约九百个。十维还只是个开始；一百维时接受率是 <code>2⁻¹⁰⁰</code>，这是个比任何实验预算都小得多的数。两帧都把前一维的节点重复写了一遍，读者单看第 2 帧也能读出「逐维打对折」的趋势。</p>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h7">10.7 高维为什么失效，以及 MCMC 想救什么</h2>
+<p>接受率按 <code>(1/2)^d</code> 塌方，根源是「体积集中」：在高维单位立方体里，绝大部分体积集中在靠近表面的薄壳，而乘积密度 <code>∏(2xⱼ)</code> 在中心区域最高、在角落才大。均匀提议的候选几乎总落在目标密度极低的区域，于是被无情拒绝。更一般地，高维分布的目标密度往往集中在一个体积很小的典型集上，随便找一个简单提议很难打中它；要盖住密度峰值的包络常数 <code>M</code> 又被迫取得极大，进一步压低接受率。</p>
+<p>出路是<strong>不要独立地抽每个样本</strong>，而是让下一个样本依赖当前样本：如果新点落在高密度区就以较大概率走过去，落在低密度区就可能留在原地。这样构造出的马尔可夫链，其平稳分布恰好是目标分布；跑足够多步之后，链上的样本就近似来自 <code>p</code>。这就是 MCMC（马尔可夫链蒙特卡洛）的核心想法。Metropolis–Hastings 算法用的接受概率是 <code>min(1, p(x')q(x|x') / (p(x)q(x'|x)))</code>，提议可以很局部，接受率不再按维度指数塌方。代价是样本之间<strong>相关</strong>，不能像拒绝采样那样当成独立同分布；要丢弃开头的「预热期」，还要监控链有没有真正混合。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">MCMC 不是「更聪明的拒绝采样」</span></header>
+<div class="box-b">
+<p>两者虽然都有「接受/拒绝」的动作，但目标完全不同。拒绝采样每次从提议分布独立抽候选，被拒就重抽，留下的样本独立同分布；MCMC 被拒时<strong>留在原地</strong>，样本之间有强相关，独立性只在极长的间隔后近似成立。把 MCMC 的连续样本当成独立样本去算均值，标准误会被严重低估——你以为看了 100 万个样本，有效样本可能只有几千。诊断有效样本量（ESS）是 MCMC 实践里的必备步骤。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h8">10.8 采样在 dropout 与生成里的角色</h2>
+<p>回到深度学习的日常。dropout 的训练操作是：对每个神经元抽一个伯努利变量，以概率 <code>1−p</code> 把它暂时置零。这就是最朴素的采样——每个训练步、每个神经元都要抽一次。推理时通常不采样，而是用期望（把权重乘以保留概率），这叫 inverted dropout，目的是让训练与推理的期望一致。这里的关键不是采样方法多高级，而是「训练时采样、推理时取消随机性」这个模式。</p>
+<p>变分自编码器把采样放进了前向传播：编码器输出隐变量的一个分布参数，解码器需要从后验中采一个 <code>z</code> 才能生成。 famously 的「重参数化技巧」就是把 <code>z = μ + σ⊙ε</code> 中的随机性挪到 <code>ε ~ N(0,1)</code> 上，让梯度能穿过采样这一步——否则采样不可导，反向传播断在这里。这个技巧和逆变换法是一回事：把「从分布采样」改写成「从固定分布采样再做确定性变换」。</p>
+<p>扩散模型把这件事推到极致：生成一张图要从噪声开始，按学习到的条件分布一步一步去噪，每一步都涉及一次采样。采样质量、步数、随机种子共同决定了输出——你在图像生成界面里填的那个 seed，控制的就是整条采样链的随机数。理解了本单元「固定种子就固定输出」的道理，你就明白为什么同一个 seed 能复现同一张图，也明白为什么换个实现（不同 LCG、不同采样器）即使 seed 相同也可能得到不同结果。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">什么时候用逆变换，什么时候用拒绝</span></header>
+<div class="box-b">
+<p>判据不是「哪个更高级」，而是「你知道什么」。知道 CDF 且反函数便宜，逆变换首选：精确、无浪费。只知道密度、CDF 难求但能找到好提议和包络，拒绝采样足够：实现几行就能写完，样本独立。两者都不行——密度只知道到比例、维度又高——就该考虑 MCMC 或专门的采样器。深度学习框架里的 <code>torch.normal</code>、<code>numpy.random</code> 等函数在底层已经把逆变换、Box–Muller、别名法等方法封装好了，你通常不用自己实现；但读到采样相关的论文时，应该能判断它用的是哪一类、为什么用这一类。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h9">10.9 常见失败模式与排查</h2>
+<p>第一，<code>M</code> 选小了，包络被戳破。程序不会报错，但接受概率公式失效，样本分布悄悄变错。防御办法是先在网格上扫一遍 <code>p(x)/q(x)</code> 的最大值，宁可取大一点。第二，种子没固定。蒙特卡洛实验一旦忘了 <code>po_seed</code>，每次跑出的黄金值都不同，闸门永远报 mismatch；更糟的是如果你用「第一次跑的输出」当黄金值，那个数下次就对不上了。</p>
+<p>第三，把统计波动当成 bug。接受率 <code>0.499500</code> 与理论 <code>0.5</code> 相差 <code>0.0005</code>，这是正常的；若把容差也设成 <code>1e-6</code>，闸门几乎每次都会误报。反过来，若把容差放宽到 <code>0.1</code>，就等于取消了检查——程序把接受判定写错成常数 0.5，也能通过。容差要按误差来源定：本例标准误约 <code>3.5e-4</code>，取 <code>1e-3</code> 是「大约三个标准误」，既容纳噪声又能抓住真正的错误。</p>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>最可能的原因</th>
+<th>先查哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>accept_rate</code> 明显偏离 <code>1/M</code></td>
+<td><code>M</code> 取小，包络被戳破</td>
+<td><code>q</code> 与 <code>p</code> 的比值上界</td>
+</tr>
+<tr>
+<td><code>sample_mean</code> 对不上但接受率正常</td>
+<td>接受判定写错，留下的是提议样本</td>
+<td><code>if (po_uniform() &lt; x)</code></td>
+</tr>
+<tr>
+<td>每次跑黄金值都不同</td>
+<td>漏掉 <code>po_seed</code></td>
+<td><code>main</code> 开头</td>
+</tr>
+<tr>
+<td>高维接受率几乎为零</td>
+<td>维度灾难，提议与典型集错位</td>
+<td>改用 MCMC 或局部提议</td>
+</tr>
+<tr>
+<td>逆变换均值偏离 <code>2/3</code></td>
+<td>把 <code>F⁻¹</code> 写成了 <code>F</code> 或别的函数</td>
+<td><code>sqrt(po_uniform())</code></td>
+</tr>
+</tbody>
+</table>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把接受判定改成常数会怎样</span></header>
+<div class="box-b">
+<p>把 <code>if (po_uniform() &lt; x)</code> 改成 <code>if (po_uniform() &lt; 0.5)</code>，接受率仍接近 <code>0.5</code>，<code>num_accepted</code> 也接近原来的数，但留下的样本来自均匀分布，均值会掉到 <code>0.5</code> 附近，<code>sample_mean</code> 那一行报 mismatch。这个阴性对照说明为什么清单要同时写接受率和样本均值：前者只验证「效率」，后者才验证「采对了分布」。做实验时记得另建清单，别覆盖本单元的黄金值。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h10">10.10 黄金值来源与复现清单</h2>
+<p>七个黄金值分两类。<code>true_mean=0.666667</code> 来自手算积分 <code>∫₀¹2x²dx=2/3</code>，是独立推导。<code>accept_rate=0.5</code>、<code>accept_2d=0.25</code>、<code>accept_5d=0.03125</code> 来自理论接受率 <code>1/M=(1/2)^d</code>，也是独立推导，只是容差放宽到 <code>1e-3</code> 容纳统计噪声。剩下四项——<code>sample_mean=0.666581</code>、<code>num_accepted=999000</code>、<code>inv_mean=0.666773</code>，以及 <code>first8</code> 那串向量——来自固定种子下的真跑读数，属于回归基准。它们不是「第一次随便跑出来的数」：种子写死、编译选项固定 <code>-O0</code>、LCG 实现在共用库里不变，所以任何机器上重跑都得到同一串数。这与 po08 的情况完全一样，是蒙特卡洛实验的标准做法。</p>
+<p>复现这个实验要记全以下条件：目标密度 <code>p(x)=2x</code> 与定义域 <code>[0,1]</code>；提议分布 Uniform(0,1)；包络常数 <code>M=2</code>；候选数 <code>REJ_N=2,000,000</code>；两个种子 <code>20240519UL</code> 与 <code>990099UL</code>；逆变换样本数 <code>1,000,000</code>；容差分配（<code>accept</code> 三项 <code>1e-3</code>，其余 <code>1e-6</code>）。清单保存期望，源码保存做法，两者合起来才是一份完整记录。少写任何一条，别人都无法解释屏幕上的七行数从哪来。</p>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h11">10.11 从 LCG 到真随机数：种子到底固定了什么</h2>
+<p>共用库里的随机数发生器是线性同余发生器（LCG）：<code>r ← (1664525·r + 1013904223) mod 2³²</code>，取高 24 位除以 <code>2²⁴</code> 得到 <code>[0,1)</code> 上的均匀数。它的全部状态就是一个 32 位整数 <code>r</code>，<code>po_seed(seed)</code> 把它设成给定值。种子固定，整条序列就固定——这就是本单元所有黄金值可复现的根本原因。</p>
+<p>需要说清的是，LCG 不是「真随机」，它是<strong>伪随机</strong>：序列完全确定，只是统计性质看起来像均匀独立。对教学和数值实验来说这恰恰是优点——你要的就是可复现，而不是不可预测。真随机源（硬件噪声、大气噪声）用于密码学和抽签，那里需要的是不可预测性；数值实验需要的是「换台机器还能得到同一串数」，二者目标相反。理解这一点，你就明白为什么本册坚持用固定种子的 LCG 而不用标准库里那些实现各异的发生器。</p>
+<p>LCG 也有统计性质上的短板：相邻数之间存在可被检测出的相关性，高维情形下尤其明显。在本单元这种百万量级的一维采样里它够用；若要做严谨的蒙特卡洛积分或高维 MCMC，应该换质量更好的发生器（比如 PCG 或 Mersenne Twister）。但换了发生器，黄金值也会跟着变——所以「复现」永远是指在同一套实现、同一个种子下复现，不是跨实现的绝对一致。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把 `po_normal()` 当成免费的午餐</span></header>
+<div class="box-b">
+<p>共用库的 <code>po_normal()</code> 用 Box–Muller 变换，每调用一次消耗两个均匀数，并涉及 <code>log</code>、<code>sqrt</code>、<code>cos</code> 三个超越函数。它比 <code>po_uniform()</code> 贵得多。在需要大量正态样本的场合，这个开销会主导运行时间；实践中常用查表、Ziggurat 等更快的算法。另外，Box–Muller 产生的两个数其实是一对（另一个可用正弦得到），库里丢弃了第二个——这是为了代码短，不是数学必需。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h12">10.12 逆变换法的更多例子与数值稳定</h2>
+<p>逆变换法的适用范围比初看要广。指数分布 <code>p(x)=λe^{−λx}</code>（<code>x≥0</code>）的 CDF 是 <code>F(x)=1−e^{−λx}</code>，反解得 <code>x=−ln(1−u)/λ</code>；因为 <code>u</code> 与 <code>1−u</code> 都服从均匀分布，实践里常写成 <code>x=−ln(u)/λ</code>，省一次减法。威布尔分布、柯西分布、以及任何能写出初等反函数 CDF 的分布都能照办。离散分布更直接：把概率累加成 <code>[0,p₀)</code>、<code>[p₀,p₀+p₁)</code> 这样的区间，抽一个 u 看它落在哪一段；共用库的 <code>po_categorical()</code> 正是这么实现的。</p>
+<p>数值稳定上有两个坑。第一，<code>u</code> 可能恰好为 0（LCG 取高 24 位，只有 <code>r</code> 的高位全零时才发生，概率极小但不为零），此时 <code>−ln(u)=+∞</code>。稳妥做法是先取 <code>u = po_uniform()</code> 再做 <code>1.0−u</code>，或者加一个极小偏移——共用库的 <code>po_normal()</code> 里 <code>u + 1e-12</code> 就是在防这件事。第二，当 <code>u</code> 非常接近 1 时，<code>1−u</code> 会遭受灾难性相消；用 <code>−ln(u)</code> 的写法反而更稳。这类细节在教科书里常被略过，真跑时却能让你的程序偶发打出 <code>inf</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">用逆变换采柯西分布，看看期望为什么不收敛</span></header>
+<div class="box-b">
+<p>柯西分布的 CDF 是 <code>F(x)=½+arctan(x)/π</code>，反函数是 <code>x=tan(π(u−½))</code>。抽一百万个样本算均值，你会发现结果随着样本数增加并不稳定——它不会像中心极限定理说的那样收敛到某个数。原因是柯西分布没有有限的期望（po01 的引子）。这个实验把「期望不一定存在」从一句话变成一个看得见的数值现象：样本均值会被少数极端值反复拉偏。做的时候记得给 <code>tan</code> 的输入避开 ±π/2，否则会得到巨大的数。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h13">10.13 接受率的误差预算与实验设计</h2>
+<p>设计一个蒙特卡洛实验，先要算需要多少样本。接受率的估计值是 <code>â = A/N</code>，其中 <code>A</code> 是接受数、<code>N</code> 是候选数。每个候选是成功概率 <code>a=1/M</code> 的伯努利变量，<code>â</code> 的标准误是 <code>√(a(1−a)/N)</code>。若想让标准误降到 <code>σ</code>，需要 <code>N ≈ a(1−a)/σ²</code>。本例 <code>a=0.5</code>，要 <code>σ=1e-4</code> 就需要 <code>N≈2.5×10⁷</code>——两千五百万次，比我们实际用的两百万多一个数量级。这就是为什么容差定在 <code>1e-3</code>：它对应 <code>N≈2.5×10⁵</code> 就够，两百万提供了宽裕的余量。</p>
+<p>样本均值的误差预算则是另一套。接受样本近似独立同分布，数量约 <code>N·a</code>，单个样本方差 <code>Var(p)</code>，均值的标准误是 <code>√(Var(p)/(Na))</code>。本例 <code>Var(p)=1/18≈0.0556</code>、<code>Na≈10⁶</code>，得 <code>≈2.4e-4</code>。若要把均值估计做到 <code>1e-5</code>，需要约 <code>5.6×10⁸</code> 个接受样本——这不现实。此时更聪明的办法不是堆样本，而是用低方差估计量：重要性采样、分层采样、控制变量法都是这个思路，它们用问题结构换取更少的样本。</p>
+<figure class="viz" data-kind="calltree" data-frames="2" data-viz-id="vz-f9b1e265">
+<figcaption class="viz-title"><span class="viz-kind">调用树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-callTree" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="3.6" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M8 5.4v3M8 8.4H4.8v1.8M8 8.4h3.2v1.8"/></svg></span> main 里的三种采样路径：种子分开，结果汇合于打印</figcaption>
+<div class="viz-screen" role="group" aria-label="main 里的三种采样路径：种子分开，结果汇合于打印：逐步演示">
+<input class="vs-radio" type="radio" name="vz-f9b1e265" id="vz-f9b1e265-1" checked>
+<input class="vs-radio" type="radio" name="vz-f9b1e265" id="vz-f9b1e265-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-f9b1e265-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-f9b1e265-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印八行结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_triangle() ：拒绝采样，给 accept_rate 与样本均值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_product_accept() ：维度实验，给各维接受率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_inverse_mean() ：逆变换，给独立对照</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_triangle()</span><span class="ve-lbl">种子 20240519</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_product_accept()</span><span class="ve-lbl">同种子，不同维度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_inverse_mean()</span><span class="ve-lbl">种子 990099</span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">rej_triangle() ：抽候选与判定数</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">po_uniform() ：共用库的 LCG</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">rej_inverse_mean() ：也用同一个 LCG</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">rej_triangle()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">po_uniform()</span><span class="ve-lbl">每次调用推进状态</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">rej_inverse_mean()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">po_uniform()</span><span class="ve-lbl">独立种子，序列独立</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>main 依次调用三种采样</p><div class="viz-canvas" data-kind="calltree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">main() ：打印八行结果</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_triangle() ：拒绝采样，给 accept_rate 与样本均值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_product_accept() ：维度实验，给各维接受率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">rej_inverse_mean() ：逆变换，给独立对照</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_triangle()</span><span class="ve-lbl">种子 20240519</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_product_accept()</span><span class="ve-lbl">同种子，不同维度</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">main()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">rej_inverse_mean()</span><span class="ve-lbl">种子 990099</span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>拒绝路径内部只用均匀数</p><div class="viz-canvas" data-kind="calltree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">rej_triangle() ：抽候选与判定数</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">po_uniform() ：共用库的 LCG</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">rej_inverse_mean() ：也用同一个 LCG</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">rej_triangle()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">po_uniform()</span><span class="ve-lbl">每次调用推进状态</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">rej_inverse_mean()</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">po_uniform()</span><span class="ve-lbl">独立种子，序列独立</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧揭示了一个容易忽略的事实：三种采样共用同一个 <code>po_uniform()</code> 状态机，区别只在调用顺序与初始种子。拒绝路径和逆变换路径用不同种子，所以两条序列互不干扰；维度实验虽然用同一个种子，但每次调用产生的序列长度不同，得到的接受率自然不同。若你把种子设成一样又想让两条路径完全独立，必须在切换前重新 <code>po_seed</code>——本例已经这么做了。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">高斯分布采样为什么值得单独优化</span></header>
+<div class="box-b">
+<p>深度学习里正态样本的数量极大（初始化、噪声注入、VAE 的隐变量），<code>po_normal()</code> 里那三个超越函数累积起来相当可观。Ziggurat 算法用预先算好的矩形和阶梯来覆盖密度曲线，绝大多数采样只需几次比较和一次乘法，只有极少数落到尾部才走慢路径。它比 Box–Muller 快好几倍，是许多数值库默认的正态采样器。你不必自己实现它，但看到框架里的采样器选项时，应该知道背后的权衡：速度与尾部精度、状态大小与实现复杂度。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h14">10.14 和前面单元的连接：采样是期望的执行器</h2>
+<p>回头看整本书的路线，采样串起了至少三处。po01 说期望是「长期平均」，并给出蒙特卡洛估计——本单元正是那句话的执行器：没有采样方法，长期平均就只能停留在定义上。po04 的最大似然要对数据分布求期望（或对数似然的期望），当积分没有闭式解时，就要靠采样近似；EM 算法、变分推断里的蒙特卡洛估计都走这条路。po05 的熵与 KL 同样是积分，离散情形直接求和，连续情形常常需要采样近似。</p>
+<p>再往前看，po08 的 Adam 在随机梯度下降里用到的小批量，本质是从训练数据这个经验分布里采样；po09 的对偶变量给约束定价，而采样方法能帮你估计约束的期望值。整个分册从「分布是什么」走到「怎么从分布里取样本」，这条线到此闭合。下一册若进入生成模型，你会发现扩散模型、正常化流、自回归模型本质上都在回答同一个问题：如何高效、可控地从复杂分布中采样。本单元教的两种最基本方法，就是那座大厦的地基。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">采样不是万能的近似工具</span></header>
+<div class="box-b">
+<p>蒙特卡洛的误差按 <code>1/√N</code> 下降：样本数翻四倍，精度才翻一倍。在高维问题里，这个缓慢的收敛速度常常比「没有闭式解」更让人绝望。确定性数值积分在一维、二维远优于蒙特卡洛；只有在维度升高后，蒙特卡洛的收敛率才显出优势（它与维度无关，而网格积分的格点数随维度指数增长）。所以正确的问题是「在什么维度、什么精度要求下用采样」，而不是「采样能不能解决一切」。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h15">10.15 一句话收束</h2>
+<p>把这个单元压缩成一句话：能反解 CDF 就用逆变换，不能反解就找一个包络住密度的提议做拒绝采样；接受率告诉你效率，样本均值告诉你正确性，维度会吃掉前者，种子保证一切可复现。记住这条主线，具体的公式只是它的展开。</p>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h16">10.16 手算核对：不靠程序也能验的三组数</h2>
+<p>第一组是 CDF 与反函数。<code>p(x)=2x</code> 在 <code>[0,1]</code> 上积分得 <code>F(x)=x²</code>，<code>F(1)=1</code> 说明归一化正确。取 <code>u=0.64</code>，反解得 <code>x=√0.64=0.8</code>；验算 <code>P(x≤0.8)=F(0.8)=0.64=u</code>，一致。取 <code>u=0.25</code>，<code>x=0.5</code>，<code>F(0.5)=0.25</code>，也一致。这说明 <code>√u</code> 把均匀的 u 映射成了密度向大 x 倾斜的样本。</p>
+<p>第二组是期望与方差。<code>E[x]=∫₀¹x·2x dx=2/3≈0.666667</code>。<code>E[x²]=∫₀¹x²·2x dx=1/2</code>，所以 <code>Var(x)=1/2−(2/3)²=1/18≈0.055556</code>。用这组数估计样本均值的标准误：<code>√(0.055556/999000)≈0.000236</code>，与真跑偏差 <code>|0.666581−0.666667|≈0.000086</code> 相比，后者不到半个标准误，说明程序行为正常。这三步手算不需要任何工具，任何人重算都能得到同样的数——这就是「可手算核对」的价值，它让你在程序出错时还有一把独立的尺子。</p>
+<p>第三组是接受率。一维理论 <code>1/2</code>，真跑 <code>0.499500</code>，接受数 <code>999000=2000000×0.4995</code>，三数咬合。二维理论 <code>(1/2)²=0.25</code>，真跑 <code>0.249510</code>；五维理论 <code>(1/2)⁵=0.03125</code>，真跑 <code>0.031241</code>。把这三个数按维度排成一条序列，你就看到了指数衰减的形状：每加一维，接受率就 roughly 打对折。十维时约 <code>0.00098</code>，二十维时约 <code>9.5e-7</code>，实验预算再大也无济于事——这比任何公式都直观地说明了维度灾难。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么这三类数要分开验</span></header>
+<div class="box-b">
+<p>它们验的是不同的东西。CDF 与反函数验「推导对不对」；期望与方差验「目标分布理解得对不对」；接受率验「采样机制实现得对不对」。一类错了，其它两类可能仍然自洽：比如接受判定写成常数 0.5，接受率仍对得上，但样本均值会露馅；若目标密度写成了 <code>p(x)=3x²</code>，CDF 推导跟着错，手算的 <code>2/3</code> 就不再是正确参照。把三类数各自独立地算一遍，等于给实验上了三道不同的保险。这也解释了为什么清单要同时写七个黄金值，而不是只写最重要的那个。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch04-02-sampling-methods-md-h17">10.17 再想一步：采样与优化的分工</h2>
+<p>最后点一下采样和优化的关系，免得把两个工具混用。优化在<strong>找</strong>一个点：最大化似然、最小化损失、求对偶变量，答案是一个确定的数或向量。采样在<strong>生成</strong>一批点：从已知分布里抽出样本，用来估计期望或产生随机性。 po08 的 Adam 属于前者，本单元属于后者。二者交汇的地方是随机优化：目标里的期望用样本均值近似，而参数再用优化器更新——每一小步都同时用到本单元的采样和上一单元的优化器。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>逆变换法要求 CDF 有显式反函数；<code>p(x)=2x</code> 的 <code>F(x)=x²</code>，所以 <code>x=√u</code>，样本均值理论值 <code>2/3</code>；</li>
+<li>拒绝采样只需密度与包络：从 <code>q</code> 抽候选，以 <code>p/(Mq)</code> 的概率接受；本例 <code>q</code> 均匀、<code>M=2</code>，接受概率是 <code>x</code>；</li>
+<li>真跑：<code>accept_rate=0.499500</code>、<code>sample_mean=0.666581</code>、<code>accept_5d=0.031241</code>，分别对应理论 <code>0.5</code>、<code>2/3</code>、<code>0.03125</code>；</li>
+<li>接受率是效率指标，样本均值才验证「采对了分布」；蒙特卡洛噪声决定容差：<code>accept</code> 三项 <code>1e-3</code>，确定量 <code>1e-6</code>；</li>
+<li>高维接受率按 <code>(1/2)^d</code> 塌方，MCMC 用相关样本绕开这个指数灾难，但要处理预热期与有效样本量；</li>
+<li>dropout、VAE、扩散模型都在用采样；固定种子让随机数成为可复现的实验条件，而不是噪声。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>对 <code>p(x)=2x</code>（<code>0≤x≤1</code>）写出 CDF，并用逆变换法说明为什么 <code>x=√u</code> 服从 <code>p</code>。</li>
+<li>拒绝采样为什么要求 <code>Mq(x) ≥ p(x)</code>？若 <code>M</code> 取小了会发生什么，程序会不会报错？</li>
+<li>本例接受概率为什么是 <code>x</code>？总接受率 <code>0.5</code> 是怎么算出来的？</li>
+<li><code>accept_rate=0.499500</code> 与理论 <code>0.5</code> 差 <code>0.0005</code>，为什么清单给它 <code>atol=1e-3</code> 而不是 <code>1e-6</code>？</li>
+<li>五维乘积目标的接受率理论值是多少？为什么高维拒绝采样会失效？</li>
+<li>MCMC 与拒绝采样都有「接受/拒绝」，本质差别是什么？为什么 MCMC 样本不能直接当独立样本用？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>F(x)=∫₀ˣ2t dt=x²</code>。逆变换取 <code>x=F⁻¹(u)=√u</code>；验证 <code>P(x≤a)=P(u≤a²)=a²=F(a)</code>，与 CDF 定义一致，故 x 服从 p。</li>
+<li>因为接受概率 <code>p/(Mq)</code> 必须不超过 1，即 <code>Mq≥p</code> 处处成立，否则公式失效。M 取小会让毯子被戳破，留下的样本不再服从目标分布；程序没有任何异常，属于静默错误，只能靠事先扫描比值上界来防。</li>
+<li><code>q(x)=1</code>、<code>p(x)=2x</code>、<code>M=2</code>，所以 <code>p/(Mq)=x</code>。总接受率是对候选密度积分：<code>∫₀¹q(x)·x dx=∫₀¹x dx=1/2</code>。</li>
+<li>接受率是蒙特卡洛量，每次实验自带统计噪声；<code>N=2×10⁶</code> 时标准误约 <code>√(0.25/N)≈3.5e-4</code>，观测偏差 <code>0.0005</code> 约 1.4 个标准误，属正常波动。<code>1e-3</code> 约为三个标准误，既容纳噪声又能抓住真正的错误；<code>1e-6</code> 远小于噪声，会导致每次误报。</li>
+<li>理论值 <code>(1/2)^5=0.03125</code>，真跑 <code>0.031241</code>。高维时目标密度集中在很小的典型集里，简单提议的候选几乎都落在低密度区被拒，接受率按维度指数下降，很快就无法在有限预算内收集到足够样本。</li>
+<li>拒绝采样每次独立抽候选，被拒就重抽，留下的样本独立同分布；MCMC 被拒时留在原地，靠马尔可夫链探索，样本之间强相关。把连续样本当独立样本会严重低估标准误，必须丢弃预热期并监控有效样本量（ESS）。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

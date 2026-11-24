@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>随机变量、分布与期望：采样为什么能算出「长期平均」</title>
+<meta name="description" content="零基础 · 第 1 单元 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-probopt-chapters-ch01-01-random-variables-and-ex { @top-right { content: "随机变量、分布与期望：采样为什么能算出「长期平均」"; } }
+#content { page: p-u-probopt-chapters-ch01-01-random-variables-and-ex; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/probopt.html">《probopt》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">随机变量、分布与期望：采样为什么能算出「长期平均」</h1><p class="doc-sub">零基础 · 第 1 单元 · 建议 120 分钟</p><p class="doc-meta">源文件 books/probopt/chapters/ch01/01-random-variables-and-expectation.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h1">1.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h2">1.2 随机变量是函数，不是「未知的数」</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h3">1.3 分布：离散与连续两种记账法</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h4">1.4 期望的两种读法：加权平均与长期频率</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h5">1.5 真跑：两万次采样把期望打印出来</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h6">1.6 为什么期望不一定存在：柯西引子</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h7">1.7 把 LCG 看清楚：种子、状态与可复现</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h8">1.8 误差从哪来：蒙特卡洛的 √n 速率</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h9">1.9 失败模式：偏差、相关与「看起来收敛」</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h10">1.10 与深度学习的对应：损失就是样本均值</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h11">1.11 手算核对：不用程序也能验的三组数</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h12">1.12 把这一节接到后面：从期望到方差</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h13">1.13 指示变量法：把计数变成期望</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h14">1.14 从期望到估计：偏差、方差与均方误差</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h15">1.15 连续分布的期望为什么用积分</a></li><li class="toc-l2"><a href="#probopt-chapters-ch01-01-random-variables-and-expectation-md-h16">1.16 这一节新增了什么，下一节要什么</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清随机变量是「样本空间到实数的函数」，而不是一个还没揭晓的未知数；</li>
+<li>分别用加权平均和长期频率两种读法解释同一个期望值，并知道两者什么时候一致；</li>
+<li>手算均匀分布的期望、伯努利的期望，以及两者的方差量级；</li>
+<li>用固定种子的 LCG 采样两万次，把样本均值、真值与差值真跑出来；</li>
+<li>解释为什么柯西分布没有期望，以及为什么蒙特卡洛误差按 √n 缩小；</li>
+<li>看懂清单里 <code>mode=numerical</code> 的黄金值与容差怎样把「差不多」变成可判定的证据。</li>
+</ul>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h1">1.1 先看工程长什么样</h2>
+<p>概率、信息论与最优化这一册不装科学计算库。我们先用 C 把最小的一套概率原语写出来：固定种子的随机源、几种常见分布、均值方差协方差、熵与似然。理由和前面几册一样——这一册要证明的不是「会不会调现成的库」，而是<strong>每个数字从哪来、对不对</strong>。共用库 <code>common/</code> 已经把这些原语放在 <code>probopt.h</code> / <code>probopt.c</code> 里，每个新例子只负责提供驱动和清单，共用库一个字都不改。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>你每天看到的「平均值」几乎都是采样出来的：一次点击是否转化、一天里某个广告的收益、一次考试的成绩。这些量在真正观察之前并没有一个确定的数，但它们的长期平均却相当稳定。期望就是把这种「长期稳定」写成一个数。这一单元要做的，是把「长期」两个字从口号变成两万次真实采样，让你亲眼看到样本均值怎样一点点贴住理论值。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-fcdfffb2">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：共用库加一个期望采样例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：共用库加一个期望采样例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-fcdfffb2" id="vz-fcdfffb2-1" checked>
+<input class="vs-radio" type="radio" name="vz-fcdfffb2" id="vz-fcdfffb2-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-fcdfffb2-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-fcdfffb2-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/probopt.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/probopt.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">expect_mc/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/expect.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/expect.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po01-expect.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，probopt 工程只有共用库</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/probopt.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/probopt.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的期望采样例子</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">expect_mc/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/expect.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/expect.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po01-expect.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是这一节开始时的形态：<code>examples/</code> 下只有 <code>common/</code> 共用库，<code>chapters/ch01/</code> 还是空目录。第 2 帧长出 <code>expect_mc/</code>：一个声明文件、两个源文件、一个清单。头文件 <code>expect.h</code> 只放常量和函数声明，<code>expect.c</code> 只放实现，<code>main.c</code> 只管打印。这种分家从第二个工程起就是硬要求——接缝可见，读头文件就知道这个例子能干什么，实现换了算法不影响驱动。共用库始终不动，所有单元都从它取函数。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么把常量写进头文件</span></header>
+<div class="box-b">
+<p><code>EXPECT_N</code>、<code>EXPECT_SEED</code> 放在 <code>expect.h</code> 里，驱动和算法看到的是同一份定义。要是把两万这个数在 <code>main.c</code> 写一遍、在 <code>expect.c</code> 再写一遍，改采样量时漏改一处，打印的样本数和实际采样数就对不上了。头文件是这份契约的唯一正本。代价只是多一次 <code>#include</code>，换来的是「改一处、全局一致」。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h2">1.2 随机变量是函数，不是「未知的数」</h2>
+<p>初学最容易把随机变量理解成「一个数，只是我们还不知道它是多少」。这个理解在掷骰子的场合勉强能用，一到多个变量就立刻垮掉。正确的说法是：<strong>随机变量是一个函数</strong>，它把样本空间里的每个结果映射成一个实数。样本空间是所有可能结果的集合，比如掷一枚硬币是 <code>{正面, 反面}</code>，掷一个骰子是 <code>{1,2,3,4,5,6}</code>。函数规则告诉你每个结果对应哪个数：正面记 1，反面记 0；骰子掷出几点就记几点。</p>
+<p>这个区别为什么重要？因为「未知的数」没法同时谈分布和期望，而函数可以。函数有定义域（所有可能结果）、有取值规则（每个结果的数值）、有取值概率（每个结果出现的可能性）。把这三样写清楚，期望才有落脚点。反过来，如果你把随机变量当成一个待揭晓的常数，就会问出「它到底等于几」这种没有答案的问题——它不是一个待揭晓的常数，它是一整张对应表。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-0dc23377">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 随机变量是映射：先有结果，后有数值</figcaption>
+<div class="viz-screen" role="group" aria-label="随机变量是映射：先有结果，后有数值：逐步演示">
+<input class="vs-radio" type="radio" name="vz-0dc23377" id="vz-0dc23377-1" checked>
+<input class="vs-radio" type="radio" name="vz-0dc23377" id="vz-0dc23377-2">
+<input class="vs-radio" type="radio" name="vz-0dc23377" id="vz-0dc23377-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-0dc23377-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-0dc23377-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-0dc23377-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本空间 ：{正面, 反面}</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">概率 ：正面 0.5，反面 0.5</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">正面 ：结果之一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">反面 ：结果之一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">X(正面) = 1 ：映射成数值 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">X(反面) = 0 ：映射成数值 0</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">正面</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X(正面)</span><span class="ve-lbl">函数作用</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">反面</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X(反面)</span><span class="ve-lbl">函数作用</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">取值1 ：概率 0.5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">取值0 ：概率 0.5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">X(正面)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">取值1</span><span class="ve-lbl">归并同值</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">X(反面)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">取值0</span><span class="ve-lbl">归并同值</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>样本空间里有两个结果</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本空间 ：{正面, 反面}</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">概率 ：正面 0.5，反面 0.5</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>随机变量把每个结果映射成数</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">正面 ：结果之一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">反面 ：结果之一</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">X(正面) = 1 ：映射成数值 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">X(反面) = 0 ：映射成数值 0</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">正面</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X(正面)</span><span class="ve-lbl">函数作用</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">反面</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">X(反面)</span><span class="ve-lbl">函数作用</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>分布描述的是「取到哪个值」的概率</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">取值1 ：概率 0.5</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">取值0 ：概率 0.5</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">X(正面)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">取值1</span><span class="ve-lbl">归并同值</span></div>
+<div class="ve" data-arrow="to"><span class="ve-a">X(反面)</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">取值0</span><span class="ve-lbl">归并同值</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧先把样本空间摆出来；第 2 帧画的是函数规则本身——两个结果各自被映成一个数；第 3 帧把相同数值的结果归并，得到「取值 0 的概率 0.5、取值 1 的概率 0.5」。注意第 2 帧里 <code>X</code> 的两个值用的是不同的节点，第 3 帧才把它们按数值归类。这个两步过程正是「随机变量」与「它的分布」的区别：前者是映射，后者是映射之后各数值的概率权重。把这两件事分开，后面谈「两个不同的随机变量可以有同一个分布」时才不会绕晕。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把「随机」理解成「毫无规律」</span></header>
+<div class="box-b">
+<p>你会觉得随机就是乱七八糟、无法预测，于是对「随机变量的期望」这句话本能地怀疑：既然随机，怎么会有确定的平均值？真相是：<strong>单次结果随机，长期频率稳定</strong>。掷一枚公平硬币，下一次是正是反完全无法预测；但掷一万次，正面的比例几乎必定贴近 0.5。这种「个体无序、群体有序」正是期望存在的经验基础。反过来，也不是所有随机量都有稳定平均——柯西分布就是反例，后面 1.6 节会讲。把「随机」等同于「没有规律」，会让你既看不懂期望，也看不懂为什么有些分布压根没有期望。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h3">1.3 分布：离散与连续两种记账法</h2>
+<p>分布回答的是「随机变量取各个值的可能性有多大」。离散分布用<strong>概率质量函数</strong>：每个可能取值挂着一个概率，所有概率加起来恰好是 1。连续分布用<strong>概率密度函数</strong>：单个点的概率是 0，只有一段区间上的积分才是概率，整条曲线下的面积是 1。这个区别在代码里很关键——离散用 <code>po_bernoulli</code> 直接吐出 0 或 1，连续用 <code>po_uniform</code> 吐出 <code>[0,1)</code> 里的浮点数，两者都是从一个 <code>[0,1)</code> 的均匀随机数变出来的。</p>
+<p>伯努利分布是最简单的离散分布：取值只有 0 和 1，取 1 的概率是参数 <code>p</code>，取 0 的概率是 <code>1-p</code>。它描述的是「一次试验成功还是失败」——用户点不点、邮件是不是垃圾、抛硬币正还是反。均匀分布是最简单的连续分布：在 <code>[0,1)</code> 上每个点的密度一样高，取值落进任意一段区间的概率等于那段区间的长度。它描述的是「完全不偏袒任何位置」的随机选择，也是其他所有分布的原料。</p>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-b61df88f">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 两种分布住在机器里：一个是概率表，一个是区间</figcaption>
+<div class="viz-screen" role="group" aria-label="两种分布住在机器里：一个是概率表，一个是区间：逐步演示">
+<input class="vs-radio" type="radio" name="vz-b61df88f" id="vz-b61df88f-1" checked>
+<input class="vs-radio" type="radio" name="vz-b61df88f" id="vz-b61df88f-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-b61df88f-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-b61df88f-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p(1) = 0.300000 ：成功概率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p(0) = 0.700000 ：失败概率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">校验 ：0.3+0.7=1</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">区间下界 = 0.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">区间上界 = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">密度 ：[0,1) 内恒为 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u = po_uniform() ：落在区间中的一点</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>伯努利用一张两格的概率表</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p(1) = 0.300000 ：成功概率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">p(0) = 0.700000 ：失败概率</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">校验 ：0.3+0.7=1</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>均匀分布在区间上密度处处相同</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">区间下界 = 0.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">区间上界 = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">密度 ：[0,1) 内恒为 1</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u = po_uniform() ：落在区间中的一点</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧的两格概率表加起来是 1，这是离散分布的硬约束；第 2 帧把均匀分布画成一条水平密度线段，加上一次真实抽取 <code>u</code>。这两帧代表了两种完全不同的记账方式：离散是「逐格列概率」，连续是「给出密度、按区间积分」。共用库把两种都封装好了：<code>po_bernoulli(p)</code> 内部先抽一个均匀数再与 <code>p</code> 比较，<code>po_uniform()</code> 直接返回 LCG 产生的浮点数。看懂这层，你就知道伯努利并不是独立的随机源，它是均匀分布的一次加工。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">手算伯努利的期望</span></header>
+<div class="box-b">
+<p>取 <code>p=0.3</code>。按加权平均的定义，期望是「每个取值乘以它的概率再求和」：<code>E[X] = 1×0.3 + 0×0.7 = 0.3</code>。这个 0.3 不是「某次试验会得到 0.3」——单次只会得到 0 或 1——而是大量试验里 1 出现的长期比例。如果你做一万次试验，成功次数大约在 3000 附近，样本均值大约 0.3。这一节的 <code>bern_true=0.300000</code> 就是这个理论值，程序的任务是用真实采样去逼近它。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h4">1.4 期望的两种读法：加权平均与长期频率</h2>
+<p>期望 <code>E[X]</code> 有两种读法，它们在数学上等价，但在直觉上各有各的用处。<strong>加权平均读法</strong>：把每个可能取值乘上它的概率再求和，离散情形写作 <code>E[X] = Σ xᵢ p(xᵢ)</code>，连续情形写作 <code>E[X] = ∫ x f(x) dx</code>。这是一个静态的、纸面上的计算，不需要真的做实验。<strong>长期频率读法</strong>：做很多次独立重复试验，把结果加起来除以次数，次数趋于无穷时这个比值趋于期望。这是一个动态的、可操作的过程，正是蒙特卡洛方法的依据。</p>
+<p>两种读法的一致性不是巧合，而是大数定律的结论（第 3 单元会讲它的严格形式）。在这一节，我们先把它当成工作假设：只要你采样够多次，样本均值就能当作期望的近似。这一假设有个前提——期望必须存在。下一节会给出期望不存在的例子，那时长期频率读法会彻底失效：样本均值不收敛到任何数，而是越跑越跳。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">把「加权平均」读成「重心」</span></header>
+<div class="box-b">
+<p>把数轴想成一根杠杆，每个取值是一个挂砝码的位置，概率是砝码的重量。<code>E[X]</code> 就是这根杠杆的重心位置。砝码重的那一侧把重心拉过去；如果所有砝码均匀分布，重心就在区间中点。均匀分布 <code>[0,1)</code> 的砝码处处一样重，重心显然在 0.5——这就是 <code>E[X]=0.5</code> 的直观来源。伯努利 <code>p=0.3</code> 是「0 处放 0.7 的重量、1 处放 0.3 的重量」，重心偏向 0，位置在 0.3。这两句话不用积分就能记住，而且能推广：想让期望变大，就把更多重量挪到右边。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h5">1.5 真跑：两万次采样把期望打印出来</h2>
+<p>下面是这个例子的核心算法。<code>expect_sample</code> 先把随机源钉在固定种子上，然后循环两万次：每次取一个均匀数和一次伯努利结果，分别累加，最后除以次数。前八个均匀数被留进 <code>po_vec_t</code>，用来让你看见 LCG 吐出的原始样本长什么样。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/expect_mc/src/expect.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch01/expect_mc/src/expect.c</span><span class="cb-lines">第 3–19 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="3" data-to="19"><span class="cl" data-ln="3"><span class="ln" data-ln="3" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">expect_sample</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">uniform_mean</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">bern_mean</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">po_vec_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">head</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="4"><span class="ln" data-ln="4" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">first</span><span class="tk" style="color:#24292E">[PO_MAX];</span></span></span>
+<span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> su </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> sb </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0.0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> i;</span></span></span>
+<span class="cl is-marked" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">po_seed</span><span class="tk" style="color:#24292E">(EXPECT_SEED);</span><span class="k-note">固定种子保证可复现</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (i </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">; i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> EXPECT_N; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">i) {</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> u </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_uniform</span><span class="tk" style="color:#24292E">();</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> b </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_bernoulli</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">0.3</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        su </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> u;</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        sb </span><span class="tk" style="color:#D73A49">+=</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E">)b;</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (i </span><span class="tk" style="color:#D73A49">&lt;</span><span class="tk" style="color:#24292E"> PO_MAX) </span><span class="tk" style="color:#E36209">first</span><span class="tk" style="color:#24292E">[i] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> u;</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span>
+<span class="cl is-marked" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">uniform_mean </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> su </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> EXPECT_N;</span><span class="k-note">先累加再除次数</span></span></span>
+<span class="cl is-marked" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">bern_mean </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> sb </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> EXPECT_N;</span><span class="k-note">伯努利样本均值</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E">head </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_vec</span><span class="tk" style="color:#24292E">(PO_MAX, first);</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">8</span>固定种子保证可复现</li><li><span class="cb-note-ln">16</span>先累加再除次数</li><li><span class="cb-note-ln">17</span>伯努利样本均值</li></ol></figure>
+<p>真跑得到的 stdout：</p>
+<figure class="term term-output" data-id="po01-expect-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">po01-expect-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">n=20000</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">uniform_mean=0.503677</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">uniform_true=0.500000</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">uniform_diff=0.003677</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">bern_mean=0.291650</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">bern_true=0.300000</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">bern_diff=-0.008350</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">first8:[0.336336,0.407226,0.754389,0.411778,0.188337,0.745527,0.729504,0.059614]</span></span></pre></figure>
+<p>注意样本向量那行用的是冒号 <code>first8:[...]</code> 而不是等号。这是<strong>故意的</strong>：流水线把 <code>key=value</code> 行当数值行做容差对账，<code>first8:[0.336336,...]</code> 不是合法数值，会被判成坏行。改用冒号后闸门把它当普通文字逐字比较，只对上面七个等号行做数值对账。这是整套数值实验的通用写法，后面四个单元都照办。</p>
+<p>逐行读这八行输出。<code>n=20000</code> 是采样次数；<code>uniform_mean=0.503677</code> 是两万个均匀数的平均值，离真值 0.5 差 <code>0.003677</code>；<code>bern_mean=0.291650</code> 是两万次伯努利试验里 1 的比例，离真值 0.3 差 <code>-0.008350</code>。两个差值都不为零，这是<strong>正常的</strong>——有限次采样不可能精确等于理论值。关键问题是：这个偏差算大还是算小？1.8 节会给出量级判据。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">闸门怎么证明这些数不是编的</span></header>
+<div class="box-b">
+<p>清单 <code>po01-expect.json</code> 用 <code>mode=numerical</code>，在 <code>expect.numbers</code> 里写了七个黄金值。<code>uniform_true</code> 与 <code>bern_true</code> 是理论常数，给 <code>atol=1e-6</code>；四个采样量是蒙特卡洛结果，给 <code>atol=1e-3</code>。闸门做三件事：编译并真跑；从 stdout 解析出 <code>uniform_mean=0.503677</code> 这类数值行；检查真实值与黄金值之差是否在各自容差内。正文里这七个数也按同样容差对账——想把 <code>uniform_mean</code> 改成 <code>0.500000</code> 让书更好看，闸门会报 <code>numeric_value_mismatch</code>。容差只写在清单里，正文写「约等于 0.5」不算证据。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h6">1.6 为什么期望不一定存在：柯西引子</h2>
+<p>到这里你可能会以为每个随机变量都有期望。不是的。考虑柯西分布，它的密度是 <code>f(x) = 1/(π(1+x²))</code>，曲线形状像钟形但尾巴掉得很慢。按定义算期望要积分 <code>∫ x f(x) dx</code>，也就是 <code>∫ x/(π(1+x²)) dx</code>。这个积分的正部和负部各自都是发散的：右边尾巴的贡献是 <code>+∞</code>，左边尾巴的贡献是 <code>-∞</code>，<code>∞ - ∞</code> 没有定义。所以柯西分布<strong>没有期望</strong>——不是期望等于 0，而是这个数压根不存在。</p>
+<p>这件事对蒙特卡洛意味着什么？如果你从柯西分布采样两万次再求平均，样本均值不会稳定下来。原因是那少数落在极远处的样本值巨大，把它们加进来就把平均值猛地拉偏；样本越多，遇到极端值的机会越大，均值跳得越厉害。换句话说，长期频率读法在这里失效了：不管采样多少次，平均值都不收敛到任何固定数。这提醒我们「样本均值 ≈ 期望」这条经验规则有前提——期望必须存在，而且尾巴不能太重。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把「对称」当成「期望为零」</span></header>
+<div class="box-b">
+<p>你会想：柯西分布的密度关于 0 对称，正负抵消，期望当然是 0。这个推理看起来天衣无缝，其实是错的。数学上要求的是绝对可积，即 <code>∫|x|f(x)dx</code> 有限；柯西分布不满足这个条件，所以不能说正负抵消得到 0。更直观的说法：你把正负两边截断到 <code>[-R,R]</code> 再算平均，确实得到 0；但让 <code>R</code> 趋于无穷的过程中，先扩左边还是先扩右边会给出不同的极限路径，整体极限不存在。<strong>对称性只能在期望存在的前提下用来判断它是 0</strong>。这个坑在重尾数据里真实存在：某些金融资产收益率的分布尾巴很重，拿历史平均去预测未来就可能在某一天被一个极端事件彻底推翻。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h7">1.7 把 LCG 看清楚：种子、状态与可复现</h2>
+<p>共用库的随机源是一个 32 位线性同余发生器（LCG）。它的全部状态就是一个无符号整数 <code>po_rng</code>：<code>po_rng = po_rng × 1664525 + 1013904223 (mod 2³²)</code>，然后取高 24 位除以 <code>2²⁴</code> 得到 <code>[0,1)</code> 里的浮点数。这个公式只有乘法和加法，没有查表、没有系统调用，所以同样的种子在任何机器上给出<strong>逐位相同</strong>的序列。这就是我们敢把黄金值写进清单的底气。</p>
+<figure class="viz" data-kind="memory" data-frames="3" data-viz-id="vz-b7965173">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> LCG 的状态机：一个 32 位整数怎样吐出一串随机数</figcaption>
+<div class="viz-screen" role="group" aria-label="LCG 的状态机：一个 32 位整数怎样吐出一串随机数：逐步演示">
+<input class="vs-radio" type="radio" name="vz-b7965173" id="vz-b7965173-1" checked>
+<input class="vs-radio" type="radio" name="vz-b7965173" id="vz-b7965173-2">
+<input class="vs-radio" type="radio" name="vz-b7965173" id="vz-b7965173-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-b7965173-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-b7965173-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-b7965173-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">po_seed(20240101) ：状态设为固定值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">状态 ：0x01342FC5，32 位无符号整数</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">新状态 ：旧状态乘 1664525 加 1013904223</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u1 = 0.336336 ：取高 24 位再除以 2 的 24 次方</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">状态</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">u1</span><span class="ve-lbl">一次迭代产生一个样本</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">状态 ：继续更新</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u2 = 0.407226 ：第二个样本</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">u1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">u2</span><span class="ve-lbl">同种子必然重现同一序列</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>种子把状态初始化</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">po_seed(20240101) ：状态设为固定值</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">状态 ：0x01342FC5，32 位无符号整数</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>一次更新吐出一个数</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">新状态 ：旧状态乘 1664525 加 1013904223</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u1 = 0.336336 ：取高 24 位再除以 2 的 24 次方</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">状态</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">u1</span><span class="ve-lbl">一次迭代产生一个样本</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>重复迭代，序列完全确定</p><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">状态 ：继续更新</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">u2 = 0.407226 ：第二个样本</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">u1</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">u2</span><span class="ve-lbl">同种子必然重现同一序列</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是种子注入；第 2 帧是一次迭代的完整动作——状态更新和输出；第 3 帧说明序列的确定性。注意这里的 u1、u2 正是 <code>first8:[...]</code> 的前两项，你可以逐位核对。<code>po_bernoulli</code> 用的也是这条序列：它先取一个均匀数，与 <code>p</code> 比较，小于 <code>p</code> 就返回 1。所以一次伯努利采样消耗一个均匀数，均匀和伯努利两个序列是<strong>交织</strong>的，不是各自独立的——这一点在调试时要记牢，否则你会以为两个样本流互不影响。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么用 LCG 不用标准库的 rand</span></header>
+<div class="box-b">
+<p>标准库的 <code>rand()</code> 没有规定具体算法，不同实现给出不同序列，同样的种子在不同机器上结果不一样，黄金值就没法跨机器对账。LCG 的公式写在共用库里，每一位都可查，可复现性是硬保证。代价是它的统计质量一般——高维下会出现格子结构，不能当密码学随机源。本书只用它做数值实验的可复现采样，这个用途完全够格；真要做蒙特卡洛积分的严肃研究，该用更长的周期和更好的发生器。</p>
+</div>
+</section>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把种子当成「随机性的来源」</span></header>
+<div class="box-b">
+<p>你会以为种子让结果「更随机」，于是每次运行都换一个种子，还觉得这才叫科学。真相恰恰相反：种子的作用是<strong>消除随机性带来的不可复现</strong>，让同一份代码每次跑出逐位相同的数。换种子得到的不是「更真实」的结果，而是另一条样本路径——它可以用来检验结论是否依赖特定样本，但不能用来代替固定种子的对账。测试里如果需要「换个种子也该通过」，那是另一类检查；黄金值对账必须在固定种子上做，否则今天跑过的数字明天就对不上了。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h8">1.8 误差从哪来：蒙特卡洛的 √n 速率</h2>
+<p>现在回答 1.5 节留下的问题：偏差 0.003677 和 -0.008350 算大吗？对独立同分布的样本，样本均值的标准差是 <code>σ/√n</code>，其中 <code>σ</code> 是单个样本的标准差。均匀分布 <code>[0,1)</code> 的 <code>σ = 1/√12 ≈ 0.288675</code>，所以 <code>n=20000</code> 时标准误约 <code>0.288675/√20000 ≈ 0.00204</code>。观测偏差 <code>0.003677</code> 大约是 1.8 个标准误——完全在正常波动范围内。伯努利 <code>p=0.3</code> 的 <code>σ = √(0.3×0.7) ≈ 0.458258</code>，标准误约 <code>0.00324</code>，观测偏差 <code>-0.008350</code> 约 2.6 个标准误，稍微偏大但仍在两三倍以内。</p>
+<p>这里的 <code>√n</code> 是关键：想把误差缩小 10 倍，样本量要放大 100 倍；想缩小 100 倍，要放大一万倍。这就是蒙特卡洛方法「收益递减」的根源——它从不给你指数级的精度。好处是它与维度无关：不管被积函数有多少维，采样误差的速率都是 <code>√n</code>，这在高维问题上比网格方法划算得多。深度学习里的采样估计（比如从策略分布里采样回报）靠的正是这一条。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-a8f6e5ff">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 样本均值怎样贴住真值：误差按 √n 缩小</figcaption>
+<div class="viz-screen" role="group" aria-label="样本均值怎样贴住真值：误差按 √n 缩小：逐步演示">
+<input class="vs-radio" type="radio" name="vz-a8f6e5ff" id="vz-a8f6e5ff-1" checked>
+<input class="vs-radio" type="radio" name="vz-a8f6e5ff" id="vz-a8f6e5ff-2">
+<input class="vs-radio" type="radio" name="vz-a8f6e5ff" id="vz-a8f6e5ff-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-a8f6e5ff-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-a8f6e5ff-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-a8f6e5ff-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=100</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本均值 ：0.538000，偏离较多</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=10000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">样本均值 ：0.503000，明显贴近</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=1000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">样本均值 ：0.500300，只剩千分位偏差</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>少量样本，波动大</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=100</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本均值 ：0.538000，偏离较多</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>样本量放大百倍，误差缩小十倍</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=10000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">样本均值 ：0.503000，明显贴近</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>再放大百倍，误差再缩小十倍</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本量 ：n=1000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">真值 ：0.500000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">样本均值 ：0.500300，只剩千分位偏差</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>三帧里的数字是示意量级，不是这次真跑的结果，正文已用真实的标准误公式给出了精确尺度。图元要传达的是「横轴按平方放大、纵轴才按一次方缩小」这件事。你点开第 2 帧会看到真值节点仍在——这是帧自包含的要求，渲染器不会自动把上一帧的节点带过来。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">心算验算标准误</span></header>
+<div class="box-b">
+<p>对均匀分布 <code>[0,1)</code>：<code>E[X]=0.5</code>，<code>E[X²]=1/3</code>，所以 <code>Var(X)=1/3−0.25=1/12≈0.083333</code>，<code>σ≈0.288675</code>。除以 <code>√20000≈141.421</code>，得标准误 <code>≈0.002041</code>。真跑偏差 <code>0.003677/0.002041≈1.80</code>。对伯努利 <code>p=0.3</code>：<code>Var(X)=p(1−p)=0.21</code>，<code>σ≈0.458258</code>，标准误 <code>≈0.003241</code>，真跑偏差 <code>-0.008350/0.003241≈−2.58</code>。两个偏差都在几个标准误以内，说明采样过程没有系统性偏差——如果你看到偏差有几十个标准误，第一反应应该是检查随机源或累加代码，而不是怪运气。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h9">1.9 失败模式：偏差、相关与「看起来收敛」</h2>
+<p>第一种失败是<strong>有偏的采样</strong>。如果你把 LCG 的输出取模后再缩放，或者用 <code>rand() % 100 / 100.0</code> 这种写法，得到的数不再均匀——低位比特的周期特别短，某些值出现得更频繁。这时样本均值会稳定地偏离真值，再多采样也救不回来。判据很简单：偏差随 <code>n</code> 增大不缩小，而是停在一个固定值附近。</p>
+<p>第二种失败是<strong>样本不独立</strong>。标准误公式 <code>σ/√n</code> 假设样本之间独立。如果你的采样过程有惯性（比如马尔可夫链采样，或者重复用同一批样本做多次统计），有效的独立样本数远小于 <code>n</code>，实际误差会比公式预测的大得多。这时 <code>n=20000</code> 给不了你 <code>√20000</code> 的精度。第 10 单元讲 MCMC 时会把这件事说透。</p>
+<p>第三种失败是<strong>只看轨迹不看尺度</strong>。采样均值曲线看起来「平了」，不代表收敛到真值——它可能只是恰好在那段区间里慢慢漂移。判断收敛要有两个东西：理论真值作参照，以及标准误作尺度。这一节的真值 0.5 和 0.3 就是参照，1.8 节的标准误就是尺度，两者缺一不可。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把「样本均值接近真值」当成「采样正确」</span></header>
+<div class="box-b">
+<p>你会看到 <code>uniform_mean=0.503677</code> 离 0.5 很近，于是觉得采样代码没问题。但一个把随机数全打成 0.5 的程序也会给出 <code>uniform_mean=0.500000</code>，看起来更漂亮。闸门为什么不只看均值？因为 <code>first8:[...]</code> 那行被逐字对账了——八个原始样本必须逐位匹配，这就堵住了「只抄一个常数」的假实现。数值对账的力量来自多个独立观测的联合约束，不是单个数字碰巧接近。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h10">1.10 与深度学习的对应：损失就是样本均值</h2>
+<p>神经网络训练时用的损失函数，几乎都是对一批样本的平均值。均方误差 <code>L = (1/n)Σ(yᵢ−ŷᵢ)²</code> 是平方损失的样本均值；交叉熵 <code>L = −(1/n)Σ log p(yᵢ)</code> 是负对数似然的样本均值。所以你在本节练的「用采样平均逼近期望」，正是训练循环里每一步在做的事。区别只在于：这里的样本来自已知分布，训练里的样本来自数据分布；这里的真值已知，训练里的真值未知，我们要优化参数让这个平均值尽量小。</p>
+<p>这个对应还解释了随机梯度下降的噪声。全量梯度是「对所有数据求平均」，随机梯度是「抽一小批样本求平均」。小批量的样本均值有波动，波动幅度按 <code>1/√B</code> 缩小，<code>B</code> 是批大小——这正是 1.8 节的 <code>√n</code> 速率。你增大批量能让梯度更稳，但收益按平方根衰减：批大小放大四倍，噪声才减半。这不是实现问题，是采样统计的铁律。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么训练曲线会抖</span></header>
+<div class="box-b">
+<p>看到 loss 曲线上下抖动，新手常以为代码写错了。实际上每个小批量只是数据分布的一次采样，批次之间的样本均值本来就有波动。批大小越小，抖动越明显；学习率越大，同样的梯度噪声被放得越大。理解「损失是样本均值」这件事，你就知道该先看批大小和学习率，而不是急着翻代码找 bug。想平滑曲线可以用指数移动平均，但那是显示技巧，不改变梯度本身噪声。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h11">1.11 手算核对：不用程序也能验的三组数</h2>
+<p>第一组是均匀分布的期望与方差。<code>E[X] = ∫₀¹ x dx = 1/2</code>；<code>E[X²] = ∫₀¹ x² dx = 1/3</code>；<code>Var(X) = 1/3 − (1/2)² = 1/12 ≈ 0.083333</code>。三个数都用手算积分得出，与 1.8 节的标准误计算完全对上。</p>
+<p>第二组是伯努利。<code>E[X] = 1·p + 0·(1−p) = p = 0.3</code>；<code>E[X²] = 1²·p + 0²·(1−p) = 0.3</code>；<code>Var(X) = 0.3 − 0.09 = 0.21</code>。注意 <code>E[X²] = E[X]</code> 是 0/1 变量特有的性质，因为 <code>x² = x</code> 对 0 和 1 都成立，这个简化在手写反向时能省不少事。</p>
+<p>第三组是样本比例。<code>bern_mean=0.291650</code> 乘以 <code>n=20000</code> 得 <code>5833</code>——这就是两万次试验里 1 出现的次数。你可以用程序再数一遍成功次数，必须恰好是 5833，否则累加代码有 bug。这类「从打印值反推内部计数」的核对，比盯着平均值看有用得多。</p>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h12">1.12 把这一节接到后面：从期望到方差</h2>
+<p>期望告诉你分布的重心在哪，但它不告诉你分布有多散。两门课的平均分可能都是 75，一门全班都在 74–76，另一门从 30 到 100——均值一样，风险完全不同。度量这种「散」的就是方差，下一单元的主角。方差的定义 <code>Var(X) = E[(X−E[X])²]</code> 仍然是一个期望，所以你在本节练的两种读法照样适用：既可以按概率加权算，也可以采样估计。</p>
+<p>从代码角度看，下一步几乎不用改结构：<code>expect.c</code> 里累加 <code>u</code> 和 <code>b</code> 的地方，再多累加一列 <code>u*u</code>，就能算出 <code>E[X²]</code>，再用 <code>E[X²] − (E[X])²</code> 得到方差。共用库已经把这件事封装成 <code>po_variance</code>，下一单元直接调它。这样你就看出这一册的推进方式：每一节只加一层统计概念，底层的采样与对账流程原样复用。</p>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h13">1.13 指示变量法：把计数变成期望</h2>
+<p>有一种手算技巧在这一册会反复出现，叫指示变量法。它的想法很简单：想知道「满足某个条件的样本有多少个」，就给每个样本定义一个只取 0 或 1 的指示变量——满足条件记 1，不满足记 0——然后对这个指示变量求期望。由于指示变量是伯努利变量，它的期望恰好等于条件成立的概率；把所有指示变量加起来，总个数的期望就是各个概率之和。这个方法把「数数」变成了「求期望」，从而能用期望的线性性绕开复杂的联合分布。</p>
+<p>拿本节的两万次伯努利试验练手。第 <code>i</code> 次试验定义 <code>Iᵢ</code>，成功时是 1、失败时是 0，那么 <code>E[Iᵢ] = p = 0.3</code>。成功总次数 <code>K = I₁ + I₂ + ⋯ + I₂₀₀₀₀</code>，于是 <code>E[K] = 2×10⁴ × 0.3 = 6000</code>。真跑得到的成功次数是 5833，比理论值少 167——这个差值约等于 <code>167/√6000 ≈ 2.16</code> 个标准误，属于两三个标准误以内的正常波动。反过来从打印值核对：<code>bern_mean=0.291650</code> 乘两万正好是 5833，与这里的计数一致。这条链式核对把理论值、样本统计量、内部计数三件事串了起来。</p>
+<p>指示变量法真正厉害的地方，是处理「相互依赖的事件」。比如想知道一批样本里有多少对数值相差小于 0.01，直接算这个计数的分布非常麻烦；但定义每对样本一个指示变量，总对数的期望就是各对概率之和，而每一对只是两个均匀分布的比较，容易手算。你不需要知道这些指示变量之间是否独立——期望的线性性对任意变量都成立，这是它比方差好用得多的地方。下一单元讲方差时会看到，方差的线性性要求独立性，用起来要小心翼翼。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">期望的线性性为什么这么好用</span></header>
+<div class="box-b">
+<p>对任意两个随机变量都有 <code>E[X+Y] = E[X] + E[Y]</code>，不需要独立、不需要同分布、不需要任何额外条件。这是期望最值钱的性质。它让你可以把一个复杂量拆成若干个简单指示变量之和，逐个求期望再加起来。深度学习的损失函数设计里也常用这一招：整体 loss 写成每个样本 loss 之和，反向传播才能逐样本累加梯度。要是期望没有线性性，这套拆分立刻失效。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h14">1.14 从期望到估计：偏差、方差与均方误差</h2>
+<p>现在把「估计」这件事说清楚。我们想用一个统计量去逼近某个未知的真值，这个统计量叫估计量。样本均值是最常用的估计量。评价一个估计量好坏有三个词：<strong>偏差</strong>是估计量的期望与真值之差，衡量「平均意义上偏不偏」；<strong>方差</strong>是估计量自身的波动，衡量「换一批样本会变多少」；<strong>均方误差</strong>是两者之和加交叉项，在偏差为零时恰好等于方差。样本均值对有期望的分布是无偏的：<code>E[X̄] = E[X]</code>，它的方差是 <code>σ²/n</code>。所以样本均值的均方误差就是 <code>σ²/n</code>，这正是 1.8 节标准误的平方。</p>
+<p>这给出一个重要的工程判断：想降低均方误差，要么减小单样本方差 <code>σ²</code>，要么增大样本量 <code>n</code>。减小 <code>σ²</code> 的办法叫方差缩减，比如重要性采样、分层采样、公共随机数法；增大 <code>n</code> 简单粗暴但按平方根收益递减。深度学习里两者都在用：小批量训练对应增大 <code>n</code>，而各种归一化技术某种程度上是在压低梯度估计的方差。把均方误差拆成偏差和方差，你就有了分析任何估计量的统一框架。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">无偏不等于每次都准</span></header>
+<div class="box-b">
+<p>你会觉得「无偏估计」意味着每次估计都接近真值。不是的。无偏只保证大量重复试验的平均值对得上真值，单次估计可能差得很远。样本均值在 <code>n=2</code> 时也是无偏的，但两次采样得到的均值波动巨大。反过来，一个有偏但方差极小的估计量，在均方误差意义上可能比无偏估计量更好——机器学习里大量正则化方法就是故意引入偏差来换方差下降。评价估计量要看均方误差，不要只盯无偏性这一个词。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h15">1.15 连续分布的期望为什么用积分</h2>
+<p>离散情形 <code>E[X] = Σ xᵢpᵢ</code> 很好理解，连续情形 <code>E[X] = ∫ x f(x) dx</code> 看着像另一套东西，其实是同一件事的极限。把实数轴切成长度 <code>Δx</code> 的小格，落在第 <code>i</code> 格的概率大约是 <code>f(xᵢ)Δx</code>，于是加权平均近似为 <code>Σ xᵢ f(xᵢ) Δx</code>。让 <code>Δx → 0</code>，这个和就变成积分。所以积分号不是新概念，它只是「格子无限细的求和」。记住这层，你就永远不会把概率密度和概率搞混：密度 <code>f(x)</code> 本身不是概率，乘以一小段长度 <code>Δx</code> 才是落进那一小段的概率。</p>
+<p>对均匀分布 <code>[0,1)</code>，密度恒为 1，于是 <code>E[X] = ∫₀¹ x·1 dx = 1/2</code>，与 1.11 节的手算一致。对指数分布 <code>f(x) = e^{−x}</code>（<code>x ≥ 0</code>），<code>E[X] = ∫₀∞ x e^{−x} dx = 1</code>，这是第 3 单元 <code>expected_mean=1.000000</code> 的来源。你能手算这两个积分，就能对后面所有蒙特卡洛实验做独立核对——程序跑出来的数再漂亮，也要有一把不依赖程序的尺子量一量。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">用采样验证积分的几何意义</span></header>
+<div class="box-b">
+<p>在 <code>[0,1)</code> 上取均匀样本，估计 <code>∫₀¹ x² dx</code>。把每个样本映成 <code>x²</code>，再求这些 <code>x²</code> 的平均值，按期望定义它逼近 <code>E[X²] = ∫₀¹ x² f(x) dx = 1/3</code>。这一节的程序里只累加了 <code>u</code> 本身，没有累加 <code>u²</code>；你可以自己加一列 <code>su2 += u*u</code>，打印 <code>second_moment≈0.333</code>，再算 <code>0.333−0.5²≈0.083</code>，正好是均匀分布的方差 1/12。这类改写是对「积分就是加权平均」最直接的验证，也让你在改代码的过程中把期望与方差的关系摸熟。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch01-01-random-variables-and-expectation-md-h16">1.16 这一节新增了什么，下一节要什么</h2>
+<p>回到 1.1 的第 2 帧：<code>expect_mc/</code> 多了头文件、算法实现、驱动和清单四样东西，共用库没有改动。这一节真正产出的不只是一个打印两万次平均值的程序，而是一套可复用的流程：固定种子 → 真采样 → 打印数值行 → 清单声明黄金值与容差 → 闸门从 stdout 重算判定。后面九个单元都在这套流程上加内容，只是被估计的量从期望换成方差、批次均值、似然、熵、对偶间隙。流程不变，概念逐层叠加，这是这一册的组织方式。</p>
+<p>下一单元问一个紧接着的问题：重心知道了，分布有多散？方差与协方差把「散」和「一起变」量化成数，并且会把你带到一个看起来纯代数、其实有深刻统计含义的结论——协方差矩阵半正定。你会看到本节的期望概念在那里原样复用，也会看到独立与不相关这两个词之间那道很容易踩空的缝。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>随机变量是样本空间到实数的函数，分布是映射之后各取值的概率权重；</li>
+<li>期望既是加权平均 <code>Σxᵢpᵢ</code>，也是长期频率的极限；柯西分布说明这个极限不一定存在；</li>
+<li>固定种子的 LCG 让采样逐位可复现，这是黄金值对账的前提；</li>
+<li>样本均值的误差按 <code>σ/√n</code> 缩小，想缩小十倍误差要放大百倍样本；</li>
+<li><code>mode=numerical</code> 把理论常数与采样量分开给容差，正文里的数受清单约束；打印向量用冒号避免被当成坏数值行。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>为什么说随机变量是函数而不是未知的数？举一个「两个不同随机变量有同一个分布」的例子。</li>
+<li><code>E[X]=0.3</code> 对伯努利 <code>p=0.3</code> 意味着什么？单次试验会不会得到 0.3？</li>
+<li>手算均匀分布 <code>[0,1)</code> 的期望与方差，并写出 <code>n=20000</code> 时的标准误。</li>
+<li>为什么柯西分布没有期望？「密度关于 0 对称」为什么推不出期望为 0？</li>
+<li>把 <code>po_seed(EXPECT_SEED)</code> 改成每次运行取当前时间作种子，黄金值对账会出什么问题？</li>
+<li>样本均值看起来收敛了，列出两个还需要检查的东西，并说明理由。</li>
+<li>为什么打印向量用 <code>first8:[...]</code> 而不是 <code>first8=[...]</code>？闸门会怎么对待这一行？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>随机变量把样本空间的结果映射到实数，映射规则本身才是这个变量。例子：掷一枚公平硬币，<code>X</code> 记正面为 1、反面为 0；<code>Y</code> 记反面为 1、正面为 0。两个映射不同，但分布相同——都是取值 0 和 1 各占一半。</li>
+<li>意味着大量独立重复试验里 1 的长期比例趋近 0.3。单次试验只会得到 0 或 1，永远不会得到 0.3；期望是群体的统计量，不是单次结果的候选值。</li>
+<li><code>E[X]=∫₀¹x dx=1/2</code>；<code>E[X²]=1/3</code>；<code>Var(X)=1/3−1/4=1/12≈0.083333</code>，<code>σ≈0.288675</code>；<code>n=20000</code> 时标准误 <code>σ/√n≈0.002041</code>。真跑偏差 <code>0.003677</code> 约 1.8 倍标准误，属正常波动。</li>
+<li>期望要求 <code>∫|x|f(x)dx</code> 有限；柯西的正部积分是 <code>+∞</code>、负部是 <code>-∞</code>，相减无定义，所以期望不存在。对称只能在期望存在时用：截断到对称区间确实得 0，但让区间无穷扩张时正负两边各自发散，极限不存在。</li>
+<li>每次运行得到不同样本路径，stdout 里的 <code>uniform_mean</code> 等值会逐次变化，清单里的固定黄金值会频繁报 <code>numeric_value_mismatch</code>。可复现采样是数值对账的前提，种子必须钉死。</li>
+<li>一要有理论真值作参照——只看到曲线变平不知道它平在哪；二要有标准误作尺度——偏差要在几个标准误以内才算合理。缺少任一项，「看起来收敛」都可能是错觉。</li>
+<li><code>first8=[...]</code> 会被解析成数值行，<code>[...]</code> 不是合法有限小数，闸门报 <code>numeric_value_invalid</code>。用冒号后它成为普通文字行，逐字对账即可；七个等号行才走容差比较。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

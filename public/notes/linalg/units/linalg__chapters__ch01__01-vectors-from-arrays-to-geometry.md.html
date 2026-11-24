@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>向量：从数组到几何</title>
+<meta name="description" content="零基础 · 第 1 单元 · 建议 90 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-linalg-chapters-ch01-01-vectors-from-arrays-to-g { @top-right { content: "向量：从数组到几何"; } }
+#content { page: p-u-linalg-chapters-ch01-01-vectors-from-arrays-to-g; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/linalg.html">《linalg》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">向量：从数组到几何</h1><p class="doc-sub">零基础 · 第 1 单元 · 建议 90 分钟</p><p class="doc-meta">源文件 books/linalg/chapters/ch01/01-vectors-from-arrays-to-geometry.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h1">1.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h2">1.2 加法：两种看法，同一个结果</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h3">1.3 点积：一个数字里藏了方向信息</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h4">1.4 内存：向量在机器里长什么样</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h5">1.5 真跑：把数字从公式里搬到屏幕上</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h6">1.6 减法、距离与单位化：同一个工具的三种用法</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h7">1.6.1 减法就是「从哪走到哪」</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h8">1.6.2 范数把「多远」变成一个数</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h9">1.6.3 单位化：把长度和方向分开</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h10">1.7 图形怎么读：三步图元不是装饰</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h11">1.7.1 实现里的四个小坑</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h12">1.8 这一节新增了什么</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h13">1.9 为什么点积非得这样定义</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h14">1.9.1 双线性不是假设，是从定义推出来的</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h15">1.9.2 用余弦定理把几何公式严格推出来</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h16">1.9.3 为什么不用「夹角」直接当定义</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h17">1.10 失败模式：什么时候向量工具会失灵</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h18">1.10.1 零向量让余弦没有定义</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h19">1.10.2 维度不匹配是静默错误</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h20">1.10.3 大数相消吃掉有效位</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h21">1.11 与深度学习的对应：点积就是注意力的心跳</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h22">1.11.1 从 embedding 到 attention score</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h23">1.11.2 反向传播里的点积梯度</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h24">1.12 手算核对：不用程序也能验的三组数</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h25">1.12.1 主例逐步算</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h26">1.12.2 垂直例子与单位化</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h27">1.13 把「长度」讲透：柯西—施瓦茨与三角不等式</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h28">1.13.1 从一个显然的事实推出柯西—施瓦茨</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h29">1.13.2 三角不等式其实是柯西—施瓦茨的推论</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h30">1.13.3 手算验证：把不等式按在本例的数字上</a></li><li class="toc-l2"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h31">1.14 读图指引与一个反复出现的误解</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h32">1.14.1 三张图分别该盯着哪里</a></li><li class="toc-l3"><a href="#linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h33">1.14.2 最常见的误解：把向量当成「一串数」就完事</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>把向量同时看成「箭头」和「有序数组」，并说清这两种看法分别在什么时候省力；</li>
+<li>手算两个三维向量的加、减、数乘、点积和范数，不查公式；</li>
+<li>解释点积为什么能衡量方向是否一致，以及余弦相似度为什么要把长度约掉；</li>
+<li>看懂 <code>vec_t</code> 的定长数组布局，说清 <code>n</code> 与容量各管什么；</li>
+<li>用流水线跑出真实的点积/范数/余弦，并知道闸门怎样验证这些数字不是编的。</li>
+</ul>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h1">1.1 先看工程长什么样</h2>
+<p>线性代数分册不装科学计算库，先用 C 把最小的一套向量运算写出来。原因是这一册要证明的不是「会不会调 numpy」，而是<strong>每一步数值从哪来、对不对</strong>。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>向量有两个身份。写成 <code>(1,2,3)</code> 时它是一组三个数，计算机里就是连续的三格内存；画成从原点出发的箭头时，它有长度、有方向。这两个身份不是两件事——<strong>数组是箭头的坐标</strong>，箭头是数组的几何解释。</p>
+<p>加减法在数组视角是「逐格相加」，在几何视角是「首尾相接」。点积在数组视角是「对应格相乘再求和」，在几何视角是「一个箭头在另一个箭头方向上的投影长度，再乘以对方长度」。两种说法算出来是同一个数。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-c4c56095">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：一个共用数值库，一个向量例子</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：一个共用数值库，一个向量例子：逐步演示">
+<input class="vs-radio" type="radio" name="vz-c4c56095" id="vz-c4c56095-1" checked>
+<input class="vs-radio" type="radio" name="vz-c4c56095" id="vz-c4c56095-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-c4c56095-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-c4c56095-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/linalg/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/linalg.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">│  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/linalg.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">vec_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">la01-vec-basics.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch01 下什么都没有</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/linalg/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>共用库 + 第一个例子 + 清单</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">│  ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/linalg.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">│  └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/linalg.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">vec_basics/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="3"><span class="vn-tree" aria-hidden="true">      └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">la01-vec-basics.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>共用库 <code>common/</code> 从第 1 单元起就在，之后 9 个单元的矩阵、分解、微分例子都从它取函数。每个例子仍然是「<code>main.c</code> + 共用库 + 一个清单」的多文件工程：清单负责真编译真跑，<code>main.c</code> 负责把要展示的数打出来。</p>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h2">1.2 加法：两种看法，同一个结果</h2>
+<p>取 <code>a=(1,2,3)</code>、<code>b=(4,-5,6)</code>。数组视角的加法是逐格算：</p>
+<ul>
+<li><code>a+b = (1+4, 2+(-5), 3+6) = (5,-3,9)</code></li>
+<li><code>2a = (2,4,6)</code>，数乘就是把每一格都乘同一个数</li>
+</ul>
+<p>几何视角的加法是「把 b 的尾巴挪到 a 的头上，从原点连到 b 的新头」。下面三帧把这件事拆开：</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-397a2582">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 向量加法：首尾相接，合向量从原点指向终点</figcaption>
+<div class="viz-screen" role="group" aria-label="向量加法：首尾相接，合向量从原点指向终点：逐步演示">
+<input class="vs-radio" type="radio" name="vz-397a2582" id="vz-397a2582-1" checked>
+<input class="vs-radio" type="radio" name="vz-397a2582" id="vz-397a2582-2">
+<input class="vs-radio" type="radio" name="vz-397a2582" id="vz-397a2582-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-397a2582-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-397a2582-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-397a2582-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)，从原点出发</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)，仍在原处</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">b ：(4,-5,6)，尾巴接在 a 头</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b</span><span class="ve-lbl">首尾相接</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">b ：(4,-5,6)，尾巴接在 a 头</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">a+b ：(5,-3,9)，指向终点</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b</span><span class="ve-lbl">首尾相接</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>先只有 a</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)，从原点出发</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>把 b 的尾巴接到 a 的头上</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)，仍在原处</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">b ：(4,-5,6)，尾巴接在 a 头</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b</span><span class="ve-lbl">首尾相接</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>合向量从原点指向终点</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：(1,2,3)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">b ：(4,-5,6)，尾巴接在 a 头</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">a+b ：(5,-3,9)，指向终点</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">a</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b</span><span class="ve-lbl">首尾相接</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 2 帧里 b 的位置变了，但它的<strong>坐标没变</strong>——<code>(4,-5,6)</code> 描述的是「往哪个方向走多远」，跟起点在哪无关。这一点是向量和「点」的根本区别：点有固定位置，向量只有方向和长度。第 3 帧的合向量 <code>a+b</code> 才是我们要的那个箭头。</p>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h3">1.3 点积：一个数字里藏了方向信息</h2>
+<p>点积的定义是对应分量相乘再求和：<code>a·b = 1×4 + 2×(-5) + 3×6 = 4-10+18 = 12</code>。这个 12 本身不好解释，得配合两个长度一起看。</p>
+<p>几何上 <code>a·b = |a||b|cosθ</code>，其中 θ 是两个箭头的夹角。也就是说，点积把三件事揉成了一个数：两个箭头各自多长、它们有多对齐。我们这组数据的长度是 <code>|a|=√14≈3.741657</code>、<code>|b|=√77≈8.774964</code>，于是：</p>
+<ul>
+<li><code>cosθ = 12 / (3.741657 × 8.774964) = 0.365487</code></li>
+<li>cos 为正 → 夹角小于 90°，两个向量大体同向</li>
+<li>cos 为 0 → 垂直；cos 为负 → 大体反向</li>
+</ul>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-d44b8b4d">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 点积的几何：投影长度乘以对方长度</figcaption>
+<div class="viz-screen" role="group" aria-label="点积的几何：投影长度乘以对方长度：逐步演示">
+<input class="vs-radio" type="radio" name="vz-d44b8b4d" id="vz-d44b8b4d-1" checked>
+<input class="vs-radio" type="radio" name="vz-d44b8b4d" id="vz-d44b8b4d-2">
+<input class="vs-radio" type="radio" name="vz-d44b8b4d" id="vz-d44b8b4d-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-d44b8b4d-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-d44b8b4d-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-d44b8b4d-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">b_in_a ：b 在 a 方向的投影</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">b</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b_in_a</span><span class="ve-lbl">投影</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">cos ：0.365487，只与夹角有关</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">b</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b_in_a</span><span class="ve-lbl">投影</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>两个箭头与它们的长度</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>把 b 投影到 a 的方向上</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">b_in_a ：b 在 a 方向的投影</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">b</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b_in_a</span><span class="ve-lbl">投影</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>除以两个长度，只剩夹角</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">a ：长度 3.741657</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">b ：长度 8.774964</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">cos ：0.365487，只与夹角有关</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">b</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">b_in_a</span><span class="ve-lbl">投影</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">余弦相似度为什么要除以长度</span></header>
+<div class="box-b">
+<p>如果只比点积，同一段文字被重复两遍，embedding 长度翻倍，点积也跟着翻倍——明明语义没变，相似度却变了。除以 <code>|a||b|</code> 之后只剩 <code>cosθ</code>，长度被约掉，比的是纯方向。这就是检索系统里常用余弦而不是点积的原因。反过来，若你本来就想让「更长 = 更重要」，那点积反而更合适。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h4">1.4 内存：向量在机器里长什么样</h2>
+<p>分册里用定长结构 <code>vec_t</code>：一个 <code>n</code> 记录有效长度，一个数组装最多 <code>LA_MAX=8</code> 个 double。读的时候只看前 <code>n</code> 格，后面的空槽不参与任何计算。</p>
+<figure class="viz" data-kind="memory" data-frames="2" data-viz-id="vz-aa82517d">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> vec_t 的定长数组：n 说前几格有效</figcaption>
+<div class="viz-screen" role="group" aria-label="vec_t 的定长数组：n 说前几格有效：逐步演示">
+<input class="vs-radio" type="radio" name="vz-aa82517d" id="vz-aa82517d-1" checked>
+<input class="vs-radio" type="radio" name="vz-aa82517d" id="vz-aa82517d-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-aa82517d-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-aa82517d-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">n ：3，有效长度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[0] = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[1] = 2.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[2] = 3.000000</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">n ：3，只前三个有效</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[0] = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[1] = 2.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[2] = 3.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[3] = 0 ：空槽，不参与计算</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[4..7] ：空槽</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>n=3，数组前格装着 a 的三个分量</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">n ：3，有效长度</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[0] = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[1] = 2.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[2] = 3.000000</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>后面还有空槽，但 n 不认它们</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">n ：3，只前三个有效</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[0] = 1.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[1] = 2.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-text">v[2] = 3.000000</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">v[3] = 0 ：空槽，不参与计算</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">v[4..7] ：空槽</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么要带一个 n，而不是全局定长 3</span></header>
+<div class="box-b">
+<p>后面矩阵乘法会换各种维度：2 维输入、3 维隐层、1 维输出。如果写死长度，每换一次形状就得改一份代码。把 <code>n</code> 放进结构，函数就只看 <code>n</code> 格，同一套 <code>vec_dot</code> 能给所有维度用。代价是空槽浪费一点内存——在这个量级完全无所谓。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h5">1.5 真跑：把数字从公式里搬到屏幕上</h2>
+<p>下面是这个例子的核心代码。<code>vec_make</code> 把普通数组装进 <code>vec_t</code>，<code>vec_add</code> / <code>vec_scale</code> / <code>vec_dot</code> / <code>vec_norm</code> 都只遍历 <code>n</code> 格：</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/vec_basics/src/main.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">向量四则运算与点积：所有数字都从真跑里来</span><span class="cb-file">examples/ch01/vec_basics/src/main.c</span><span class="cb-lines">第 6–23 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="6" data-to="23"><span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">main</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E">) {</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">av</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> {</span><span class="tk" style="color:#005CC5">1.0</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">3.0</span><span class="tk" style="color:#24292E">};</span></span></span>
+<span class="cl" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">bv</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">] </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> {</span><span class="tk" style="color:#005CC5">4.0</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">-</span><span class="tk" style="color:#005CC5">5.0</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#005CC5">6.0</span><span class="tk" style="color:#24292E">};</span></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">vec_t</span><span class="tk" style="color:#24292E"> a </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">vec_make</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">, av);</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">vec_t</span><span class="tk" style="color:#24292E"> b </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">vec_make</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">3</span><span class="tk" style="color:#24292E">, bv);</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">vec_t</span><span class="tk" style="color:#24292E"> sum </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">vec_add</span><span class="tk" style="color:#24292E">(a, b);</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">vec_t</span><span class="tk" style="color:#24292E"> scaled </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">vec_scale</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">2.0</span><span class="tk" style="color:#24292E">, a);</span></span></span>
+<span class="cl is-empty" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">vec_print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"a"</span><span class="tk" style="color:#24292E">, a);</span></span></span>
+<span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">vec_print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"b"</span><span class="tk" style="color:#24292E">, b);</span></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">vec_print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"a+b"</span><span class="tk" style="color:#24292E">, sum);</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">vec_print</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"2a"</span><span class="tk" style="color:#24292E">, scaled);</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"dot=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">vec_dot</span><span class="tk" style="color:#24292E">(a, b));</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"norm_a=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">vec_norm</span><span class="tk" style="color:#24292E">(a));</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"norm_b=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">vec_norm</span><span class="tk" style="color:#24292E">(b));</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#6F42C1">printf</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#032F62">"cos=</span><span class="tk" style="color:#005CC5">%.6f\n</span><span class="tk" style="color:#032F62">"</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#6F42C1">vec_dot</span><span class="tk" style="color:#24292E">(a, b) </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> (</span><span class="tk" style="color:#6F42C1">vec_norm</span><span class="tk" style="color:#24292E">(a) </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">vec_norm</span><span class="tk" style="color:#24292E">(b)));</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">return</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">0</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">}</span></span></span></pre></div></figure>
+<p>真跑得到的 stdout：</p>
+<figure class="term term-output" data-id="la01-vec-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">la01-vec-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">a:[1.000000,2.000000,3.000000]</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">b:[4.000000,-5.000000,6.000000]</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">a+b:[5.000000,-3.000000,9.000000]</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">2a:[2.000000,4.000000,6.000000]</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">dot=12.000000</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">norm_a=3.741657</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">norm_b=8.774964</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">cos=0.365487</span></span></pre></figure>
+<p>注意向量那四行用的是冒号 <code>a:[...]</code> 而不是等号，这是<strong>故意的</strong>：流水线把 <code>key=value</code> 行当数值行做容差对账，<code>a:[1.000000,...]</code> 不是合法数值，会被判成坏行。让打印函数用冒号，闸门就把它当普通文字逐字比较，只对 <code>dot</code> / <code>norm_a</code> / <code>norm_b</code> / <code>cos</code> 四行做数值对账。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">闸门怎么证明这四个数不是编的</span></header>
+<div class="box-b">
+<p>清单 <code>la01-vec-basics.json</code> 用 <code>mode=numerical</code>，在 <code>expect.numbers</code> 里写了四个黄金值，各给 <code>atol=1e-6</code>。闸门做三件事：编译并真跑；从 stdout 解析出 <code>dot=12.000000</code> 这类行；检查真实值与黄金值之差是否在容差内。正文里那四个数也按同样容差对账——想把 <code>cos</code> 改成 <code>0.5</code> 让书更好看，闸门会报 <code>numeric_value_mismatch</code>。容差只写在清单，正文写「约等于 0.37」不算证据。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h6">1.6 减法、距离与单位化：同一个工具的三种用法</h2>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h7">1.6.1 减法就是「从哪走到哪」</h3>
+<p>加法把两个箭头首尾相接，减法回答的是另一个问题：<strong>从 a 的终点走到 b 的终点，要往哪个方向走多远</strong>。把 <code>b-a</code> 看成「b 加上 -a」，就知道它是逐格相减：<code>a-b=(1-4, 2-(-5), 3-6)=(-3,7,-3)</code>。几何上，它是从 a 指向 b 的那支箭头；把它的尾巴挪回原点，方向和长度都不变。</p>
+<p>这个视角在深度学习里到处都是。梯度下降里的更新量 <code>w_new - w_old</code> 是一个向量，loss 下降量是关于这两个点的差；两个 embedding 的差常被当作「语义方向」（经典例子是 <code>king - man + woman ≈ queen</code>）。这些说法能成立，前提正是向量只有方向和长度、与起点无关。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h8">1.6.2 范数把「多远」变成一个数</h3>
+<p><code>‖a‖ = √(a·a)</code> 把一支箭头压成一个标量。它满足三件事：非负（长度不可能是负的）、齐次（<code>‖ca‖=|c|‖a‖</code>）、三角不等式（<code>‖a+b‖ ≤ ‖a‖+‖b‖</code>）。第三条不是数学家的洁癖——它正是「走折路不会比直路短」这句话的代数版本；检索系统用余弦相似度和 Euclidean 距离排序时，隐含依赖的就是这套性质。</p>
+<p>我们这组数里 <code>‖a‖=√14≈3.741657</code>，<code>‖b‖=√77≈8.774964</code>。注意 <code>‖a‖²=a·a=14</code> 是个整数，而 <code>‖a‖</code> 是无理数。程序里先算平方和再开方是对的；反过来先对分量开方再组合会得到完全不同的东西。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把「范数」和「绝对值」混为一谈</span></header>
+<div class="box-b">
+<p>标量 <code>|-3|=3</code> 只有一种长度；向量的范数要看所有分量的联合贡献。<code>a=(1,2,3)</code> 的三个分量都不大，但 <code>‖a‖≈3.74</code> 已经比最大分量还大——因为三个方向上的长度按勾股定理合成。有人写 <code>‖a‖ = |a₁|+|a₂|+|a₃|</code>，那叫 L1 范数，是另一种度量，几何形状（菱形而不是圆）和梯度性质都不一样。本册默认说的范数是 L2。</p>
+</div>
+</section>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h9">1.6.3 单位化：把长度和方向分开</h3>
+<p><code>a/‖a‖</code> 叫单位向量，长度恰好为 1。它把「指向哪」和「有多长」拆成两件事：单位向量只管方向，范数只管长度，乘回去就得到原向量。余弦相似度的定义 <code>cosθ = (a·b)/(‖a‖‖b‖)</code> 正是先把 a、b 都单位化，再算点积——两个长度被除掉，只剩方向的夹角。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">什么时候不该单位化</span></header>
+<div class="box-b">
+<p>文本检索里，同一段话出现一次和出现十次，语义方向几乎一样，但「重要程度」不一样。这时用余弦会把频次信息抹平。反过来在推荐系统里，如果你把用户行为向量单位化了，一个只点过一次的用户和一个点过一百次的用户会变得无法区分。所以「归一化还是不归一化」不是技术问题，是你想让模型看见什么的问题。</p>
+</div>
+</section>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h10">1.7 图形怎么读：三步图元不是装饰</h3>
+<p>这一节用了三个图元，它们的分工不一样。<code>graph</code> 画的是<strong>过程</strong>：第 2 帧里 b 的尾巴接到 a 头上，第 3 帧里合向量出现，读者点「下一步」能看到状态怎么变。<code>memory</code> 画的是<strong>静态布局</strong>：<code>vec_t</code> 里 <code>n=3</code> 和八个 double 槽是什么关系，哪一格有效、哪一格是空的。两者不能互换——用 <code>graph</code> 画内存会丢掉「格子」的直觉，用 <code>memory</code> 画向量加法会丢掉「首尾相接」的动作。</p>
+<p>图元还有一条硬规矩：每一帧自包含。第 3 帧里必须把 a、b、a+b 三支箭头都写进去，不能只写新出现的 a+b——渲染器不会自动把上一帧的节点带过来，打印版每一帧是独立的一张图。这也是为什么图里的节点文字要短：重复写三遍，长句子会把一张图撑爆。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h11">1.7.1 实现里的四个小坑</h3>
+<p>第一，<code>n</code> 和容量必须分清。<code>vec_make(3, values)</code> 只把前三个数拷进数组，后面五格保持未初始化；<code>vec_dot</code> 也只循环 <code>i &lt; a.n</code>。要是某处手滑写成 <code>i &lt; LA_MAX</code>，未初始化的内存就被算进点积，结果每次跑都不一样——而且这种 bug 在 <code>-O0</code> 下经常「看起来还挺对」。</p>
+<p>第二，长度不同的两个向量不能点积。<code>vec_dot</code> 默认两个 <code>n</code> 相等；要是传进一个 2 维一个 3 维，它按 <code>a.n</code> 循环，会读到 b 的第三格（里面可能是上次算完留下的旧值）。共用库里没有维度检查，是为了让代码短到能印在书上；真实项目里这一步必须断言，或者在类型系统里把维度编进类型。</p>
+<p>第三，浮点求和的顺序会影响最后几位。<code>a·b</code> 的三项 <code>4</code>、<code>-10</code>、<code>18</code> 先加哪个，严格来说结果可能差一个 ulp。这一节的数都选得能精确表示，所以四种顺序都给出 <code>12.000000</code>；换成随机小数就不会这么乖。这就是数值实验里容差不能写零的原因——<code>atol=1e-6</code> 不是「允许算错」，是给浮点实现留的合理空间。</p>
+<p>第四，开方前先平方和。<code>vec_norm</code> 先算 <code>vec_dot(a,a)</code> 再 <code>sqrt</code>，而不是对每个分量开方。前者是一次开方，后者是三次开方加三次乘法，结果还不对——勾股定理说的是平方和再开方。把这步写反了，闸门里的 <code>norm_a</code> 黄金值会立刻报 <code>numeric_value_mismatch</code>。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">"看起来一样"的两种写法</span></header>
+<div class="box-b">
+<p><code>‖a‖²</code> 和 <code>a·a</code> 数学上是同一个数，代码里却是两条路：前者要先算 <code>vec_dot</code> 再乘一次，后者直接就是 <code>vec_dot</code>。若你把 <code>norm_a</code> 的黄金值从 <code>3.741657</code> 改成 <code>14</code>，闸门会失败——因为程序打印的是开方后的 <code>‖a‖</code>，不是平方。这类「平方 vs 开方」的错位是手写数值代码最常见的一类错误，读输出时先确认单位再确认数值。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把 b 换个数会怎样</span></header>
+<div class="box-b">
+<p>建议自己改 <code>bv</code> 试两遍。改成 <code>b=(2,4,6)</code>，点积变成 <code>2+8+18=28</code>，<code>cos</code> 会明显变大——两向量更同向了。改成 <code>b=(-2,-4,-6)</code>，点积变成 <code>-28</code>，<code>cos</code> 变成负的——两支箭头几乎反向。注意 <code>‖b‖</code> 在这两次改动里<strong>没变</strong>，因为 <code>(-2,-4,-6)</code> 只是把 <code>(2,4,6)</code> 转了 180°，长度不变。这正好说明：<code>cos</code> 的变化来自方向，不是来自长度。改完记得把清单里的黄金值也改成真跑读数，否则闸门会报 <code>numeric_value_mismatch</code>。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">为什么这一节选这三个数</span></header>
+<div class="box-b">
+<p><code>a=(1,2,3)</code>、<code>b=(4,-5,6)</code> 不是随手挑的。点积 <code>1×4+2×(-5)+3×6=12</code> 恰好是个整数，手算不容易出错；<code>‖a‖²=14</code>、<code>‖b‖²=77</code> 也都是整数，读者能验证开方前的那一步。b 的第二分量是负数，保证加法里真的出现「一正一负抵消」的情形，不会让人以为向量加法只是正数相加。余弦 <code>0.365487</code> 是个既不正也不负、既不接近 0 也不接近 1 的数，正好说明「大体同向但不是特别同向」。</p>
+</div>
+</section>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">把这一节接到后面的矩阵</span></header>
+<div class="box-b">
+<p>下一节的矩阵乘法，本质就是把这一节的 <code>vec_dot</code> 批量做一遍：矩阵每一行都是一个向量，乘上输入向量得到一个分量，所有行合起来就是输出向量。所以这里的点积不是「向量章的小练习」，它是整个深度学习前向传播的基本动作。你现在写的每一层 <code>Wx+b</code>，拆开来看都是若干个 <code>a·b</code>。把点积的两种看法（逐格乘加 / 投影）都记牢，后面看反向传播里的转置时才不会觉得那是个凭空冒出来的符号。</p>
+</div>
+</section>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">用改数字的办法检验理解</span></header>
+<div class="box-b">
+<p>把 <code>a</code> 改成 <code>(3,0,4)</code>（长度 5）、<code>b</code> 改成 <code>(0,5,0)</code>（长度 5）。这时候点积是 <code>0</code>，两个箭头垂直，<code>cos=0</code>。再看 <code>a+b=(3,5,4)</code>，它的长度是 <code>√50≈7.071</code>，而 <code>‖a‖+‖b‖=10</code>——三角不等式在这里是严格的。这个例子比正文里的三位数更好手算，适合拿来给人讲「为什么向量加法不是长度相加」。建议你真跑一遍，把 stdout 里的 <code>dot</code>、<code>cos</code>、<code>a+b:[...]</code> 三行读一读，确认自己的手算和程序一致。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h12">1.8 这一节新增了什么</h2>
+<p>回到 1.1 的第 2 帧：多了共用库 <code>common/</code>（头文件与实现），多了 <code>vec_basics/</code>（驱动与清单）。共用库从这一节起长期陪伴整册，之后每章只往里加函数，不另起炉灶。这一节的四个函数——<code>vec_make</code> 装数据、<code>vec_add</code>/<code>vec_scale</code> 做线性组合、<code>vec_dot</code> 做投影、<code>vec_norm</code> 量长度——后面九节一次都不会丢掉：矩阵乘法是点积的批量版，特征向量要靠范数归一，SVD 的截断误差要用范数度量。先把它们写对，后面的楼才盖得稳。</p>
+<p>下一单元问一个更关键的问题：给定几个向量，把它们任意伸缩再相加，到底能铺出多大的空间？那就是线性组合与张成。这一节的 <code>vec_scale</code> 和 <code>vec_add</code> 正好是那件事的两个零件，下一节只是把它们反复用起来而已。</p>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h13">1.9 为什么点积非得这样定义</h2>
+<p>前面我们直接接受了「对应分量相乘再求和」这个定义。但一个定义值不值得记住，要看它能不能同时做到三件事：<strong>算起来便宜</strong>（只需乘法和加法）、<strong>代数上好用</strong>（满足漂亮的运算律）、<strong>几何上说得通</strong>（能解释角度和投影）。点积三样全占。这一节把「为什么」补完整，顺便把后面所有推导的地基打牢。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h14">1.9.1 双线性不是假设，是从定义推出来的</h3>
+<p>先证明两条性质。第一条是齐次性：把 <code>a</code> 整体乘一个数 <code>c</code>，有 <code>(ca)·b = Σᵢ(c aᵢ)bᵢ = c Σᵢ aᵢbᵢ = c(a·b)</code>。从定义到结论只用了「有限求和能提出公因子」这一步。同样地 <code>a·(cb) = c(a·b)</code>。第二条是分配性：<code>a·(b+d) = Σᵢ aᵢ(bᵢ+dᵢ) = Σᵢ aᵢbᵢ + Σᵢ aᵢdᵢ = a·b + a·d</code>。把两条合起来说：固定其中一个变量，点积对另一个变量是线性的，术语叫<strong>双线性</strong>（bilinear）——对每个变量分别线性。</p>
+<p>这里有个初学时极容易踩的坑：双线性不等于「对整体线性」。若把 <code>a</code> 和 <code>b</code> 同时乘 <code>c</code>，点积变成 <code>(ca)·(cb) = c²(a·b)</code>，多出一个平方。后面讲二阶导数（Hesse 矩阵）、注意力分数随维度缩放时，这个平方因子会反复出现。记住一条：每乘一次向量，点积就多一次 <code>c</code>。</p>
+<p>还要专门强调对称性 <code>a·b = b·a</code>，因为乘法满足 <code>aᵢbᵢ = bᵢaᵢ</code>。别小看这一行，它意味着我们不必区分「谁投影到谁」——<code>a</code> 在 <code>b</code> 上的投影长度乘 <code>|b|</code>，与 <code>b</code> 在 <code>a</code> 上的投影长度乘 <code>|a|</code>，是同一个数。这一性质让余弦相似度天然对称，检索时 <code>sim(a,b)</code> 与 <code>sim(b,a)</code> 永远相等。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h15">1.9.2 用余弦定理把几何公式严格推出来</h3>
+<p>现在证明 <code>a·b = |a||b|cosθ</code>。很多人把它当定义背，其实它可以从两条更基本的事实推出来：余弦定理与刚证的双线性。</p>
+<p>考虑向量 <code>a-b</code>，用两种办法算它的长度平方。代数办法：<code>|a-b|² = (a-b)·(a-b) = a·a - a·b - b·a + b·b = |a|² - 2a·b + |b|²</code>，这一步用到了双线性与对称性。几何办法：把 <code>a</code>、<code>b</code>、<code>a-b</code> 看成三角形的三条边，<code>a-b</code> 对着夹角 θ，余弦定理给出 <code>|a-b|² = |a|² + |b|² - 2|a||b|cosθ</code>。两式左边相等，右边前两项也相同，于是 <code>-2a·b = -2|a||b|cosθ</code>，两边除以 <code>-2</code> 就得到结论。</p>
+<p>这个推导的价值不只是记住公式：它告诉你点积里的「长度乘积」和「余弦」不是谁硬塞进去的，而是<strong>勾股定理在斜三角形上的修正项</strong>。当 θ=90°，余弦为零，公式退化为勾股定理 <code>|a+b|² = |a|²+|b|²</code>。反过来看，正因为 <code>|a|² = a·a</code>，范数和点积是一回事：<code>vec_norm</code> 内部就是 <code>vec_dot(a,a)</code> 再开方。如果你把点积改了定义，范数、距离、余弦会一起变——它们是同一套结构的三张脸。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h16">1.9.3 为什么不用「夹角」直接当定义</h3>
+<p>有人会问：既然点积能算夹角，为什么不干脆把 <code>|a||b|cosθ</code> 定义成点积，把「对应相乘再求和」当推论？答案是计算代价。<code>cosθ</code> 要算两个开方和一次反余弦，都是超越函数，硬件上要么用迭代逼近，要么查表；而「相乘再求和」只需要乘法器和加法器，是处理器一个周期就能干的事。把便宜的东西定义为基本运算，把贵的东西定义为导出量，这是数值计算的一贯取舍。深度学习的注意力层每做一次要算几百万个点积，如果每个都走反余弦，训练根本跑不动。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">双线性在浮点里只是「近似成立」</span></header>
+<div class="box-b">
+<p>数学上 <code>(ca)·b = c(a·b)</code> 精确成立，程序里却不总是。左边先把 <code>aᵢ</code> 乘 <code>c</code> 再求和，右边先求和再乘 <code>c</code>，两步的舍入位置不同，最后几位可能差一个 ulp。我们这一节选的整数都能被 double 精确表示，所以看不到差别；换成随机小数，<code>(2a)·b</code> 与 <code>2(a·b)</code> 的打印值可能不一致。闸门给 <code>atol=1e-6</code> 正是为这种情况留的。若你在调试里看到「明明数学上相等的两个式子在程序里差了 1e-15」，先怀疑浮点结合顺序，别急着怀疑公式。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h17">1.10 失败模式：什么时候向量工具会失灵</h2>
+<p>这一节专门讲「什么时候不好使」，因为看懂一个工具的最好办法，是看它坏掉的样子。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h18">1.10.1 零向量让余弦没有定义</h3>
+<p>余弦公式的分母是 <code>‖a‖‖b‖</code>。只要有一个是零向量，分母为零，<code>vec_dot(a,b)/(vec_norm(a)*vec_norm(b))</code> 在 C 里会得到 <code>nan</code>（0.0/0.0）或 <code>inf</code>（非零除以零）。屏幕上打出 <code>cos=nan</code>，这不是格式问题，是几何上「零向量没有方向，夹角无从谈起」。工程上的处理通常是在算余弦前检查范数是否为零，返回 0 或抛错，而不是让 nan 流进后续计算。nan 有传染性：一旦它进了 softmax，整个输出全变 nan，而且 <code>nan != nan</code> 让你的断言也失效。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h19">1.10.2 维度不匹配是静默错误</h3>
+<p><code>vec_dot</code> 只按 <code>a.n</code> 循环。传进 2 维的 <code>a</code> 和 3 维的 <code>b</code>，它会读 <code>b</code> 的前两格，忽略第三格——不越界、不报错、不崩溃。你以为算的是两个三维向量的点积，实际算的是截断后的二维点积。更糟的是那格空槽里可能残留着上一次计算的旧值，导致同一份输入在不同运行里得到不同结果。这类静默错误比崩溃危险得多：崩溃逼你去看，静默错误让你带着错误答案继续往下走。闸门对这种情况无能为力——它只核对打印出的数在容差内，而程序打印的本来就是错的数。防御办法只有两个：入口断言两个 <code>n</code> 相等，或者把维度编进类型（比如 C++ 的固定长度数组），让不匹配在编译期就被拦下。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h20">1.10.3 大数相消吃掉有效位</h3>
+<p>点积 <code>(-10) + 4 + 18 = 12</code> 看着没问题。但把量级放大：取 <code>a=(1e16, 1, -1e16)</code>、<code>b=(1, 1, 1)</code>。精确答案是 <code>1e16 + 1 - 1e16 = 1</code>。可 double 只有约 15 位十进制有效数字，<code>1e16 + 1</code> 在 double 里就已经舍入成 <code>1e16</code>（因为 1 相对 1e16 太小，落到了精度之外），减完得到 0，真正的答案 1 被完全吃掉。这叫<strong>灾难性相消</strong>（catastrophic cancellation）。现象是：你手算明明有个不大的答案，程序却打出 0 或奇怪的小数。防御办法是补偿求和（Kahan 算法）或提高中间精度。本册的例子刻意选小整数，就是为了让读者先看清结构，不被数值问题分心。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">让闸门替你制造一次失败</span></header>
+<div class="box-b">
+<p>想亲眼看到闸门报错，最简单的办法是把正文 <code>output</code> 块里 <code>dot=12.000000</code> 改成 <code>dot=13.000000</code>，然后跑单元渲染。闸门会报 <code>numeric_value_mismatch</code>：正文的数与清单黄金值（以及程序真跑的 stdout）对不上。注意这说明什么——正文里的数不是装饰，它受清单约束。反过来，若你把 <code>cos</code> 那行改成 <code>cos=nan</code>，闸门会报数值无法解析。把这两个错误各触发一次，你对「闸门到底在验什么」就有体感了。做完记得改回来，否则整册的其他检查也会受影响。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h21">1.11 与深度学习的对应：点积就是注意力的心跳</h2>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h22">1.11.1 从 embedding 到 attention score</h3>
+<p>Transformer 的第一步把每个 token 映射成一个向量（embedding），于是「一个词」在模型里就是一支箭头，和你手里的 <code>(1,2,3)</code> 没有本质区别。自注意力的核心动作是：为每个 token 算出 query <code>q</code>、key <code>k</code>、value <code>v</code>，再用 <code>q</code> 与所有 <code>k</code> 的点积作为<strong>注意力分数</strong>（attention score）：<code>score(q,kᵢ) = q·kᵢ / √d</code>。分子 <code>q·kᵢ</code> 正是本单元的点积——它衡量当前 query 和某个 key 的方向有多一致，也就是「这个位置该去注意哪个位置」。除以 <code>√d</code> 是为了抵消维度带来的放大：若 <code>q</code>、<code>k</code> 的分量相互独立，点积的方差随维度 <code>d</code> 线性增长，不除的话分数会很大，softmax 饱和成接近 one-hot，梯度几乎消失。这个 <code>√d</code> 不是魔法，是点积双线性加上方差分析的直接结论。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h23">1.11.2 反向传播里的点积梯度</h3>
+<p>训练时还要算梯度。由双线性立刻得到 <code>∂(a·b)/∂a = b</code> 与 <code>∂(a·b)/∂b = a</code>，因为 <code>a·b = Σ aᵢbᵢ</code>，对 <code>aⱼ</code> 求偏导时只有第 <code>j</code> 项留下 <code>bⱼ</code>。这意味着注意力的反向传播里，<code>dL/dq</code> 是「上游梯度与所有 key 的加权和」——又是一次向量线性组合。你在本节练的加、减、数乘、点积，就是反向传播的全部算术；后面矩阵那一单元只是把它们批量化，本质没有新东西。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么「余弦 vs 点积」在检索系统里是个开关</span></header>
+<div class="box-b">
+<p>向量数据库建索引时要先选相似度：点积，还是余弦。若 embedding 已经单位化，两者只差一个常数，可以互换；若没单位化，点积把「长度」也算进去——长度往往编码了置信度或词频，这时点积更合理。余弦则把长度约掉，只比方向。这个选择会改变召回结果，不是随手调的参数。实现上还有个细节：很多库为了速度，内部仍用点积，只是在入库前把向量归一化，从而在结果上等价于余弦。读懂本节「归一化抹掉什么」，你就知道该选哪个，而不是照抄默认配置。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h24">1.12 手算核对：不用程序也能验的三组数</h2>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h25">1.12.1 主例逐步算</h3>
+<p>取 <code>a=(1,2,3)</code>、<code>b=(4,-5,6)</code>。第一遍算点积，按分量逐项列出再求和：<code>1×4=4</code>，<code>2×(-5)=-10</code>，<code>3×6=18</code>，合计 <code>4-10+18=12</code>。第二遍算长度平方：<code>a·a=1+4+9=14</code>，<code>b·b=16+25+36=77</code>。于是 <code>|a|=√14≈3.741657</code>，<code>|b|=√77≈8.774964</code>。第三遍算余弦：<code>12/(√14·√77)=12/√1078</code>。用近似值验算：<code>3.741657×8.774964≈32.833</code>，<code>12/32.833≈0.3655</code>，与屏幕上的 <code>0.365487</code> 一致。三步都不需要计算器以外的东西，过程清楚，任何人重算都能得到同一串数——这就是「可手算核对」的意义，它让你在程序出错时还有一把独立的尺子。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h26">1.12.2 垂直例子与单位化</h3>
+<p>再取 <code>a=(3,4,0)</code>、<code>b=(0,0,5)</code>。<code>a·b=3×0+4×0+0×5=0</code>，所以两向量垂直，<code>cosθ=0</code>。<code>|a|=√(9+16)=5</code>，<code>|b|=5</code>。把 <code>a</code> 单位化：<code>a/|a|=(3/5,4/5,0)=(0.6,0.8,0)</code>，它的长度是 <code>√(0.36+0.64)=1</code>。你可以再验 <code>‖a+b‖=‖(3,4,5)‖=√50≈7.071</code>，而 <code>‖a‖+‖b‖=10</code>，严格大于前者——三角不等式在这里是严格的，因为两向量不共线。若取共线的 <code>b</code> 为 <code>(6,8,0)</code>（即 <code>2a</code>），<code>‖a+b‖=‖(9,12,0)‖=15</code> 恰好等于 <code>5+10</code>，等号只在同向共线时成立。这组数小到能心算，适合拿来给别人讲清「长度不相加、方向才相加」。</p>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">深化自测（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>用分配律证明 <code>(a+b)·(a+b) = |a|² + 2a·b + |b|²</code>，并说明它和余弦定理的关系。</li>
+<li>为什么点积叫「双线性」而不是「线性」？把 <code>a</code>、<code>b</code> 同时乘 2，点积变几倍？</li>
+<li><code>a=(1,0,0)</code>、<code>b=(0,1,0)</code>，手算 <code>a·b</code>、<code>|a|</code>、<code>|b|</code>、<code>cosθ</code>。这说明点积为零是否要求某个向量为零？</li>
+<li>一个 embedding 向量被整体乘了 3 倍。分别用点积相似度和余弦相似度比较它与原向量，结果各变多少？这对检索意味着什么？</li>
+<li>程序打出 <code>cos=nan</code>，列出两种可能原因，并说明你先该检查哪一步。</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">深化自测答案</span></header>
+<div class="box-b">
+<ol>
+<li>展开得 <code>a·a + a·b + b·a + b·b</code>，由对称性 <code>a·b=b·a</code>，得 <code>|a|²+2a·b+|b|²</code>。与余弦定理 <code>|a+b|²=|a|²+|b|²+2|a||b|cosθ</code> 对照，可反推出 <code>a·b=|a||b|cosθ</code>，是同一件事的两种写法。</li>
+<li>因为它对两个变量分别线性：固定 <code>b</code> 时对 <code>a</code> 线性，固定 <code>a</code> 时对 <code>b</code> 线性。同时乘 2 得 <code>(2a)·(2b)=4(a·b)</code>，变 4 倍，不是 2 倍，所以不是对整体的线性。</li>
+<li><code>a·b=0</code>，<code>|a|=|b|=1</code>，<code>cosθ=0</code>（垂直）。这说明点积为零并不要求有零向量，只要两向量垂直即可。</li>
+<li>点积相似度变 3 倍（<code>(3a)·a=3(a·a)</code>）；余弦相似度不变（分子分母同乘 3 约掉）。所以若你关心语义方向，用余弦；若长度本身编码了重要度，用点积。</li>
+<li>两种原因：某个向量是零向量（分母为零，<code>0/0</code> 得 nan）；或者某分量已是 nan/inf 污染了计算。先检查两个向量的范数是否为零，再看输入里有没有非有限数——用 <code>isfinite</code>，不要用 <code>==nan</code> 判断。</li>
+</ol>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h27">1.13 把「长度」讲透：柯西—施瓦茨与三角不等式</h2>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h28">1.13.1 从一个显然的事实推出柯西—施瓦茨</h3>
+<p>前面说余弦的绝对值不超过 1，理由是「投影不会比原箭头更长」。这是直觉，不是证明。严格证明从一件谁都不会怀疑的事出发：<strong>长度平方永远非负</strong>，即对任意实数 <code>t</code> 都有 <code>‖a - t b‖² ≥ 0</code>。把它按点积展开，得到一个关于 <code>t</code> 的二次式：</p>
+<p><code>‖b‖² t² - 2(a·b) t + ‖a‖² ≥ 0</code></p>
+<p>一个开口向上的二次函数对一切 <code>t</code> 都不小于零，唯一可能是它的判别式不大于零：<code>(-2a·b)² - 4‖b‖²‖a‖² ≤ 0</code>。化简并开方，得到 <code>|a·b| ≤ ‖a‖‖b‖</code>，这就是<strong>柯西—施瓦茨不等式</strong>。把两边除以 <code>‖a‖‖b‖</code>，正好得到 <code>|cosθ| ≤ 1</code>，余弦的合法性由此而来；等号成立当且仅当 <code>a</code> 与 <code>b</code> 共线（那个二次式有重根，意味着存在某个 <code>t</code> 使 <code>a-tb=0</code>）。</p>
+<p>这个推导值得慢慢读，因为它示范了线性代数里最常用的招数：<strong>把一个几何命题转成一个关于参数的二次式，再用判别式读出结论</strong>。后面证明矩阵范数的次乘性、最小二乘解的存在性，用的都是同一招。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h29">1.13.2 三角不等式其实是柯西—施瓦茨的推论</h3>
+<p>三角不等式 <code>‖a+b‖ ≤ ‖a‖+‖b‖</code> 也可以从柯西—施瓦茨推出来，而不是当成公理接受。展开平方：</p>
+<p><code>‖a+b‖² = ‖a‖² + 2a·b + ‖b‖²</code></p>
+<p>由柯西—施瓦茨，<code>a·b ≤ |a·b| ≤ ‖a‖‖b‖</code>，于是</p>
+<p><code>‖a+b‖² ≤ ‖a‖² + 2‖a‖‖b‖ + ‖b‖² = (‖a‖+‖b‖)²</code></p>
+<p>两边都是非负数，同时开方就得到三角不等式。整条链条没有用到任何关于维度的假设，所以它在二维、三维、一百万维都成立——这也解释了为什么单位化后的向量能直接拿来做相似度排序：所有依靠范数的性质都在任意维度成立。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h30">1.13.3 手算验证：把不等式按在本例的数字上</h3>
+<p>用我们熟悉的数字验一遍。取 <code>a=(1,2,3)</code>、<code>b=(4,-5,6)</code>：左边 <code>|a·b|=12</code>；右边 <code>‖a‖‖b‖=√14·√77=√1078≈32.83</code>。<code>12 ≤ 32.83</code> 成立，而且离等号很远，正好对应「两向量大体同向但不共线」的直觉。再取共线的一对 <code>a=(1,2,3)</code>、<code>b=(2,4,6)=2a</code>：<code>a·b=2+8+18=28</code>，<code>‖a‖‖b‖=√14·√56=√784=28</code>，两边相等——等号只在共线时出现，验证了上一节的判据。</p>
+<p>三角不等式同样可以验：<code>a+b=(5,-3,9)</code>，<code>‖a+b‖=√(25+9+81)=√115≈10.724</code>；<code>‖a‖+‖b‖≈3.742+8.775=12.517</code>。<code>10.724 ≤ 12.517</code> 成立且不取等，因为两向量不共线。这组手算把「投影不超过全长」「走折路不比直路短」两句大白话，落到了可以逐位核对的整数和根号上。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">这些不等式在训练里不是摆设</span></header>
+<div class="box-b">
+<p>你可能觉得柯西—施瓦茨只是考试题。其实它保证了归一化后的点积（余弦）落在 <code>[-1,1]</code>，softmax 的输入才有合理范围；它也是推导出「梯度下降的更新不会让损失无限下降」这类收敛证明的起点。三角不等式则支撑着向量数据库的近似最近邻索引：很多索引结构（比如树、图）依赖「三角不等式」来剪枝——如果已知查询点到某个中心的距离，加上半径就能排除一整簇候选点。没有这些性质，十亿级向量的检索就没有可行的加速办法。</p>
+</div>
+</section>
+<h2 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h31">1.14 读图指引与一个反复出现的误解</h2>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h32">1.14.1 三张图分别该盯着哪里</h3>
+<p>这一单元出现了 <code>tree</code>、<code>graph</code>、<code>memory</code> 三类图元，它们的读法不同。<code>tree</code> 的要点是看带 <code>+</code> 的行，它们标记本单元新增的工程文件；<code>graph</code> 的要点是逐帧比较<strong>状态差异</strong>——第 2 帧比第 1 帧多了什么，第 3 帧又多了什么，而不是把三帧当成三张互不相干的插图。<code>memory</code> 的要点是看「有效」与「空槽」的边界：<code>n=3</code> 说前三个 double 有效，后面五格只是占着位置。把图当动画的步骤看，而不是当静态照片看，才能读出作者想表达的「变化」。打印版没有动画，所以每帧都自包含、把上一帧的节点重复画一遍——这是约束，不是啰嗦。</p>
+<h3 id="linalg-chapters-ch01-01-vectors-from-arrays-to-geometry-md-h33">1.14.2 最常见的误解：把向量当成「一串数」就完事</h3>
+<p>初学者最容易停在数组视角，把向量当成「装了几个数的容器」，于是遇到几何说法就觉得是比喻。正确的态度是来回切换：看到 <code>a+b</code> 要能立刻想到首尾相接的箭头，看到点积要能想到投影；反过来，看到两支箭头要能写出它们的分量。两种视角不是「直观 vs 严格」，而是同一对象的两种坐标表示。这个习惯在下一单元会立刻兑现——线性组合既是「伸缩再拼接」的几何动作，也是「解方程组」的代数动作，只会其中一种的人会在张成空间那里卡住。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别把「归一化」当成无损操作</span></header>
+<div class="box-b">
+<p>单位化 <code>a/‖a‖</code> 丢掉了长度信息，这一点在检索里是特性，在别处可能是 bug。比如做词频统计时，把词频向量单位化后，「出现一次」和「出现一百次」方向相同、余弦相同——模型再也看不出频次差异。再比如梯度更新里，若你偷偷把梯度单位化，更新步伐就固定为 1，再也不会随梯度大小自动调整步长，训练很可能直接发散。归一化永远要问一句：被除掉的那个长度，是不是本来携带了我要的信息？本单元的余弦相似度之所以合理，是因为它明确服务于「只比方向」的任务。</p>
+</div>
+</section>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>向量既是箭头也是有序数组；加减在数组里是逐格算，在几何里是首尾相接；</li>
+<li>点积 <code>a·b = |a||b|cosθ</code>：既含长度也含方向；除以两长度得余弦相似度，只比方向；</li>
+<li>范数 <code>‖a‖ = √(a·a)</code>，单位向量是 <code>a/‖a‖</code>；</li>
+<li><code>vec_t</code> 用 <code>n</code> 记录有效长度、用定长数组装数值，空槽不参与计算；</li>
+<li>打印向量用冒号而非等号，避免被闸门的数值行解析当成坏行；</li>
+<li><code>mode=numerical</code> 的黄金值与容差写在清单，程序自报的 PASS 不算证据。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li><code>a=(1,2,3)</code>、<code>b=(4,-5,6)</code>，手算 <code>a-b</code> 与 <code>a·b</code>，再算 <code>cosθ</code> 的符号。</li>
+<li>为什么「把 b 的尾巴挪到 a 的头上」不算改变了 b？</li>
+<li>两个向量点积为 0，是否一定有一个是零向量？举一个反例。</li>
+<li>余弦相似度相比点积，牺牲了什么信息？什么时候这种牺牲是坏事？</li>
+<li>为什么打印向量用 <code>a:[...]</code> 而不是 <code>a=[...]</code>？闸门里对应的错误码是什么？</li>
+<li><code>vec_dot</code> 只按 <code>a.n</code> 循环。传进一个 2 维、一个 3 维的向量会出什么事？为什么这属于「静默错误」而不是当场崩溃？</li>
+<li>把 <code>b</code> 从 <code>(4,-5,6)</code> 改成 <code>(-4,5,-6)</code>，<code>‖b‖</code> 和 <code>cosθ</code> 分别怎么变？先用几何直觉猜，再动手算。</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li><code>a-b=(1-4, 2-(-5), 3-6)=(-3,7,-3)</code>；点积 <code>4-10+18=12</code>；cos 为正，夹角小于 90°。</li>
+<li>向量只有方向和长度，没有固定起点。平移箭头不改它的分量，所以还是同一个向量；点才有固定位置。</li>
+<li>不一定。例如 <code>a=(1,0)</code>、<code>b=(0,1)</code>，两个都不是零向量，但 <code>a·b=0</code>——它们垂直。</li>
+<li>牺牲了长度（模长）信息。若「更长」本身有意义（比如词频、金额、重要度），归一化后这些差别被抹掉，点积反而更合适。</li>
+<li><code>a=[...]</code> 会被解析成 <code>key=a</code> 的数值行，但 <code>[...]</code> 不是合法有限小数，闸门报 <code>numeric_value_invalid</code>。改用冒号后它只是普通文字行，逐字对账即可。</li>
+<li>它只读 b 的前两个分量，把 b 的第三格完全忽略，算出的点积与「正确结果」无关；程序既不会越界也不会报错，所以是静默错误。真正危险的是那格可能残留着上一次计算的旧值，导致同一份输入在不同运行里得到不同点积。工程上要么在入口断言两个 <code>n</code> 相等，要么把维度编进类型，让这类调用编译不过。</li>
+<li><code>(-4,5,-6)</code> 是 <code>(4,-5,6)</code> 整体乘 <code>-1</code>，是同一支箭头转了 180°，所以 <code>‖b‖</code> 不变，仍是 <code>8.774964</code>；点积从 <code>12</code> 变成 <code>-12</code>，余弦从 <code>0.365487</code> 变成 <code>-0.365487</code>。几何直觉：方向反了，夹角从锐角变钝角，余弦取相反数，长度完全不参与这件事。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

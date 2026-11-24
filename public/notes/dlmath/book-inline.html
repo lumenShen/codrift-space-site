@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《深度学习数学基础》</title>
+<meta name="description" content="从数值实验到 Transformer · 真梯度对拍 · 真种子复现">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<style>
+@charset "UTF-8";
+/* ==========================================================================
+ * theme.css — 《C / C++ / 算法 / 项目实战》版式系统（读代码专用）
+ *
+ * 这份文件解决一个问题：读者第一眼要能分清**五种东西**——
+ *   ① 源码块（.codeblock）   ② 终端输出（.term-output，深底）
+ *   ③ 编译诊断（.term-diagnostic，浅红+粗左条）  ④ 真机实测数字（.box-experiment 里的 strong）
+ *   ⑤ 老师的大白话（.box-plain，暖底+顶部虚线）
+ * 彩色屏幕上靠色相，灰度打印上靠**底色深浅 + 左边框样式 + 字重**三重冗余；每种块在灰度下
+ * 都有独一无二的「形状指纹」（见第 4 节开头的表），不靠颜色也能认出是哪种块。
+ *
+ * 结构：
+ *   0. 设计令牌（颜色 / 字体 / 尺度 / 高度预算）
+ *   1. 页面骨架（封面区、目录、页脚、站内导航、单元导航）
+ *   2. 标题层级
+ *   3. 正文元素（段落、列表、表格、引用、行内代码）
+ *   4. 语义块（12 种）
+ *   5. 代码块（行号列 / 行标注 / 旁注 / 折行 / 空白可见 / 续块）
+ *   6. 终端块（真实输出 / 编译诊断 / 会话记录）
+ *   7. 图元（树 / 调用树 / 内存 / 图 / 可见性；屏幕版动画 + 打印版静态帧）
+ *   8. 打印（A4、页码、命名页页眉、分页控制）
+ *   9. 屏幕适配与无障碍
+ *
+ * 三条不可动的约束（改版式前先读）：
+ *   a) 配色表与 build/splitcheck.py 的 HEADER_COLORS / BODY_COLORS 一一对应：
+ *      改这里的底色必须同步改那张表（见 build/TOOLCHAIN.md 第 6 节）。
+ *   b) @page 的 A4 与 margin: 19mm 17mm 20mm 17mm 不许改：splitcheck.py 按这三个值
+ *      算版心底边与页首采样点，改了体检数字就全错。
+ *   c) 分页策略 = 「内容高度预算 + 分页规则」双管齐下（第 8 节）：块整体不打断，
+ *      所以块的高度上限就是页尾空白的上限；超长内容必须在写作阶段拆块（第 5 节）。
+ * ========================================================================== */
+
+/* ==========================================================================
+ * 0. 设计令牌
+ * ========================================================================== */
+
+:root {
+  /* --- 墨色与纸色 --- */
+  --ink: #16181d;          /* 正文 */
+  --ink-soft: #333a46;     /* 次级正文 */
+  --ink-mute: #6b7280;     /* 辅助信息（页码、单位、提示） */
+  --rule: #d8dce3;         /* 细线 */
+  --rule-soft: #e8ebf0;    /* 更浅的线 */
+  --rule-strong: #aeb6c2;  /* 粗线 */
+  --paper: #ffffff;
+  --paper-soft: #f6f8fa;   /* 统一的「块头」灰（也用于表头、图元标题带） */
+  --paper-tint: #f2f5f9;   /* 目录底 */
+
+  /* --- 全书强调色（墨蓝）：链接、行内强调 --- */
+  --accent: #1b4b8f;
+  --accent-deep: #143a6e;
+  --accent-soft: #eaf0f8;
+
+  /* --- 字体 ---
+   * 正文：中文长时间阅读栈（黑体系，字号 10.5pt / 行高 1.72）。
+   * 代码：等宽栈。Consolas 与 Cascadia Mono 都没有中文字形，Chrome 会逐字回退，
+   *       所以中文字体必须显式排在 monospace 之前，中文注释才不会是方框（见 TOOLCHAIN 第 2 节）。
+   */
+  --font-sans: "Segoe UI", -apple-system, "Microsoft YaHei", "PingFang SC",
+    "Hiragino Sans GB", "Source Han Sans SC", "Noto Sans CJK SC", "SimSun", sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", "Courier New", "DejaVu Sans Mono",
+    "Noto Sans Mono CJK SC", "Microsoft YaHei", monospace;
+
+  /* --- 尺度 --- */
+  --fs-body: 9.5pt;        /* 中文正文（打印） */
+  --lh-body: 1.49;         /* 中文正文行高：舒适且不至于让块长胖 */
+  --fs-code: 8pt;          /* 代码字号：一行 96 列仍放得下（体检口径的宽度上限） */
+  --lh-code: 1.3;          /* 代码行高：每行 10.4pt ≈ 15.9px（110 DPI） */
+  --fs-h1: 1.72em;
+  --fs-h2: 1.26em;
+  --fs-h3: 1.08em;
+  --measure: 42em;         /* 屏幕正文最佳阅读宽度 */
+  --radius: 4px;
+  --radius-lg: 6px;
+
+  /* --- 高度预算（体检口径：110 DPI，1pt = 1.528px；版心 258mm = 1117px）---
+   * 这些值不是美术偏好，是**分页规则的反推结果**：块整体 break-inside: avoid，
+   * 于是「页尾空出来的最大高度 < 换页那一刻正在排的块的高度」。把块压在这些上限之内，
+   * 页尾空白就被摁在体检线（250px）附近（推导见第 8 节）。
+   */
+  --budget-box: 330px;     /* 语义块设计目标（当前字号下约 14 行正文；超过就拆成「（续）」两块） */
+  --budget-code: 22;       /* 代码块行数上限（≈ 22 × 15.9px + 块头 ≈ 380px） */
+  --budget-term: 18;       /* 终端 / 诊断 / 会话块：行数上限 */
+  --budget-frame: 260px;   /* 图元单帧（帧与帧之间允许分页，每帧自带标题） */
+
+  /* --- 语义块色板 ---
+   * 每个块三件套：--c-*（文字/图标主色）、--bg-*（块体底色）、--hd-*（标题带底色）。
+   * 底色与标题带都在 splitcheck.py 的颜色表里；任何一对颜色的 RGB 至少有一个通道
+   * 相差 ≥3，否则颜色近似匹配（容差 2）会混淆（TOOLCHAIN 第 8 节第 4 条）。
+   */
+  --c-goal: #2c4a6e;       --bg-goal: #f2f6fc;
+  --c-syntax: #1b4b8f;     --bg-syntax: #eef4fd;     --hd-syntax: #dbe8fa;
+  --c-trap: #a5241d;       --bg-trap: #fdeeec;       --hd-trap: #f8dcd6;
+  --c-compiler: #3f4a58;   --bg-compiler: #f1f4f8;   --hd-compiler: #dde3ea;
+  --c-standard: #8a5a00;   --bg-standard: #fdf7ea;   --hd-standard: #f6e6c2;
+  --c-experiment: #0f6f4a; --bg-experiment: #e9f7f0; --hd-experiment: #cfead9;
+  --c-practice: #5b3fa8;   --bg-practice: #f4f0fe;   --hd-practice: #e3dbf8;
+  --c-debug: #a3520b;      --bg-debug: #fdf2e6;      --hd-debug: #f8e1c6;
+  --c-plain: #8a6a1f;      --bg-plain: #fdf9ef;
+  --c-summary: #146c3a;    --bg-summary: #f0f8e6;    --hd-summary: #d9eedd;
+  --c-quiz: #8f2049;       --bg-quiz: #fdf1f6;       --hd-quiz: #f8d7e2;
+  --c-note: #45566b;       --bg-note: #ffffff;
+
+  /* --- 终端与代码 --- */
+  --term-bg: #0d1117;      /* 终端输出底色（深） */
+  --term-ink: #e6edf3;
+  --term-head: #161b22;
+  --diag-bg: #fff8f8;      --diag-hd: #f9dcdc;      --diag-ink: #8b1a1a;
+  --mark-bg: #fff5cc;      /* 被标注的代码行 */
+  --mark-rule: #d4a017;
+  --note-bg: #fdf1b8;      /* 行尾旁注小签 */
+  --viz-bg: #fcfcfd;
+}
+
+/* ==========================================================================
+ * 1. 页面骨架
+ * ========================================================================== */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  /* 打印底色关键：写在 html 上可继承，语义块/终端块的底色才打得出来（TOOLCHAIN 第 6 节） */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-size: var(--fs-body);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: var(--lh-body);
+  text-rendering: optimizeLegibility;
+}
+
+.doc {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.1rem 3rem;
+}
+
+@media screen {
+  /* 屏幕阅读尺度：打印用的 9.5pt / 行高 1.49 / 代码 8pt 放到大屏上又小又挤。
+     根字号必须和正文对齐，否则 .toc / .legend / .cb-head 这些 rem 小字
+     会继续按 9.5pt 结算，比正文小一大截。 */
+  html { font-size: 17px; }
+  :root {
+    --font-sans: "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Noto Sans SC",
+      "Source Han Sans SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    --fs-code: 0.84rem;   /* ≈14.3px，代码块与终端输出共用 */
+    --lh-code: 1.55;
+  }
+  body {
+    font-size: 17px;
+    line-height: 1.75;
+    background: #fff;
+  }
+  .doc { padding-top: 1.4rem; }
+}
+
+/* --- 站内导航（屏幕可见，打印隐藏）--- */
+.sitenav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.05rem;
+  align-items: center;
+  padding: 0.5rem 1.1rem;
+  border-bottom: 1px solid var(--rule);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: saturate(1.4) blur(6px);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.sitenav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid transparent;
+}
+
+.sitenav a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.sitenav .nav-brand { margin-right: auto; font-weight: 700; color: var(--ink); }
+.sitenav .ico-svg { width: 1em; height: 1em; vertical-align: -0.12em; }
+
+/* --- 页首标题区（打印时的封面块：@page p-cover 无页眉无页码）--- */
+.doc-head {
+  padding: 1.4rem 0 0.9rem;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 1.2rem;
+}
+
+.doc-kicker {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: var(--ink-mute);
+}
+
+.doc-title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.28;
+  letter-spacing: 0.01em;
+}
+
+.doc-sub { margin: 0.5rem 0 0; font-size: 0.95rem; color: var(--ink-soft); }
+.doc-meta { margin: 0.7rem 0 0; font-size: 0.78rem; color: var(--ink-mute); }
+
+/* 首页的「怎么读这本书」小卡片：五种东西各有长相（读者第一页就要看到） */
+.legend {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.9rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  font-size: 0.86rem;
+  line-height: 1.62;
+}
+
+.legend-t { margin: 0 0 0.35rem; font-weight: 700; font-size: 0.9rem; }
+.legend ul { margin: 0; padding-left: 1.15em; }
+.legend li { margin: 0.12em 0; }
+.legend .sw {
+  display: inline-block;
+  width: 1.05em;
+  height: 0.86em;
+  margin-right: 0.32em;
+  vertical-align: -0.08em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+}
+.legend .sw-code { background: #fff; border-left: 3px solid #b9c0ca; }
+.legend .sw-out { background: var(--term-bg); border-color: var(--term-bg); }
+.legend .sw-diag { background: var(--diag-bg); border-left: 3px solid var(--c-trap); }
+.legend .sw-num { background: var(--bg-experiment); border-left: 3px solid var(--c-experiment); }
+.legend .sw-plain { background: var(--bg-plain); border-top: 2px dashed var(--c-plain); }
+
+/* --- 目录面板 --- */
+.toc {
+  margin: 0 0 1.5rem;
+  padding: 0.9rem 1.05rem 1rem;
+  background: var(--paper-tint);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: 0.88rem;
+  break-inside: avoid;
+}
+
+.toc-h {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.55rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.toc-h .ico-svg { width: 1em; height: 1em; color: var(--accent); }
+.toc-list { margin: 0; padding: 0; list-style: none; line-height: 1.62; }
+.toc-list li { margin: 0.08rem 0; }
+.toc-l3 { padding-left: 1.35em; }
+.toc-empty { margin: 0; color: var(--ink-mute); }
+.toc a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px dotted var(--rule-strong); }
+.toc a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* --- 页脚 --- */
+.doc-foot {
+  margin-top: 2.2rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.76rem;
+  color: var(--ink-mute);
+}
+
+/* --- 单元导航（屏幕可见，打印隐藏）--- */
+.unit-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.6rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.8rem;
+  color: var(--ink-mute);
+}
+
+/* --- 合书时的章封面页与单元标题 ---
+ * 章封面页（.chapter-head）占整页、无页眉（页名由 render.js 注入），页脚页码照常。
+ * 本机实测：@page :first 对命名页不生效、@page <名字>:first 只匹配文档第 1 页，
+ * 所以「章首页不重复页眉」只能靠页名切换（探针与结论见 build/TOOLCHAIN.md）。 */
+.chapter-head { margin: 0 0 1.2rem; padding-bottom: 0.8rem; border-bottom: 2px solid var(--ink); }
+.chapter-title {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0;
+  border-bottom: 0;
+  font-size: 1.65em;
+  line-height: 1.3;
+  break-after: avoid;
+}
+.chapter-title .chapter-kicker {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.56em;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  color: var(--ink-mute);
+}
+.chapter-meta { margin: 0 0 0.7rem; font-size: 0.8rem; color: var(--ink-mute); }
+.chapter-units { margin: 0; padding-left: 1.5em; font-size: 0.92rem; }
+.chapter-units li { margin: 0.22em 0; }
+.chapter-units a { color: var(--ink-soft); border-bottom: 1px dotted var(--rule-strong); }
+.chapter-units .cu-note { margin-left: 0.5em; font-size: 0.86em; color: var(--ink-mute); }
+
+.unit-title {
+  margin: 1.6em 0 0.55em;
+  padding: 0.3em 0 0.3em 0.65em;
+  border-left: 4px solid var(--accent);
+  font-size: 1.04em;
+  font-weight: 700;
+  break-after: avoid;
+}
+
+.unit-title:first-of-type { margin-top: 1em; }
+
+/* ==========================================================================
+ * 2. 标题层级
+ * ========================================================================== */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  color: var(--ink);
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+h2 {
+  margin: 1.25em 0 0.45em;
+  padding: 0.14em 0 0.14em 0.6em;
+  border-left: 4px solid var(--accent);
+  font-size: var(--fs-h2);
+  line-height: 1.4;
+}
+
+h3 {
+  margin: 0.9em 0 0.3em;
+  font-size: var(--fs-h3);
+  line-height: 1.45;
+}
+
+h3::before {
+  content: "";
+  display: inline-block;
+  width: 0.4em;
+  height: 0.4em;
+  margin-right: 0.4em;
+  vertical-align: 0.06em;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+h4 { margin: 0.9em 0 0.3em; font-size: 1em; color: var(--ink-soft); }
+
+/* 章内小节的编号（1.1 / 1.2.3）跟着标题走，不用另起样式 */
+.h-num { color: var(--accent); margin-right: 0.3em; font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+ * 3. 正文元素
+ * ========================================================================== */
+
+p {
+  margin: 0 0 0.38em;
+  orphans: 2;
+  widows: 2;
+}
+
+/* 中文着重号：术语用 <em>，底面加点（比斜体更符合中文排版习惯）。
+ * display: inline-block 是**修 bug 不是装饰**：下加点会扩张行盒，与同一行里下探的行内盒子
+ * （上下标、行内代码的行盒）互相放大，行距会裂开；行内块让着重号只在自己的行盒里结算。
+ * 这条沿用 gaoshu 的实测结论（gaoshu-notes/build/theme.css:401 的注释），本项目未复测。 */
+em {
+  font-style: normal;
+  text-emphasis: filled dot var(--accent);
+  -webkit-text-emphasis: filled dot var(--accent);
+  text-emphasis-position: under right;
+  display: inline-block;
+  max-width: 100%;
+}
+
+strong { font-weight: 700; color: #0d0f13; }
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+a:hover { border-bottom-color: var(--accent); }
+
+mark { background: #fdf0b8; padding: 0 0.15em; border-radius: 2px; }
+
+/* 行内代码：只在「正文里提到一个标识符/命令/文件名」时用。
+ * 底色**故意不**进 splitcheck 的颜色表：行内代码可能在页首行首出现，
+ * 若算作「块体底色」会把正常的正文页误判成续块（TOOLCHAIN 第 6 节的采样方式）。 */
+code, kbd, samp {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: #e9edf2;
+  border: 1px solid #e2e7ee;
+  border-radius: 3px;
+  padding: 0.02em 0.3em;
+  overflow-wrap: anywhere;
+}
+
+kbd { background: #fff; border-bottom-width: 2px; }
+
+blockquote {
+  margin: 0.8em 0;
+  padding: 0.1em 0 0.1em 0.85em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+ul, ol { margin: 0.35em 0 0.7em; padding-left: 1.5em; }
+li { margin: 0.1em 0; }
+li > ul, li > ol { margin: 0.2em 0 0.25em; }
+ul { list-style: none; }
+ul > li { position: relative; }
+ul > li::before {
+  content: "";
+  position: absolute;
+  left: -0.92em;
+  top: 0.62em;
+  width: 0.28em;
+  height: 0.28em;
+  background: var(--accent);
+  border-radius: 50%;
+}
+ul > li > ul > li::before { background: none; border: 1px solid var(--accent); }
+ol { list-style: decimal; }
+ol > li::marker { color: var(--accent); font-weight: 600; }
+
+table {
+  width: 100%;
+  margin: 0.7em 0 0.8em;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  break-inside: auto;
+}
+
+caption {
+  caption-side: top;
+  margin-bottom: 0.3em;
+  font-size: 0.82em;
+  color: var(--ink-mute);
+  text-align: left;
+}
+
+/* 表格可以跨页，但表头每页重复（thead 重复显示），行不许拆 —— 所以「表被拆」不是缺陷 */
+thead { display: table-header-group; }
+tbody tr { break-inside: avoid; }
+
+th, td {
+  padding: 0.26em 0.48em;
+  border: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: var(--paper-soft); font-weight: 700; border-bottom: 1.5px solid var(--rule-strong); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 裸 pre（缩进代码块、规范文档里展示围栏写法时用）：不带类名，所以不会碰到 .code / .term-body */
+pre:not([class]) {
+  margin: 0.8em 0;
+  padding: 0.6em 0.85em;
+  background: var(--paper-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  break-inside: avoid;
+}
+
+hr { height: 0; margin: 1.5em 0; border: 0; border-top: 1px solid var(--rule); }
+img, svg { max-width: 100%; }
+
+/* ==========================================================================
+ * 4. 语义块（12 种）
+ *
+ * 灰度可辨识的「形状指纹」——打印成黑白也认得出是哪种块：
+ *   goal        无底色左条 · 顶部 2px 虚线 · 标题无带
+ *   syntax      左侧 6px 实条 + 标题带
+ *   trap        左侧 8px 最粗条 + 标题带 + 标题加粗到 800
+ *   compiler    左侧 2px 双线 + 标题用等宽字体（像编译器在说话）
+ *   standard    四周细框 + 上下各 2px 双线（书页感）+ 内部左竖线引用
+ *   experiment  左侧 6px 实条 + 外圈 1px 点线 + 块内数字染绿并加粗
+ *   practice    全框圆角 + 标题带 + 标题前的小方点
+ *   debug       左侧 6px 实条 + 顶部 1px 线 + 块内等宽小字
+ *   plain       无框 · 顶部 3px 虚线 + 暖底 + 圆角（老师旁白）
+ *   summary     上下各 2px 实线夹住浅底
+ *   quiz        全框 + 圆角 + 每题前带序号圈
+ *   note        左侧 1px 细线 · 无底色 · 小一号
+ * ========================================================================== */
+
+.box {
+  position: relative;
+  margin: 0.48em 0 0.55em;
+  border-radius: var(--radius);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* 图标容器：**必须有全局尺寸**，不能只给某个块内部定尺寸。
+ * 实测踩过：`.ico` 若没有 width/height，里面 `width:100%` 的 svg 会撑满整行
+ * （viz.js 的图元标题、terminal 块头都带图标），一张图元因此变成一整页，
+ * 进而把分页挤出一大片空白。这条规则不要删。 */
+.ico {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.16em;
+  color: currentColor;
+}
+.ico .ico-svg { display: block; width: 100%; height: 100%; }
+
+.box > .box-h {
+  display: flex;
+  align-items: center;
+  gap: 0.42em;
+  margin: 0;
+  padding: 0.2em 0.65em 0.18em;
+  font-size: 0.86em;
+  line-height: 1.5;
+  font-weight: 700;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+/* 图标：跟随所在块的主色（灰度打印时随之变深变浅）；尺寸由上面的全局 .ico 负责 */
+.box-h .ico { color: currentColor; }
+.box-kind { flex: none; letter-spacing: 0.03em; }
+.box-h > .box-t::before { content: "·"; margin: 0 0.4em 0 0.08em; color: var(--ink-mute); font-weight: 400; }
+.box-t { font-weight: 700; color: var(--ink); }
+
+.box > .box-b { padding: 0.28em 0.68em 0.3em; }
+.box > .box-b > :first-child { margin-top: 0; }
+.box > .box-b > :last-child { margin-bottom: 0; }
+
+/* 块内的段距一律由**后一个元素**的 padding-top 承担：分页把块切开时 margin 会被丢掉、
+ * padding 不会（gaoshu-notes/build/theme.css:838 的实测）。本项目的块整体不打断，
+ * 所以这一条是冗余保险：真出现跨页时续页首行也不贴边。 */
+.box > .box-b > :not(h2, h3, h4) { margin-top: 0; margin-bottom: 0; }
+.box > .box-b > :not(h2, h3, h4) + :not(h2, h3, h4) { padding-top: 0.5em; }
+.box > .box-b > ul + :not(h2, h3, h4),
+.box > .box-b > ol + :not(h2, h3, h4) { padding-top: 0.6em; }
+.box > .box-b > table + :not(h2, h3, h4) { padding-top: 0.6em; }
+.box > .box-b > pre + :not(h2, h3, h4) { padding-top: 0.5em; }
+.box > .box-b > blockquote + :not(h2, h3, h4) { padding-top: 0.7em; }
+.box > .box-b li { margin-top: 0; margin-bottom: 0; }
+.box > .box-b li + li { padding-top: 0.16em; }
+.box > .box-b > ul, .box > .box-b > ol { padding-left: 1.4em; }
+/* 块内不许放大块（≥250px 的代码/输出/图元）——那会把整个块推成原子，页尾空出半页。
+ * 块内只放行内代码、短引用与列表（见风格规范《分页三律》）。 */
+.box > .box-b > .codeblock,
+.box > .box-b > .term { margin: 0.5em 0 0.1em; }
+
+/* --- 学习目标：无底色左条，顶部 2px 虚线 --- */
+.box-goal {
+  padding: 0.35em 0 0.1em;
+  border-top: 2px dotted var(--br-goal, #b9c8dc);
+  background: var(--bg-goal);
+  border-radius: 0;
+}
+.box-goal > .box-h { color: var(--c-goal); padding-left: 0.85em; }
+.box-goal > .box-b { padding-left: 0.85em; }
+.box-goal li + li { padding-top: 0.1em; }
+
+/* --- 语法规则：左侧 6px 实条 + 标题带 --- */
+.box-syntax { background: var(--bg-syntax); border-left: 6px solid var(--c-syntax); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-syntax > .box-h { background: var(--hd-syntax); color: var(--c-syntax); border-radius: 0 var(--radius) 0 0; }
+
+/* --- 陷阱：左侧 8px 最粗条 + 标题带（灰度下最粗的那条一定是陷阱）--- */
+.box-trap { background: var(--bg-trap); border-left: 8px solid var(--c-trap); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-trap > .box-h { background: var(--hd-trap); color: var(--c-trap); border-radius: 0 var(--radius) 0 0; font-weight: 800; }
+.box-trap > .box-b > p > strong:first-child { color: var(--c-trap); }
+
+/* --- 编译器视角：左侧 2px 双线 + 等宽标题（像编译器在说话）--- */
+.box-compiler { background: var(--bg-compiler); border-left: 2px double var(--c-compiler); border-radius: 0 var(--radius) var(--radius) 0; }
+.box-compiler > .box-h {
+  background: var(--hd-compiler);
+  color: var(--c-compiler);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  letter-spacing: 0;
+  border-radius: 0 var(--radius) 0 0;
+}
+.box-compiler > .box-b { font-size: 0.96em; }
+
+/* --- 标准原文：四周细框 + 上下 2px 双线 + 内部引用感 --- */
+.box-standard { background: var(--bg-standard); border: 1px solid var(--rule-strong); border-top-width: 2px; border-bottom-width: 2px; border-radius: 0; }
+.box-standard > .box-h { background: var(--hd-standard); color: var(--c-standard); padding-left: 0.85em; }
+.box-standard > .box-b { padding: 0.5em 0.95em 0.55em; }
+.box-standard > .box-b > p { padding-left: 0.7em; border-left: 2px solid #e0cf9f; }
+.box-standard > .box-b > p:first-child { font-size: 0.97em; color: #4a3a10; }
+.box-standard .std-cite { display: block; font-size: 0.86em; color: var(--ink-mute); }
+
+/* --- 实验记录：左侧 6px 实条 + 外圈点线 + 块内数字染绿加粗（「真机实测数字」的样子）--- */
+.box-experiment {
+  background: var(--bg-experiment);
+  border: 1px dotted #8fc6ab;
+  border-left: 6px solid var(--c-experiment);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.box-experiment > .box-h { background: var(--hd-experiment); color: var(--c-experiment); border-radius: 0 var(--radius) 0 0; }
+.box-experiment .box-b strong { color: var(--c-experiment); font-weight: 800; font-variant-numeric: tabular-nums; }
+.box-experiment .box-b code { background: rgba(255, 255, 255, 0.8); }
+
+/* --- 工程惯例：全框圆角 + 标题带 + 标题前小方点 --- */
+.box-practice { background: var(--bg-practice); border: 1px solid #cfc2f0; border-radius: var(--radius-lg); }
+.box-practice > .box-h { background: var(--hd-practice); color: var(--c-practice); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.box-practice > .box-h::before { content: ""; flex: none; width: 0.42em; height: 0.42em; background: var(--c-practice); border-radius: 1px; }
+
+/* --- 调试实录：左侧 6px 实条 + 顶部 1px 线 + 块内等宽 --- */
+.box-debug { background: var(--bg-debug); border-left: 6px solid var(--c-debug); border-top: 1px solid #e2c49b; border-radius: 0 var(--radius) var(--radius) 0; }
+.box-debug > .box-h { background: var(--hd-debug); color: var(--c-debug); border-radius: 0 var(--radius) 0 0; }
+.box-debug > .box-b { font-family: var(--font-mono); font-size: 0.85em; line-height: 1.55; }
+.box-debug > .box-b p { font-family: var(--font-mono); }
+.box-debug code { background: rgba(255, 255, 255, 0.85); }
+
+/* --- 大白话：无框、顶部 3px 虚线、暖底、圆角（老师旁白）--- */
+.box-plain { background: var(--bg-plain); border-top: 3px dashed var(--c-plain); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.box-plain > .box-h { color: var(--c-plain); padding: 0.4em 0.85em 0.2em; }
+.box-plain > .box-b { padding: 0 0.9em 0.6em; font-size: 1.01em; }
+.box-plain > .box-b > p:first-child::first-letter { font-weight: 700; }
+
+/* --- 小结：上下 2px 实线夹住浅底 --- */
+.box-summary { background: var(--bg-summary); border-top: 2px solid var(--c-summary); border-bottom: 2px solid var(--c-summary); border-radius: 0; }
+.box-summary > .box-h { color: var(--c-summary); padding-left: 0.85em; }
+.box-summary > .box-b { padding: 0.1em 0.9em 0.6em; }
+.box-summary ul > li::before { background: var(--c-summary); }
+
+/* --- 自测题：全框圆角 + 每题序号圈 --- */
+.box-quiz { background: var(--bg-quiz); border: 1px solid #e7bccf; border-radius: var(--radius-lg); }
+.box-quiz > .box-h { background: var(--hd-quiz); color: var(--c-quiz); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.box-quiz > .box-b { padding: 0.45em 0.95em 0.6em; }
+.box-quiz ol { padding-left: 1.7em; }
+.box-quiz ol > li::marker { color: var(--c-quiz); font-weight: 700; }
+.box-quiz > .box-b > ol > li { padding-top: 0; }
+.box-quiz > .box-b > ol > li + li { padding-top: 0.28em; }
+
+/* --- 注：左侧 1px 细线、无底色、小一号（给答案、补充说明用）--- */
+.box-note { background: none; border-left: 1px solid var(--rule-strong); border-radius: 0; font-size: 0.95em; }
+.box-note > .box-h { color: var(--c-note); font-size: 0.84em; padding: 0.1em 0.8em 0.05em; }
+.box-note > .box-b { padding: 0 0.8em 0.15em; color: var(--ink-soft); }
+
+.box + .box { margin-top: 0.6em; }
+.box + h2, .box + h3 { margin-top: 1.2em; }
+
+/* ==========================================================================
+ * 5. 代码块：行号列 / 行标注 / 旁注 / 折行 / 空白可见 / 续块
+ *
+ * DOM 契约（render.js + shiki.js 产出，类名不要改，见 TOOLCHAIN 第 2.1 节）：
+ *   figure.codeblock > figcaption.cb-head(.cb-lang/.cb-file/.cb-lines/.cb-title)
+ *                    > div.cb-body > pre.code > span.cl[data-ln] > span.ln + span.code
+ *                    > ol.cb-notes > li > span.cb-note-ln
+ * ========================================================================== */
+
+.codeblock {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-left: 3px solid #b9c0ca;
+  border-radius: var(--radius);
+  background: #fff;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.cb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.7em;
+  padding: 0.22em 0.75em;
+  background: var(--paper-soft);
+  border-bottom: 1px solid #cfd6de;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.76em;
+  color: #57606a;
+}
+
+.cb-lang {
+  flex: none;
+  padding: 0 0.4em;
+  border: 1px solid #c6ced8;
+  border-radius: 2px;
+  background: #fff;
+  color: #30363d;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cb-file { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; color: #30363d; }
+.cb-lines { flex: none; margin-left: auto; color: #6b7280; }
+/* 续块标题：拆分的第二块（含「（续）」）在块头里显式标出来 */
+.cb-title { flex: none; font-weight: 700; color: var(--accent); }
+
+.cb-body { padding: 0.32em 0; overflow: visible; }
+
+.codeblock .code {
+  margin: 0;
+  padding: 0 0.85em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  tab-size: var(--tab-size, 4);
+  /* 容器**不**保留空白：逐行 DOM 的 .cl 之间是换行符，pre-wrap 会把每个换行也渲染成一个空的
+   * line box，行距凭空翻倍（实测每行 25pt → 应为 12.2pt）。空白由行内 .code 自己保留。 */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 行号列：网格第一列；续行只出现在第二列内部，所以**续行不重复行号**。
+ * 行号栏右边一条细竖线：折行的续行对齐到代码列，一眼看得出哪几行是同一个逻辑行。 */
+.cl {
+  display: grid;
+  grid-template-columns: 2.8em 1fr;
+  column-gap: 0.55em;
+  border-left: 2px solid transparent;
+}
+.cl .ln {
+  color: #98a1ad;
+  text-align: right;
+  user-select: none;
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  border-right: 1px solid var(--rule-soft);
+  padding-right: 0.45em;
+}
+.cl .ln::before { content: attr(data-ln); }
+.cl .code {
+  white-space: pre-wrap;        /* 每一行**内部**的空白与缩进照原样保留 */
+  overflow-wrap: anywhere;      /* 长行折行，不出现横向滚动、不裁切（shot.py 的 overflow 检查） */
+  min-width: 0;
+}
+.cl.is-empty { min-height: calc(var(--lh-code) * 1em); }
+.cl.is-empty .ln { color: #c8cdd4; }
+
+/* 行标注：整行高亮 + 左侧色条 + 行尾旁注小签；行号同时出现在 mark= 与 notes= 里（校验器强制） */
+.cl.is-marked { background: var(--mark-bg); box-shadow: inset 3px 0 0 var(--mark-rule); }
+.cl.is-marked .ln { color: #8a6b12; font-weight: 700; }
+.k-note {
+  margin-left: 0.6em;
+  padding: 0 0.35em;
+  background: var(--note-bg);
+  border: 1px solid #e0c264;
+  border-radius: 3px;
+  font-family: var(--font-sans);
+  font-size: 0.86em;
+  color: #6b5200;
+  white-space: normal;
+}
+
+/* 块尾图例：把旁注再列一遍（读 PDF 时不用回头找） */
+.cb-notes {
+  margin: 0;
+  padding: 0.35em 0.9em 0.5em 1.1em;
+  border-top: 1px dashed var(--rule);
+  font-family: var(--font-sans);
+  font-size: 0.82em;
+  color: #57606a;
+  list-style: none;
+}
+.cb-notes li { margin: 0.1em 0; }
+.cb-note-ln {
+  display: inline-block;
+  min-width: 2.1em;
+  margin-right: 0.3em;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  text-align: right;
+}
+
+/* 空白可见化：ws=visible 时空格 = ·、Tab = →（只在讲空白问题时用） */
+.ws { color: #b0b7c0; }
+.ws-tab { color: #c2410c; font-weight: 700; }
+.code:not(.show-ws) .ws { display: none; }
+
+/* ==========================================================================
+ * 6. 终端块：真实输出 / 编译诊断 / 会话记录
+ *
+ * 三种终端块与源码块的区别必须一眼可见：
+ *   源码块 = 白底 + 灰块头 + 左侧细条（.codeblock）
+ *   终端输出 = **深底白字**（.term-output，打印出来是黑块，全页最深的一块）
+ *   编译诊断 = 浅红底 + 粗左条 + 红字（.term-diagnostic）
+ *   会话记录 = 浅灰底 + 等宽 + 「$」提示（.term-session，给 gdb / 命令输出用）
+ * ========================================================================== */
+
+.term {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-radius: var(--radius);
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.term-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15em 0.6em;
+  padding: 0.28em 0.8em;
+  font-family: var(--font-mono);
+  font-size: 0.78em;
+}
+
+.term-kind { font-weight: 700; letter-spacing: 0.04em; }
+.term-title { color: inherit; opacity: 0.82; }
+.term-id { margin-left: auto; opacity: 0.68; font-size: 0.94em; }
+
+.term-body {
+  margin: 0;
+  padding: 0.35em 0.8em 0.4em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-code);
+  line-height: var(--lh-code);
+  white-space: normal;          /* 同上：空行/缩进由 .cl .code 自己保留 */
+  overflow-wrap: anywhere;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.term .cl { display: block; }
+.term .cl.is-text { padding-left: 0; }
+
+/* --- 真实运行输出：深底白字（PDF 里就是一块黑，最显眼） --- */
+.term-output { background: var(--term-bg); border-color: #0b0f14; }
+.term-output .term-head { background: var(--term-head); color: #c9d1d9; border-bottom: 1px solid #30363d; }
+.term-output .term-body { background: var(--term-bg); color: var(--term-ink); }
+.term-output .term-body .cl.is-text { color: var(--term-ink); }
+
+/* --- 编译诊断：浅红底 + 粗左条 + 红字 --- */
+.term-diagnostic { background: var(--diag-bg); border-color: #e0a0a0; border-left: 6px solid #b03a2e; border-radius: 0 var(--radius) var(--radius) 0; }
+.term-diagnostic .term-head { background: var(--diag-hd); color: #8b1a1a; border-bottom: 1px solid #e6b3b3; }
+.term-diagnostic .term-body { background: var(--diag-bg); color: var(--diag-ink); }
+
+/* --- 会话记录：浅灰底 + 等宽（gdb、命令行会话、流水线输出） --- */
+.term-session { background: #f3f5f8; border-color: #cdd5df; border-left: 3px solid #8b98a8; }
+.term-session .term-head { background: #e6eaf0; color: #3d4753; border-bottom: 1px solid #cdd5df; }
+.term-session .term-body { background: #f3f5f8; color: #23282f; }
+.term-session .term-body .cl.is-text { color: #23282f; }
+
+/* 「命令 + 输出」的区分：以 $ 开头的行是敲进去的命令 */
+.term-session .cl.is-cmd { color: #143a6e; font-weight: 700; }
+.term-diagnostic .cl.is-err { color: #8b1a1a; font-weight: 700; }
+
+/* ==========================================================================
+ * 7. 图元（一个图元，五处复用；屏幕动画 + 打印静态帧同一份数据源）
+ *    「五处复用」= 同一份围栏数据的五个消费点，定义见 docs/风格规范.md §5：
+ *      ① 单元单页 HTML  ② 合书 HTML  ③ 打印 PDF（.viz-print 逐帧静态图）
+ *      ④ 屏幕步进器（.viz-screen，零 JS）  ⑤ 挂载钩子（.viz-mount + template.html 的两个 mount 容器）
+ *
+ * 一份围栏内容 → 两个形态（由 build/viz.js 同时产出）：
+ *   屏幕版 .viz-screen：纯 CSS 步进器（radio + label 切帧，帧内节点错峰淡入），
+ *                       零外部依赖、零内联 JS；
+ *   打印版 .viz-print ：逐帧静态排开，每帧自带「第 N 步 · 标题」标题带，
+ *                       帧整体 break-inside: avoid，帧头 break-after: avoid（不断头）。
+ * 屏幕版在打印时 display: none，打印版在屏幕 display: none —— 两个形态永不重叠。
+ * ========================================================================== */
+
+.viz {
+  margin: 0.62em 0 0.72em;
+  border: 1px solid #cfd6de;
+  border-radius: var(--radius);
+  background: var(--viz-bg);
+  break-inside: auto;      /* 容器本身可以跨页：帧才是原子单位（见下） */
+}
+
+.viz-title {
+  padding: 0.26em 0.8em;
+  background: var(--paper-soft);
+  border-bottom: 1px solid #cfd6de;
+  border-radius: var(--radius) var(--radius) 0 0;
+  font-size: 0.9em;
+  font-weight: 700;
+  break-after: avoid;
+}
+
+.viz-title .viz-kind {
+  display: inline-block;
+  margin-right: 0.5em;
+  padding: 0 0.35em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.viz-hooks { display: none; }
+
+/* --- 共同部件：节点、边、步骤标题 --- */
+.vn-list { margin: 0; padding: 0.35em 0.75em 0.12em; font-family: var(--font-mono); font-size: var(--fs-code); line-height: 1.34; }
+.vn { display: flex; align-items: baseline; gap: 0.4em; }
+.vn .vn-tree { flex: none; color: #9aa4b1; white-space: pre; }
+.vn .vn-ico { flex: none; width: 1.05em; height: 1.05em; color: var(--ink-mute); align-self: center; }
+.vn .vn-ico .ico-svg { width: 100%; height: 100%; }
+.vn .vn-text { min-width: 0; overflow-wrap: anywhere; }
+.vn .vn-tag { flex: none; font-family: var(--font-sans); font-size: 0.8em; }
+.vn[data-new="lesson"] .vn-text { font-weight: 700; color: #146c3a; }
+.vn[data-new="lesson"] .vn-tag { color: #146c3a; }
+.vn[data-new="lesson"] .vn-tag::before { content: "← 本课新增"; }
+.vn[data-new="step"] .vn-text { font-weight: 700; color: var(--accent-deep); }
+.vn[data-new="step"] .vn-tag { color: var(--accent); }
+.vn[data-new="step"] .vn-tag::before { content: "← 本步新增"; }
+.vn[data-state="visited"] .vn-text { color: #0f6f4a; }
+.vn[data-state="active"] .vn-text { color: #8f2049; font-weight: 800; }
+.vn[data-state="pending"] .vn-text { color: var(--ink-mute); }
+
+.ve-list { margin: 0; padding: 0.1em 0.75em 0.35em; font-family: var(--font-mono); font-size: var(--fs-code); line-height: 1.34; }
+.ve { display: flex; align-items: baseline; gap: 0.42em; padding-left: calc(var(--depth, 0) * 1.15em); }
+.ve .ve-lbl { font-family: var(--font-sans); font-size: 0.88em; color: var(--ink-mute); }
+.ve .ve-arrow { color: var(--accent); font-weight: 700; }
+.ve[data-arrow="ret"] .ve-arrow { color: #a3520b; }
+.ve[data-arrow="both"] .ve-arrow { color: #5b3fa8; }
+
+.viz-step {
+  margin: 0;
+  padding: 0.24em 0.8em;
+  background: #eef1f6;
+  border-top: 1px solid #dfe4ec;
+  border-bottom: 1px solid #dfe4ec;
+  font-size: 0.82em;
+  font-weight: 700;
+  color: #3d4753;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+
+.viz-step .viz-step-no {
+  display: inline-block;
+  min-width: 3.1em;
+  margin-right: 0.45em;
+  padding: 0 0.3em;
+  background: #fff;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  text-align: center;
+}
+
+/* --- 打印形态：逐帧静态排开 --- */
+.viz-print { padding-bottom: 0.1em; }
+.viz-print .viz-frame { break-inside: avoid; page-break-inside: avoid; }
+.viz-print .viz-frame + .viz-frame { margin-top: 0.1em; }
+.viz-print .viz-canvas { padding-bottom: 0.2em; }
+
+/* --- 屏幕形态：纯 CSS 步进器 --- */
+.viz-screen .vs-radio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.viz-screen .vs-bar { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.5rem 0.7rem; border-bottom: 1px dashed var(--rule); }
+.viz-screen .vs-tab {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.viz-screen .vs-tab:hover { border-color: var(--accent); color: var(--accent); }
+.viz-screen .vs-note { align-self: center; margin-left: auto; font-size: 0.76rem; color: var(--ink-mute); }
+.viz-screen .vs-frame { display: none; }
+.viz-screen .vn, .viz-screen .ve { animation: viz-node-in 0.26s ease-out both; }
+.viz-screen .vn:nth-child(1), .viz-screen .ve:nth-child(1) { animation-delay: 0ms; }
+.viz-screen .vn:nth-child(2), .viz-screen .ve:nth-child(2) { animation-delay: 40ms; }
+.viz-screen .vn:nth-child(3), .viz-screen .ve:nth-child(3) { animation-delay: 80ms; }
+.viz-screen .vn:nth-child(4), .viz-screen .ve:nth-child(4) { animation-delay: 120ms; }
+.viz-screen .vn:nth-child(5), .viz-screen .ve:nth-child(5) { animation-delay: 160ms; }
+.viz-screen .vn:nth-child(6), .viz-screen .ve:nth-child(6) { animation-delay: 200ms; }
+.viz-screen .vn:nth-child(n+7), .viz-screen .ve:nth-child(n+7) { animation-delay: 240ms; }
+
+@keyframes viz-node-in {
+  from { opacity: 0; transform: translateY(-0.28em); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 帧切换：第 N 个 radio 选中 → 显示第 N 帧、点亮第 N 个标签（纯 CSS，最多 12 帧） */
+.viz-screen .vs-radio:nth-of-type(1):checked ~ .vs-stage > .vs-frame[data-step="1"],
+.viz-screen .vs-radio:nth-of-type(2):checked ~ .vs-stage > .vs-frame[data-step="2"],
+.viz-screen .vs-radio:nth-of-type(3):checked ~ .vs-stage > .vs-frame[data-step="3"],
+.viz-screen .vs-radio:nth-of-type(4):checked ~ .vs-stage > .vs-frame[data-step="4"],
+.viz-screen .vs-radio:nth-of-type(5):checked ~ .vs-stage > .vs-frame[data-step="5"],
+.viz-screen .vs-radio:nth-of-type(6):checked ~ .vs-stage > .vs-frame[data-step="6"],
+.viz-screen .vs-radio:nth-of-type(7):checked ~ .vs-stage > .vs-frame[data-step="7"],
+.viz-screen .vs-radio:nth-of-type(8):checked ~ .vs-stage > .vs-frame[data-step="8"],
+.viz-screen .vs-radio:nth-of-type(9):checked ~ .vs-stage > .vs-frame[data-step="9"],
+.viz-screen .vs-radio:nth-of-type(10):checked ~ .vs-stage > .vs-frame[data-step="10"],
+.viz-screen .vs-radio:nth-of-type(11):checked ~ .vs-stage > .vs-frame[data-step="11"],
+.viz-screen .vs-radio:nth-of-type(12):checked ~ .vs-stage > .vs-frame[data-step="12"] { display: block; }
+
+.viz-screen .vs-radio:nth-of-type(1):checked ~ .vs-bar > .vs-tab[data-step="1"],
+.viz-screen .vs-radio:nth-of-type(2):checked ~ .vs-bar > .vs-tab[data-step="2"],
+.viz-screen .vs-radio:nth-of-type(3):checked ~ .vs-bar > .vs-tab[data-step="3"],
+.viz-screen .vs-radio:nth-of-type(4):checked ~ .vs-bar > .vs-tab[data-step="4"],
+.viz-screen .vs-radio:nth-of-type(5):checked ~ .vs-bar > .vs-tab[data-step="5"],
+.viz-screen .vs-radio:nth-of-type(6):checked ~ .vs-bar > .vs-tab[data-step="6"],
+.viz-screen .vs-radio:nth-of-type(7):checked ~ .vs-bar > .vs-tab[data-step="7"],
+.viz-screen .vs-radio:nth-of-type(8):checked ~ .vs-bar > .vs-tab[data-step="8"],
+.viz-screen .vs-radio:nth-of-type(9):checked ~ .vs-bar > .vs-tab[data-step="9"],
+.viz-screen .vs-radio:nth-of-type(10):checked ~ .vs-bar > .vs-tab[data-step="10"],
+.viz-screen .vs-radio:nth-of-type(11):checked ~ .vs-bar > .vs-tab[data-step="11"],
+.viz-screen .vs-radio:nth-of-type(12):checked ~ .vs-bar > .vs-tab[data-step="12"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.viz-screen .vs-stage { padding-bottom: 0.35em; }
+
+/* --- 五种用法的皮肤（同一份 DOM，只换外形） --- */
+
+/* 树：缩进 + 连接线（默认样式即树；缩进深度由 viz.js 写出 style="--depth:N"，
+ * CSS 的 attr() 不能用在自定义属性上，所以深度只能在生成期写死） */
+.viz[data-kind="tree"] .vn-list { padding-bottom: 0.35em; }
+
+/* 调用树：等宽 + 箭头的「进入/返回」用不同颜色 */
+.viz[data-kind="calltree"] .vn-list { counter-reset: none; }
+
+/* 内存：节点变成「盒子」，边变成指针箭头 */
+.viz[data-kind="memory"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.45em 0.7em; padding-bottom: 0.35em; }
+.viz[data-kind="memory"] .vn { padding-left: 0; }
+.viz[data-kind="memory"] .vn .vn-tree { display: none; }
+.viz[data-kind="memory"] .vn .vn-text {
+  padding: 0.15em 0.5em;
+  border: 1px solid #98a4b2;
+  border-top: 2px solid #6b7887;
+  border-radius: 3px;
+  background: #fff;
+  font-family: var(--font-mono);
+}
+.viz[data-kind="memory"] .vn[data-state="active"] .vn-text { border-color: #8f2049; background: #fdf1f6; }
+.viz[data-kind="memory"] .vn[data-state="visited"] .vn-text { border-color: #0f6f4a; background: #eef8f1; }
+.viz[data-kind="memory"] .ve { font-family: var(--font-mono); }
+
+/* 图：节点变成圆角药丸，边单独列出（BFS/DFS 的每一步只改标记，不改结构） */
+.viz[data-kind="graph"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.4em 0.55em; }
+.viz[data-kind="graph"] .vn { padding-left: 0; }
+.viz[data-kind="graph"] .vn .vn-tree { display: none; }
+.viz[data-kind="graph"] .vn .vn-text {
+  padding: 0.1em 0.6em;
+  border: 1px solid #8b98a8;
+  border-radius: 999px;
+  background: #fff;
+}
+.viz[data-kind="graph"] .vn[data-state="active"] .vn-text { border-color: #8f2049; background: #fdf1f6; color: #8f2049; font-weight: 800; }
+.viz[data-kind="graph"] .vn[data-state="visited"] .vn-text { border-color: #0f6f4a; background: #eef8f1; color: #0f6f4a; }
+.viz[data-kind="graph"] .vn[data-state="pending"] .vn-text { border-style: dashed; }
+
+/* 可见性：节点变成「卡片」（编译单元 / 头文件 / 库），边带标签 */
+.viz[data-kind="visibility"] .vn-list { display: flex; flex-wrap: wrap; gap: 0.5em 0.7em; align-items: flex-start; }
+.viz[data-kind="visibility"] .vn { padding-left: 0; }
+.viz[data-kind="visibility"] .vn .vn-tree { display: none; }
+.viz[data-kind="visibility"] .vn .vn-text {
+  display: inline-block;
+  padding: 0.28em 0.6em;
+  border: 1px solid #9aa6b4;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 1px 0 #dde2e9;
+  font-size: 0.96em;
+}
+.viz[data-kind="visibility"] .vn[data-state="active"] .vn-text { border-color: #1b4b8f; background: #eef4fd; }
+.viz[data-kind="visibility"] .ve .ve-lbl { color: #30363d; }
+
+/* 打印时两个形态的取舍：只留静态帧 */
+@media print {
+  .viz-screen { display: none !important; }
+}
+@media screen {
+  .viz-print { display: none; }
+}
+
+/* 减少动效：屏幕步进器不再逐节点淡入（帧切换仍然可用） */
+@media (prefers-reduced-motion: reduce) {
+  .viz-screen .vn, .viz-screen .ve { animation: none; }
+}
+
+/* ==========================================================================
+ * 8. 打印：A4、页码、命名页页眉、分页控制
+ *
+ * 页眉页脚写法（本机实测有效，见 build/TOOLCHAIN.md 第 6 节）：
+ *   - counter(page) / counter(pages) 在 @page 外边距框里正常输出；
+ *   - string-set + content: string(...) **取不到值**，页眉只能用「命名页 + 字面量」；
+ *   - 命名页写法：@page p-<名字> { @top-right { content: "字面量标题"; } }
+ *                 #id / .class { page: p-<名字>; }
+ *     本项目由 render.js 在构建期注入：
+ *       单元页  → @page p-u-<slug> { … } + body.type-unit .content { page: p-u-<slug>; }
+ *       合书    → @page p-<book>-<chapter> { … } + #ch-<book>-<chapter> { page: …; }
+ *   - 封面页固定用 p-cover（无页眉、无页码），章封面页用 render.js 注入的
+ *     p-<book>-<chapter>-head（只清 @top-right，页码照常）。这两处都**不依赖**
+ *     @page :first 的优先级 —— 本机实测（.scratch/probe/）：
+ *       ① @page :first 对命名页不生效（第 1 页走 p-cover 时 :first 里的内容不出现）；
+ *       ② @page <名字>:first 只匹配文档第 1 页，章首页照样出页眉；
+ *       ③ 命名页 + 字面量字符串有效；页名一变就断页，章从新页开始是白拿的。
+ * ========================================================================== */
+
+@page {
+  size: A4;
+  /* 三个值不许改：splitcheck.py 用它们算版心底边与页首采样点 */
+  margin: 19mm 17mm 20mm 17mm;
+  @bottom-center { content: "第 " counter(page) " 页 / 共 " counter(pages) " 页"; }
+}
+
+/* 封面页 / 章首页：不印页眉也不印页码（本契约里的 p-cover 命名页） */
+@page p-cover {
+  @top-right { content: ""; }
+  @bottom-center { content: ""; }
+}
+
+@media print {
+  /* 打印时一切动画与交互元素关掉：屏幕版步进器、站内导航、跳转链接、单元导航都不进纸面 */
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .sitenav,
+  .unit-nav,
+  .doc-foot,
+  .skip-link,
+  .viz-screen,
+  .viz-hooks { display: none !important; }
+
+  body { background: #fff; color: var(--ink); }
+
+  .doc { max-width: none; margin: 0; padding: 0; }
+
+  /* 封面块（标题 + 说明 + 目录）占第 1 页，正文从第 2 页起（命名页切换自动断页） */
+  .doc-head { break-after: auto; }
+  .doc-head, .toc { page: p-cover; }
+  .toc { break-inside: avoid; }
+  .content { break-before: auto; }
+
+  /* 整书：章封面页与正文页用不同的命名页（render.js 注入），页名一变就断页；
+   * 「章首页不重复页眉」由章封面页的命名页（只清 @top-right）负责，
+   * 不能用 @page :first / @page <名>:first —— 本机实测两者都管不到文档中段的章首页。 */
+  body.type-book .chapter-head { break-before: auto; }
+  body.type-book .chapter:first-of-type .chapter-head { break-before: auto; }
+
+  h1, h2, h3, h4, .unit-title, .chapter-title { break-after: avoid; page-break-after: avoid; }
+
+  /* ---- 分页三律的 CSS 一半：块是原子，块头不许与块体分家 ----
+   * 高度那一半在写作阶段（高度预算，见第 0 节令牌与风格规范《分页三律》）。
+   * 为什么块整体 avoid 而不是让它切开：块被分片后，续页顶端直接是块体底色，
+   * 页首第一行没有标题带 —— 这正是本项目验收线盯的「页首无标题续块」。
+   */
+  .box,
+  .term,
+  .viz-print .viz-frame,
+  .cb-notes { break-inside: avoid; page-break-inside: avoid; }
+
+  /* note 块白底、无块体底色：允许跨页不会在续页伪造「无标题块」，
+   * 自测答案这类长注释也就不必整块后移。 */
+  .box-note { break-inside: auto; page-break-inside: auto; }
+
+  /* 代码块按整行续排：白底不带语义块底色，续页不会伪装成「无标题块」；
+   * 每行 .cl 仍不拆，行号连续，读者能看出这是同一份清单的后半。 */
+  .codeblock { break-inside: auto; page-break-inside: auto; }
+  .codeblock .cl { break-inside: avoid; page-break-inside: avoid; }
+  .codeblock .cb-body { orphans: 2; widows: 2; }
+  .codeblock .cb-body > .cl:first-child,
+  .codeblock .cl.is-marked,
+  .codeblock .cl:has(+ .cl.is-marked) { break-before: avoid; page-break-before: avoid; }
+  .codeblock .cl.is-marked { break-after: avoid; page-break-after: avoid; }
+  .codeblock .cb-notes { break-before: avoid; page-break-before: avoid; }
+
+  .box > .box-h,
+  .cb-head,
+  .term-head,
+  .viz-title,
+  .viz-step { break-after: avoid; page-break-after: avoid; }
+
+  /* 段内换行允许（正文是页面填充的缓冲带：大块前面有一段能断开的正文字时，
+   * 换页点会落在正文里，页尾空白被压到一行以内 —— 见风格规范《分页三律》第 2 条） */
+  p, li { orphans: 2; widows: 2; }
+  p, li { text-wrap: pretty; }
+
+  /* C++ 试点单元：答案块不拆（只匹配这一份单元，不影响 C 分册）。
+   * 不强制自测题另起一页：题目可以留在上一页，答案整块跟着走，避免为了一道题留大半页空白。
+   * id 由 render.js 从单元路径生成：cpp-chapters-ch02-02-copy-and-move-md-h10。 */
+  #cpp-chapters-ch02-02-copy-and-move-md-h10 ~ .box-note { break-inside: avoid; page-break-inside: avoid; }
+
+  /* 表格允许跨页、表头每页重复、行不拆 */
+  table { break-inside: auto; }
+  tr { break-inside: avoid; }
+
+  /* 链接在纸上不要蓝色下划线（读者没法点） */
+  a { color: var(--ink); border-bottom: 0; }
+  .toc a { border-bottom: 0; }
+}
+
+/* ==========================================================================
+ * 9. 屏幕适配与无障碍
+ * ========================================================================== */
+
+@media screen and (max-width: 46rem) {
+  body { font-size: 16px; }
+  .doc { padding-left: 0.95rem; padding-right: 0.95rem; }
+  .doc-title { font-size: 1.46em; }
+  .sitenav { gap: 0.3rem 0.75rem; font-size: 0.78rem; }
+  .box > .box-b { padding-left: 0.7em; padding-right: 0.7em; }
+  .cb-head { font-size: 0.74em; }
+}
+
+@media screen and (min-width: 75rem) {
+  .doc { max-width: 44em; }
+}
+
+/* 屏幕深色偏好：只调纸色，语义块仍是浅底（保证与 PDF 观感一致） */
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e9ecf1;
+    --ink-soft: #c7cdd7;
+    --ink-mute: #9aa3b2;
+    --rule: #3a4150;
+    --rule-soft: #2f3540;
+    --rule-strong: #4d566a;
+    --paper: #14161a;
+    --paper-soft: #1b1f26;
+    --paper-tint: #1f242c;
+  }
+  body { background: var(--paper); }
+  .sitenav { background: rgba(20, 22, 26, 0.95); }
+  strong { color: #fff; }
+  code, kbd { background: #1e232b; border-color: #2c333d; }
+}
+
+/* 「跳到正文」：键盘用户第一个聚焦点，平时移出视口、聚焦时出现 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 50;
+  padding: 0.5em 0.9em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 0 0 var(--radius) 0;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.skip-link:focus { left: 0; outline: 3px solid var(--accent-deep); }
+
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible + label,
+[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 屏幕阅读器专用文字（图元的步骤说明会用它补一句「第 N 步」） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(1px, 1px, 1px, 1px);
+  white-space: nowrap;
+}
+
+</style>
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-dlmath-ch01 { @top-right { content: "从一个两层网络开始：前向、梯度与训练"; } }
+@page p-dlmath-ch01-head { @top-right { content: ""; } }
+#ch-dlmath-ch01 { page: p-dlmath-ch01; }
+#ch-head-dlmath-ch01 { page: p-dlmath-ch01-head; }
+</style>
+</head>
+<body class="type-book">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">整书阅读版</p><h1 class="doc-title">《深度学习数学基础》</h1><p class="doc-sub">从数值实验到 Transformer · 真梯度对拍 · 真种子复现</p><p class="doc-meta">单元 1 个 · 生成于构建期</p></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 全书目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#u-dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md">两层网络：前向、梯度与训练</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="chapter" id="ch-dlmath-ch01"><div class="chapter-head" id="ch-head-dlmath-ch01"><h1 class="chapter-title"><span class="chapter-kicker">第 1 章</span>从一个两层网络开始：前向、梯度与训练</h1><p class="chapter-meta">本章 1 个单元 · 页眉从这里之后的页面开始出现</p><ol class="chapter-units"><li><a href="#u-dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md">两层网络：前向、梯度与训练</a><span class="cu-note">零基础 · 第 1 单元 · 建议 90 分钟</span></li></ol></div>
+<section class="unit" id="u-dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md"><h2 class="unit-title">两层网络：前向、梯度与训练</h2>
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>手写一个两层网络的前向传播，说清每一步的形状与激活函数的作用；</li>
+<li>推导并写出反向传播的四个式子，指出最容易漏掉的链式因子；</li>
+<li>用中心差分独立地算出数值梯度，与解析梯度逐项对拍；</li>
+<li>解释为什么「程序打印 PASS」不算证据，以及阴性对照为什么必须有；</li>
+<li>用固定种子复现一次训练，并说清种子对照为什么能证明输出不是硬编码。</li>
+</ul>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h1">1.1 先看工程长什么样</h2>
+<p>这一节不装框架、不装 Python，先把一个最小的网络用 C 写出来。理由很简单：本分册要验证的不是「会不会调库」，而是<strong>每一步数值是不是真的对</strong>。用 C 写，编译、运行、抓stdout 这条老路可以原封不动地复用。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>把网络想成一条两级流水线：两个数字进去，先被三个隐元各看一遍（每个隐元拿着三个旋钮加一个偏置），三个结果再被一个输出神经元汇总。</p>
+<p>「学习」在这里只有一件事：把这 13 个旋钮一点点拧到合适的位置。往哪边拧？答案是梯度——<strong>每个旋钮对误差的敏感度</strong>。算梯度有两种办法：顺着公式推（解析梯度），以及把旋钮轻轻拧一下看误差怎么变（数值梯度）。两者必须给出同一个数。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-ba83c666">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：一个结构，三种运行模式</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：一个结构，三种运行模式：逐步演示">
+<input class="vs-radio" type="radio" name="vz-ba83c666" id="vz-ba83c666-1" checked>
+<input class="vs-radio" type="radio" name="vz-ba83c666" id="vz-ba83c666-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-ba83c666-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-ba83c666-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/dlmath/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">tiny_net/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/tiny_net.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/tiny_net.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-forward.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-gradcheck.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-train.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>开始时，ch01 下什么都没有</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/dlmath/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的工程</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="visited" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch01/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">tiny_net/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/tiny_net.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/tiny_net.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-forward.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-gradcheck.json</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">dl-train.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是动笔前的空目录。第 2 帧长出三个清单：同一个程序用不同 <code>args</code> 跑出三份 stdout，分别由 <code>numerical</code>、<code>gradient</code>、<code>train</code> 三种闸门判定。清单不是装饰——正文里每个 <code>output</code> 块都必须被某个清单的 <code>output</code> 声明，否则报 <code>output_block_uncovered</code>。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么先把接口写在头文件里</span></header>
+<div class="box-b">
+<p><code>include/tiny_net.h</code> 只有类型和函数声明。读它就知道这个网络会什么、不会什么：能前向、能算损失、能算两种梯度、能训练。实现全在 <code>src/tiny_net.c</code> 里，<code>src/main.c</code> 只负责选模式、打印数值。等后面换更大的网络，改的是实现，不是驱动。</p>
+</div>
+</section>
+<figure class="codeblock" data-lang="c" data-file="examples/ch01/tiny_net/include/tiny_net.h"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-title">两层网络的全部接口：13 个参数藏在一个结构体里</span><span class="cb-file">examples/ch01/tiny_net/include/tiny_net.h</span><span class="cb-lines">第 5–23 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="5" data-to="23"><span class="cl" data-ln="5"><span class="ln" data-ln="5" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_IN</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">2</span></span></span>
+<span class="cl" data-ln="6"><span class="ln" data-ln="6" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_HIDDEN</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">3</span></span></span>
+<span class="cl" data-ln="7"><span class="ln" data-ln="7" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">#define</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">NET_PARAMS</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">13</span></span></span>
+<span class="cl is-empty" data-ln="8"><span class="ln" data-ln="8" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="9"><span class="ln" data-ln="9" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">typedef</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">struct</span><span class="tk" style="color:#24292E"> {</span></span></span>
+<span class="cl" data-ln="10"><span class="ln" data-ln="10" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">w1</span><span class="tk" style="color:#24292E">[NET_IN][NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="11"><span class="ln" data-ln="11" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">b1</span><span class="tk" style="color:#24292E">[NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="12"><span class="ln" data-ln="12" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">w2</span><span class="tk" style="color:#24292E">[NET_HIDDEN];</span></span></span>
+<span class="cl" data-ln="13"><span class="ln" data-ln="13" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> b2;</span></span></span>
+<span class="cl" data-ln="14"><span class="ln" data-ln="14" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">} </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E">;</span></span></span>
+<span class="cl is-empty" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"></span></span>
+<span class="cl" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_seed</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">unsigned</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">long</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">seed</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_init</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_forward</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN]);</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_loss</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">);</span></span></span>
+<span class="cl" data-ln="20"><span class="ln" data-ln="20" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_backprop</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">grad</span><span class="tk" style="color:#24292E">[NET_PARAMS]);</span></span></span>
+<span class="cl" data-ln="21"><span class="ln" data-ln="21" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_numerical_grad</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">grad</span><span class="tk" style="color:#24292E">[NET_PARAMS]);</span></span></span>
+<span class="cl" data-ln="22"><span class="ln" data-ln="22" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_param_name</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">index</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">char</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">out</span><span class="tk" style="color:#24292E">[</span><span class="tk" style="color:#005CC5">32</span><span class="tk" style="color:#24292E">]);</span></span></span>
+<span class="cl" data-ln="23"><span class="ln" data-ln="23" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#D73A49">void</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">net_train</span><span class="tk" style="color:#24292E">(</span><span class="tk" style="color:#005CC5">net_t</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">*</span><span class="tk" style="color:#E36209">net</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">x</span><span class="tk" style="color:#24292E">[NET_IN], </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">target</span><span class="tk" style="color:#24292E">, </span><span class="tk" style="color:#D73A49">int</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#E36209">steps</span><span class="tk" style="color:#24292E">);</span></span></span></pre></div></figure>
+<p>2×3 个 <code>w1</code>、3 个 <code>b1</code>、3 个 <code>w2</code>、1 个 <code>b2</code>，加起来正好 13。权重初值由 LCG 从 <code>BOOK_SEED</code> 生成——不用 <code>rand()</code>，因为它的实现由库决定，换个机器序列就变了。种子固定，13 个数字就固定。</p>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h2">1.2 前向：两个数字怎么变成一个预测</h2>
+<p>隐元先把两个输入各乘一个权重再加偏置，过一个 <code>tanh</code>；输出层把三个隐元加权求和，过一个 <code>sigmoid</code> 压到 (0,1)。损失取 <code>½(y-t)²</code>，平方前的 ½ 是为了求导时刚好消掉 2。</p>
+<p>种子 12345、输入 <code>(0.5, -0.3)</code>、目标 <code>0.8</code> 时，真实输出是：</p>
+<figure class="term term-output" data-id="dl-forward-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-forward-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">y=0.580931</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss=0.023996</span></span></pre></figure>
+<p>这两个数字就是本节的黄金值，写在清单的 <code>expect.numbers</code> 里，容差 <code>atol=1e-6</code>。注意：<strong>容差写在清单，不写在正文</strong>。正文里写「约等于 0.58」不算证据；闸门从 stdout 里解析 <code>y=</code> 与 <code>loss=</code> 两行，自己重算差值是否在容差内。程序要是自己打印一句 <code>PASS</code>，闸门看都不看。</p>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h3">1.3 反向：链式法则在哪一步最容易漏</h2>
+<p>记 <code>y = σ(s)</code>，<code>s = Σ hⱼw2ⱼ + b2</code>，<code>hⱼ = tanh(zⱼ)</code>，<code>zⱼ = Σ xᵢ w1ᵢⱼ + b1ⱼ</code>。损失 <code>L = ½(y-t)²</code>。从后往前：</p>
+<ul>
+<li><code>∂L/∂y = y - t</code></li>
+<li><code>∂L/∂s = (y-t) · y(1-y)</code> ← <strong>这个 <code>y(1-y)</code> 就是最常漏的 sigmoid 链式因子</strong></li>
+<li><code>∂L/∂w2ⱼ = (∂L/∂s) · hⱼ</code>，<code>∂L/∂b2 = ∂L/∂s</code></li>
+<li><code>∂L/∂hⱼ = (∂L/∂s) · w2ⱼ</code>，再乘 <code>1-hⱼ²</code> 得到 <code>∂L/∂zⱼ</code>，然后分给 <code>w1</code> 与 <code>b1</code></li>
+</ul>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">漏一个因子，所有梯度一起错</span></header>
+<div class="box-b">
+<p>写作 <code>ds = dy</code> 而不是 <code>ds = dy * y * (1-y)</code>，程序照常跑、loss 照常下降，只是下降得不对。这种错<strong>肉眼几乎看不出来</strong>——所以下面的对拍不是可选项。源码里用 <code>#ifdef GRAD_BUG</code> 把这个错误写成了可切换的开关，供闸门做阴性对照。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h4">1.4 对拍：数值梯度给解析梯度背书</h2>
+<p>中心差分不需要任何链式法则：把第 k 个参数加 <code>ε</code> 算一次损失，减 <code>ε</code> 再算一次，斜率就是 <code>(L₊-L₋)/(2ε)</code>，ε 取 <code>1e-5</code>。它慢，但<strong>明显正确</strong>，正合「暴力版」的角色。13 个参数逐个算完，与解析梯度逐行对照：</p>
+<figure class="term term-output" data-id="dl-gradcheck-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-gradcheck-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">w1_0_0 analytic=-0.0018961 numerical=-0.0018961</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">w1_0_1 analytic=-0.0114738 numerical=-0.0114738</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">w1_0_2 analytic=-0.0088071 numerical=-0.0088071</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">w1_1_0 analytic=0.0011377 numerical=0.0011377</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">w1_1_1 analytic=0.0068843 numerical=0.0068843</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">w1_1_2 analytic=0.0052843 numerical=0.0052843</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">b1_0 analytic=-0.0037922 numerical=-0.0037922</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">b1_1 analytic=-0.0229477 numerical=-0.0229477</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">b1_2 analytic=-0.0176142 numerical=-0.0176142</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">w2_0 analytic=0.0274368 numerical=0.0274368</span></span>
+<span class="cl is-text is-term" data-ln="11"><span class="code">w2_1 analytic=0.0261818 numerical=0.0261818</span></span>
+<span class="cl is-text is-term" data-ln="12"><span class="code">w2_2 analytic=0.0302945 numerical=0.0302945</span></span>
+<span class="cl is-text is-term" data-ln="13"><span class="code">b2 analytic=-0.0533324 numerical=-0.0533324</span></span></pre></figure>
+<p>清单要求至少 13 组、至少 8 组非零解析梯度、每组 <code>|analytic-numerical| ≤ 1e-5</code>。三条缺一不可：只查「每组接近」的话，一个把所有梯度都输出 0 的程序会 trivially 通过。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">阴性对照：故意写错必须被抓住</span></header>
+<div class="box-b">
+<p>清单还给了 <code>negative_flags: [&quot;-DGRAD_BUG=1&quot;]</code>。闸门用这组参数<strong>再编译一份</strong>，跑出错梯度的表；如果这份表也通过了对拍，就报 <code>gradient_harness_not_discriminating</code>——说明这套检查根本不判别。</p>
+<p>这和检测模式里的 <code>detect_not_attributable</code> 是同一条纪律：把字样打印出来不算检测，把梯度打印成「看起来对」也不算对拍。实测 <code>-DGRAD_BUG=1</code> 下第一行变成 <code>analytic=-0.0077885 numerical=-0.0018961</code>，对拍失败，阴性对照成立。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h5">1.5 训练：种子复现与收敛轨迹</h2>
+<p>把 13 个参数按 <code>w ← w - 0.5·∂L/∂w</code> 更新十步，每步打印一次 loss：</p>
+<figure class="term term-output" data-id="dl-train-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">dl-train-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">loss=0.020956</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">loss=0.018392</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">loss=0.016219</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">loss=0.014366</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">loss=0.012779</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">loss=0.011412</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">loss=0.010228</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">loss=0.009198</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">loss=0.008298</span></span>
+<span class="cl is-text is-term" data-ln="10"><span class="code">loss=0.007509</span></span></pre></figure>
+<p>闸门对这份轨迹查四件事：至少 10 个点、起点不低于 0.01、终点不高于 0.01、首尾降幅至少 0.01，前 6 步非增（留 1e-4 的 slack）。然后<strong>同一个种子再跑一次</strong>，所有数值必须逐值一致；给了 <code>seed_contrast: 67890</code> 就再跑第三次，要求至少一个数值变化。最后这条是为了防止程序干脆把 loss 硬编码成一张表——那样同种子复现能过，对照种子也一模一样。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">复现性不等于正确性</span></header>
+<div class="box-b">
+<p>「每次跑出来一样」只说明程序是确定的，不说明它算对了。本单元里三道判定各管一件事：数值黄金值管前向对不对，梯度对拍管导数对不对，种子与收敛管训练过程是不是真的在跑。少一道都会留下能骗过闸门的写法。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h6">1.6 为什么必须先写 C，再谈框架</h2>
+<p>这一节最容易被问的问题是：明明三行 PyTorch 就能建这个网络，为什么要手写 13 个参数？答案不在「会不会写」，而在「出了错能不能定位」。</p>
+<p>框架把前向、求导、更新三件事包成一个 <code>backward()</code>，用起来省事，但它同时把链式法则的中间量藏起来了。初学者看到 loss 不下降，能改的只有学习率和层数——因为他看不见梯度到底长什么样。这一节把每一步都摊在 stdout 上：前向给出 <code>y</code> 和 <code>loss</code>，对拍给出 13 组解析梯度和数值梯度，训练给出十步 loss 轨迹。哪一步数值不对，肉眼就能定位到具体环节。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">把三道判定想成三道体检</span></header>
+<div class="box-b">
+<p>数值黄金值查的是「前向算对没有」；梯度对拍查的是「导数算对没有」；种子与收敛查的是「训练过程是不是真的在跑」。这三件事彼此独立：一个程序可以把前向算对、梯度写错，也可以梯度写对、训练循环写错（比如忘了更新参数，loss 十步全一样）。只做其中一道，等于只做了一项体检就宣布健康。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h7">1.6.1 前向的四个中间量</h3>
+<p>把 <code>net_forward</code> 拆开看，其实只有四个量，每个都有明确形状：<code>z</code> 是 3 个隐元的加权和（长度 3），<code>h = tanh(z)</code> 还是 3 个；<code>s</code> 是一个标量，把 3 个 <code>h</code> 加权求和再加偏置；最后 <code>y = σ(s)</code> 把任意实数压到 (0,1)。损失再拿 <code>y</code> 和目标 <code>0.8</code> 比较。</p>
+<p>为什么输出要过 sigmoid？因为这一节把任务定义成「预测一个 0 到 1 之间的数」。sigmoid 把 <code>s</code> 的整个实数轴压进这个区间，顺手带来一个很好的性质：它的导数能用自身表示，<code>σ'(s) = σ(s)(1-σ(s))</code>。反传时只要保存了 <code>y</code>，就不必再算一次 exp——这正是 1.3 里那个 <code>y(1-y)</code> 因子的来源。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">sigmoid 的饱和区</span></header>
+<div class="box-b">
+<p>当 <code>s</code> 很大或很小，<code>y</code> 会非常接近 1 或 0，此时 <code>y(1-y)</code> 接近 0，梯度几乎消失。上游传来的误差再大，乘上这个因子也变成近乎零，参数就「学不动」了。这就是著名的梯度消失。这一节的网络只有两层，输入和目标都温和，不至于触发；但你要记住：<strong>激活函数不是随便选的</strong>，它直接决定梯度能不能传回去。后面讲Transformer 时会看到，深层网络改用 ReLU、LayerNorm、残差连接，全是在跟这件事较劲。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h8">1.6.2 13 个参数为什么够</h3>
+<p><code>w1</code> 是 2×3，意思是「两个输入各自连到三个隐元」，六条边六个权重；<code>b1</code> 是三个隐元各自一个偏置；<code>w2</code> 是三个隐元各自连到输出，三条边三个权重；<code>b2</code> 一个。总数是 <code>6+3+3+1=13</code>。</p>
+<p>这个数字看起来小得可笑，但结构上和真正的 LLM 没有区别——只是每个数字都被放大了几千亿倍。一个 Transformer 层里的 attention 有 <code>W_Q</code>、<code>W_K</code>、<code>W_V</code>、<code>W_O</code> 四个矩阵，本质都是「把一组向量线性映射到另一组向量」，和这里的 <code>w1</code>、<code>w2</code> 是同一件事。区别只在维度：这里是 2→3，那里是几千→几千。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">从 13 个参数到 13 亿，什么变了</span></header>
+<div class="box-b">
+<p>变的不是数学，是三件事。第一，矩阵乘法从手写循环换成 BLAS/GPU 核，因为朴素实现的复杂度不够用。第二，随机数不再手写 LCG，而是用专门设计的初始化分布（Xavier / He），保证前向的方差不爆炸也不消失。第三，训练的每一步都要在海量数据上做小批量平均，还要记录动量、二阶矩等状态。但「前向算对、梯度对拍、固定种子复现」这三条纪律一条都没变——这一节练的就是这三条。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h9">1.6.3 梯度表怎么读</h3>
+<p>13 行输出里，<code>analytic</code> 是链式法则推出来的，<code>numerical</code> 是把参数加减小量后看损失怎么变。两者每行都对到小数点后七位，这不是巧合：中心差分的误差是 <code>O(ε²)</code>，ε 取 <code>1e-5</code>，误差量级在 <code>1e-10</code> 附近，远小于打印精度。</p>
+<p>读表时别只看「数值接近不接近」，还要看符号。比如 <code>b2 analytic=-0.0533324</code>，是负的；这意味着把 <code>b2</code> 增大一点，loss 会下降——参数更新时 <code>b2 ← b2 - 0.5×(-0.0533324)</code>，也就是往增大方向走。训练十步后 loss 从 <code>0.020956</code> 降到 <code>0.007509</code>，正是这些符号 collectively 起作用的结果。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把学习率改大试试</span></header>
+<div class="box-b">
+<p><code>net_train</code> 里写的是 <code>0.5 * grad</code>。改成 <code>5.0</code>，前几步可能掉得更快，但很可能某一步直接冲过最低点，loss 反而反弹，甚至出现 <code>nan</code>。这不是 bug，是学习率太大导致步长越过了碗底。把 <code>slack</code> 之外的判定条件不动，只改学习率再跑，看看 <code>train_loss_not_decreasing</code> 会不会报出来——这一步能让你对「收敛判定不是形式主义」有直观感受。改完记得把 <code>last_max</code> 之类的黄金值按真实输出更新。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h10">1.6.4 阴性对照到底在防什么</h3>
+<p>有人可能会说：梯度对拍已经把 13 行都比过了，为什么还要多编译一份错梯度？答案是防「测试本身失灵」。假设某天有人把 <code>net_numerical_grad</code> 里的扰动量 <code>eps</code> 写成 <code>0.0</code>，那么数值梯度全部是 0/0 或者 0，解析梯度也恰好接近 0 的参数会「通过」；再假设有人把对拍的容差从 <code>1e-5</code> 放宽到 <code>1.0</code>，任何错误都能过。这些改动都不会让闸门报错，除非闸门主动做一次「故意写错必须被抓住」的演练。</p>
+<p><code>negative_flags: [&quot;-DGRAD_BUG=1&quot;]</code> 就是这次演练。它不改变测试代码，只改变被测代码里的一个链式因子。正确实现对拍通过、错误实现对拍失败，才说明这套检查有判别力。实测错误版本的第一行是 <code>analytic=-0.0077885 numerical=-0.0018961</code>，差了四倍，远超过 <code>atol=1e-5</code>。如果你把 <code>GRAD_BUG</code> 的效果注释掉，闸门会报 <code>gradient_harness_not_discriminating</code>——这跟检测模式里「把字样 printf 出来也算检测」是同一种骗法，只是换了个场景。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">把这个方法搬到别处</span></header>
+<div class="box-b">
+<p>「阴性对照」不是梯度对拍专用的。任何「自动检查」都应该问一句：如果我故意把被检查的东西弄坏，检查器会不会报警？编译器的 <code>-Werror</code> 可以拿一个真警告试；单元测试可以临时改一个断言的期望值；这一节的训练收敛判定可以给程序喂一组硬编码的 loss 表。能报警的说明检查有效，不能报警的就是零证据通过。这条纪律比任何具体工具都值钱。</p>
+</div>
+</section>
+<h3 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h11">1.6.5 为什么要固定种子而不是只固定数据</h3>
+<p>这一节的输入 <code>x=(0.5,-0.3)</code> 和目标 <code>0.8</code> 都是写死的，看起来已经「固定数据」了。但真正决定 13 个初值的是 <code>BOOK_SEED</code>：同一个输入，换一个种子，初始权重就全变，前向输出和 loss 轨迹跟着变。所以只固定数据不够——<strong>随机来源不止一个</strong>，权重初始化是最隐蔽的那个。</p>
+<p>闸门把种子当环境变量注入，是有意为之：种子写在源码里叫「硬编码」，写在清单里叫「实验条件」。前者读者看不出来，后者一眼可见且可被对照实验改变。<code>seed_contrast: 67890</code> 就是对照实验——如果换种子后数字纹丝不动，说明程序根本没用种子，那些「可复现」的数字不过是一张写死的表。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">可复现不等于正确</span></header>
+<div class="box-b">
+<p>这一点值得重复。「同样输入每次输出一样」只证明程序是确定的；一个把整条 loss 曲线硬编码进数组的程序也完全确定。再强调一次这一节的三道判定：数值黄金值证明前向数值对，梯度对拍证明导数对，对照种子证明输出确实由权重算出来。三者合起来，才能说这个训练实验是真的。</p>
+</div>
+</section>
+<h2 id="dlmath-chapters-ch01-01-tiny-network-and-its-gradient-md-h12">1.7 这一节新增了什么</h2>
+<p>回到 1.1 的第 2 帧：<code>tiny_net/</code> 下多了一个头文件、两个源文件、三个清单。三个清单指向同一个正文单元的三个 <code>output</code> 块；<code>run.js --all</code> 的全量覆盖检查会逐个核对，哪个块没被声明都会报 <code>output_block_uncovered</code>。</p>
+<p>下一单元补线性代数：这里的 <code>w1</code>、<code>w2</code> 现在还是数组，接下来要把它们写成矩阵，把整层前向写成一个矩阵乘法——那时「13 个参数」会变成「一个权重矩阵」，但梯度对拍的纪律一点不变。把这一节的三道判定和阴性对照的写法记牢，后面所有数值实验都照这个模子铺开。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>13 个参数的两层网络：2×3 个 <code>w1</code>、3 个 <code>b1</code>、3 个 <code>w2</code>、1 个 <code>b2</code>；权重由 LCG + 固定种子生成，不用 <code>rand()</code>；</li>
+<li>反向传播最容易漏的是 sigmoid 的链式因子 <code>y(1-y)</code>；</li>
+<li>中心差分是「明显正确的暴力版」，解析梯度必须与它逐项相符，且非零梯度要有足够多；</li>
+<li>阴性对照不是装饰：<code>negative_flags</code> 编译出的错梯度若也通过，闸门报 <code>gradient_harness_not_discriminating</code>；</li>
+<li>训练判定 = 收敛轨迹 + 同种子复现 + 对照种子必须改变输出；程序自报的 PASS 一律不算证据；</li>
+<li>容差只能写在清单的 <code>expect</code>，正文贴真实 stdout，<code>--fix</code> 回写原始输出。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>为什么中心差分取 <code>(L₊-L₋)/(2ε)</code> 而不是 <code>(L₊-L)/ε</code>？后者在什么时候也能用？</li>
+<li>梯度对拍为什么还要单独查「非零解析梯度的个数」？</li>
+<li><code>negative_flags</code> 编译出来的错梯度如果也通过了，说明什么？闸门报什么码？</li>
+<li><code>train</code> 模式为什么要跑三次？只跑两次（同种子）够不够？</li>
+<li>把 LCG 换成 <code>rand()</code>，哪个判定最可能先出问题？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>中心差分是二阶精度，误差 <code>O(ε²)</code>；单侧差分是一阶 <code>O(ε)</code>，ε=1e-5 时精度差好几个量级。单侧差分在 ε 极小、函数求值极贵时才退而求其次。</li>
+<li>防 trivially 通过：一个把全部解析梯度输出 0 的程序，<code>|0 - 数值梯度|</code> 在 ε 很小时可能落在容差内（尤其数值梯度本身也接近 0 的参数）。要求足够多组非零，才能证明真的算了梯度。</li>
+<li>说明这套对拍不判别——错梯度和对梯度都放过，等于零证据。闸门报 <code>gradient_harness_not_discriminating</code>，与 detect 模式的 <code>detect_not_attributable</code> 是同一类失败。</li>
+<li>不够。同种子两次一致只能证明确定性；把 loss 表硬编码进程序也能过。对照种子必须让输出变化，才能证明数值真是从种子驱动的权重算出来的。</li>
+<li>同种子复现。<code>rand()</code> 的序列由 C 运行库实现决定，换台机器或换编译器就可能不同；<code>train</code> 的两次同种子对账会报 <code>train_nondeterministic</code>。（前向与梯度的黄金值也会跟着变，但复现检查最直接。）</li>
+</ol>
+</div>
+</section>
+</section></section>
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

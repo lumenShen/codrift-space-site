@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>最大似然估计：训练本质上是哪一种求极值</title>
+<meta name="description" content="零基础 · 第 2 章 · 建议 120 分钟">
+<meta name="author" content="《C / C++ / 算法 / 项目实战》">
+<meta name="generator" content="dev-notes/build/render.js（markdown-it + Shiki 4.5.0）">
+<!-- 版式表：屏幕与打印共用（theme.css 由设计阶段整体重写，占位与类名契约不变） -->
+<link rel="stylesheet" href="../theme.css">
+<!-- 构建期注入：单元的命名页页眉规则、合书的每章 @page 规则等 -->
+<style>
+@page p-u-probopt-chapters-ch02-01-maximum-likelihood-md { @top-right { content: "最大似然估计：训练本质上是哪一种求极值"; } }
+#content { page: p-u-probopt-chapters-ch02-01-maximum-likelihood-md; }
+</style>
+</head>
+<body class="type-unit">
+
+<!-- 跳到正文：键盘与读屏用户的第一个聚焦点，打印时隐藏 -->
+<a class="skip-link" href="#content">跳到正文</a>
+
+<!-- 站内导航：屏幕可见，打印自动隐藏（阅读器入口 / 上一单元 / 下一单元） -->
+<nav class="sitenav" id="sitenav" aria-label="站内导航"><span class="nav-brand">C / C++ / 算法 / 项目实战</span><a href="../index.html">阅读入口</a><a href="../books/probopt.html">《probopt》整书</a></nav>
+
+<main class="doc" id="doc" aria-label="正文">
+
+  <!-- 标题区：单元标题 / 书标题。打印时这一块走 @page p-cover（无页眉无页码） -->
+  <header class="doc-head"><p class="doc-kicker">C / C++ / 算法 / 项目实战</p><h1 class="doc-title">最大似然估计：训练本质上是哪一种求极值</h1><p class="doc-sub">零基础 · 第 2 章 · 建议 120 分钟</p><p class="doc-meta">源文件 books/probopt/chapters/ch02/01-maximum-likelihood.md</p><aside class="legend" aria-label="版式说明"><p class="legend-t">这份稿子里的五种东西</p><ul><li><span class="sw sw-code" aria-hidden="true"></span><strong>源码块</strong>：白底、灰块头写着文件名与行号，行号是源文件里的真行号</li><li><span class="sw sw-out" aria-hidden="true"></span><strong>终端输出</strong>：深底白字（打印出来是一块黑），内容是程序真跑出来的 stdout</li><li><span class="sw sw-diag" aria-hidden="true"></span><strong>编译诊断</strong>：浅红底 + 粗左条，红字，内容是编译器真吐出来的 stderr</li><li><span class="sw sw-num" aria-hidden="true"></span><strong>实测数字</strong>：绿色实验记录块里加粗的数字：本机真跑出来的版本号、退出码、字节数</li><li><span class="sw sw-plain" aria-hidden="true"></span><strong>老师的大白话</strong>：暖底 + 顶部虚线，是不带术语的解释，不是标准原文</li></ul></aside></header>
+
+  <!-- 目录：单元内小节跳转；打印时与标题区同页 -->
+  <nav class="toc" id="toc" aria-label="目录">
+    <p class="toc-h"><svg class="ico-svg ico-list" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 4.2h7.4"/><path d="M6 8h7.4"/><path d="M6 11.8h7.4"/><circle cx="3.2" cy="4.2" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="3.2" cy="11.8" r="0.9" fill="currentColor" stroke="none"/></svg> 本单元目录</p>
+    <ol class="toc-list"><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h1">4.1 先看工程长什么样</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h2">4.2 似然不是概率：把函数和变量的身份换过来</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h3">4.3 取对数：乘积变和，下溢变可控</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h4">4.4 伯努利的 MLE 就是样本均值</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h5">4.5 真跑：网格搜索最大化对数似然</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h6">4.6 正态 MLE：均值与方差</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h7">4.7 过拟合与正则化：MLE 的边界</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h8">4.8 数值稳定：log 0 与下溢</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h9">4.9 网格搜索与解析解：两条路互相验证</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h10">4.10 与深度学习的对应：交叉熵就是负对数似然</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h11">4.11 手算核对：把两个似然值算到底</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h12">4.12 这一节新增了什么，下一节要什么</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h13">4.13 充分统计量：为什么只需记住两个计数</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h14">4.14 似然比检验：用差值判断参数是否可疑</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h15">4.15 从 MLE 到 MAP：先验怎样进入目标函数</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h16">4.16 常见误解清单</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h17">4.17 为什么种子对似然实验同样重要</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h18">4.18 用两个数字把整节收束</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h19">4.19 似然函数的形状：为什么峰值好找</a></li><li class="toc-l2"><a href="#probopt-chapters-ch02-01-maximum-likelihood-md-h20">4.20 一个容易被忽略的细节：顺序无关</a></li></ol>
+  </nav>
+
+  <!-- 正文 -->
+  <article class="content" id="content" aria-label="正文">
+<section class="box box-goal" data-box-type="goal"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-target" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="2.4"/><circle cx="8" cy="8" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">学习目标</span><span class="box-t">看完这一单元，你应该能</span></header>
+<div class="box-b">
+<ul>
+<li>说清似然是「把参数当变量、把数据当固定」的函数，为什么不等于参数的概率；</li>
+<li>手推伯努利样本的对数似然，并证明最大似然估计就是样本均值；</li>
+<li>手推正态样本的对数似然，说明为什么方差的最大似然分母是 <code>n</code> 而不是 <code>n−1</code>；</li>
+<li>真跑一万次伯努利试验，用网格搜索找出最大化对数似然的 <code>p</code>，并读出与 <code>p=0.5</code> 的差距；</li>
+<li>解释取对数为什么把乘积变和、把下溢变成可控的加法；</li>
+<li>说过拟合与正则化的关系，以及交叉熵损失为什么就是负对数似然。</li>
+</ul>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h1">4.1 先看工程长什么样</h2>
+<p>从这一单元起进入第 2 章，例子目录变成 <code>examples/ch02/</code>，单元文件落在 <code>chapters/ch02/</code>。按写作契约，第二个项目起必须是多文件工程：<code>src/</code> 放两个源文件，<code>include/</code> 放头文件，清单的 <code>sources</code> 列出至少两个 <code>.c</code>，并且头文件被 <code>#include</code> 进来。这不是形式主义——它让「声明」与「实现」的接缝可见，读头文件就知道这个例子能干什么，换了实现不影响驱动。共用库 <code>common/</code> 仍然一个字不改，<code>po_bernoulli_loglik</code> 与 <code>po_normal_loglik</code> 直接复用。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">先建立一个画面</span></header>
+<div class="box-b">
+<p>前面三节我们一直在「从已知分布采样」：分布参数是给定的，我们算均值、算方差、算误差。这一章把问题反过来：<strong>参数是未知的，数据已经有了</strong>，我们要找最可能生成这些数据的参数。这叫最大似然估计。它是深度学习训练的数学原型——你手里的网络权重就是那个未知参数，训练数据就是已观察到的数据，优化器在做的事本质上是把「数据的似然」推到最大。看懂这一节，你就看懂了训练目标函数的来历。</p>
+</div>
+</section>
+<figure class="viz" data-kind="tree" data-frames="2" data-viz-id="vz-ef425fde">
+<figcaption class="viz-title"><span class="viz-kind">目录树</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span> 本单元的工程：第二个项目，多文件且头文件分家</figcaption>
+<div class="viz-screen" role="group" aria-label="本单元的工程：第二个项目，多文件且头文件分家：逐步演示">
+<input class="vs-radio" type="radio" name="vz-ef425fde" id="vz-ef425fde-1" checked>
+<input class="vs-radio" type="radio" name="vz-ef425fde" id="vz-ef425fde-2">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-ef425fde-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-ef425fde-2">第 2 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/probopt.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/probopt.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">mle_bernoulli/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/mle.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/mle.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po04-mle.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>动笔前，ch02 的目录还是空的</p><div class="viz-canvas" data-kind="tree" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">books/probopt/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">chapters/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/common/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/probopt.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/probopt.c</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>本单元落盘的最大似然例子</p><div class="viz-canvas" data-kind="tree" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">examples/ch02/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="1"><span class="vn-tree" aria-hidden="true">└─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-folder" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.4 4.4h3.4l1.1 1.5h6.7v7.1H2.4z"/><path d="M11.2 6.6h2.4v6.4H9.2"/></svg></span><span class="vn-text">mle_bernoulli/</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">include/mle.h</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/mle.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   ├─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">src/main.c</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="lesson" data-new="lesson" data-depth="2"><span class="vn-tree" aria-hidden="true">   └─ </span><span class="vn-ico" aria-hidden="true"><svg class="ico-svg ico-file" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.1 2.4H5a1.6 1.6 0 0 0-1.6 1.6v8a1.6 1.6 0 0 0 1.6 1.6h6a1.6 1.6 0 0 0 1.6-1.6V5.9z"/><path d="M9.1 2.4V5.9h3.5"/></svg></span><span class="vn-text">po04-mle.json</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧是动笔前的形态：<code>examples/ch02/</code> 还不存在，<code>chapters/ch02/</code> 是空目录。第 2 帧长出 <code>mle_bernoulli/</code>：<code>mle.h</code> 声明常量和两个函数，<code>mle.c</code> 实现采样与正态参数估计，<code>main.c</code> 做网格搜索并打印，<code>po04-mle.json</code> 声明数值对账。注意这一节同时演示了两种分布的 MLE——伯努利是主角，正态是配角，两者共用同一套「写出似然、取对数、求最大」的流程。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么第二个项目必须拆成多文件</span></header>
+<div class="box-b">
+<p>拆开之后，<code>main.c</code> 只负责「选参数、打印结果」，<code>mle.c</code> 只负责「造样本、算统计量」。如果你要把伯努利换成别的分布，只改 <code>mle.c</code>，驱动一行不动。代价是要写 <code>#include &quot;mle.h&quot;</code>，还要保证声明与实现签名一致——编译器不会替你检查跨文件的语义，只有链接器保证符号存在。这个成本换来的是可接手性：别人读头文件就知道这个例子提供什么能力，不必先读完整个实现。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h2">4.2 似然不是概率：把函数和变量的身份换过来</h2>
+<p>设数据 <code>x₁,…,xₙ</code> 已经观察到，分布的概率质量或密度是 <code>f(x|θ)</code>，其中 <code>θ</code> 是参数。在概率视角里，<code>θ</code> 固定、<code>x</code> 变化，<code>f(x|θ)</code> 描述「不同数据的可能性」；在似然视角里，<code>x</code> 固定、<code>θ</code> 变化，<code>L(θ) = f(x₁,…,xₙ|θ)</code> 描述「不同参数的合理性」。同一个数学式子，换个变量身份就从概率变成了似然。这个身份切换是理解最大似然的第一道门槛。</p>
+<p>为什么似然不是「参数的概率」？因为 <code>L(θ)</code> 对 <code>θ</code> 积分通常不等于 1——它压根不是 <code>θ</code> 的概率密度。它只是「如果参数真是 θ，看到这批数据的可能性有多大」。一个参数值让数据出现的可能性大，我们就说它「更合理」，但不会说「θ 取这个值的概率大」。要把似然变成参数的概率分布，需要贝叶斯框架和先验分布，那是另一条路。最大似然刻意不引入先验，只问哪个参数最能解释眼前的数据。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把最大似然当成「参数最可能的值」</span></header>
+<div class="box-b">
+<p>你会脱口而出：「MLE 就是让参数最可能的值」。这句话在日常交流里能听懂，但严格说是错的——它暗示参数有概率分布，而频率学派不承认参数是随机的。正确的说法是「让观察到的数据最不意外的参数值」。这个区别不只是措辞：当你开始给参数加先验、算后验，你就进入了贝叶斯统计；MLE 是后验在均匀先验下的众数，但这个概念只有在贝叶斯框架里才成立。把两者混着用，会在讨论正则化时彻底说不清。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h3">4.3 取对数：乘积变和，下溢变可控</h2>
+<p>样本独立时，联合概率是各样本概率的乘积：<code>L(θ) = ∏ᵢ f(xᵢ|θ)</code>。一万个样本意味着一万次相乘。直接算有两个麻烦。第一，每个因子都小于 1，一万个因子乘起来会极小，双精度很快下溢成 0——<code>0</code> 与「非常小」在对数上差得很远，化成 0 后所有参数看起来一样差。第二，乘积的导数涉及复杂的乘积法则，求最优解很麻烦。</p>
+<p>取对数一举解决两件事：<code>ℓ(θ) = ln L(θ) = Σᵢ ln f(xᵢ|θ)</code>。乘法变成加法，不再下溢；对数函数是单调递增的，所以最大化 <code>L</code> 与最大化 <code>ℓ</code> 给出完全相同的参数。导数也好求了——和的导数就是导数的和。深度学习里所有训练损失几乎都写成负对数似然，正是因为它把一长串相乘变成了可累加、可求导、数值稳定的和。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-c231df1b">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> 乘积变求和：取对数怎样改造似然函数</figcaption>
+<div class="viz-screen" role="group" aria-label="乘积变求和：取对数怎样改造似然函数：逐步演示">
+<input class="vs-radio" type="radio" name="vz-c231df1b" id="vz-c231df1b-1" checked>
+<input class="vs-radio" type="radio" name="vz-c231df1b" id="vz-c231df1b-2">
+<input class="vs-radio" type="radio" name="vz-c231df1b" id="vz-c231df1b-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-c231df1b-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-c231df1b-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-c231df1b-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">似然 ：L(p)=p^k(1−p)^(n−k)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">问题 ：n=10000 时极易下溢</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">对数似然 ：ℓ(p)=k ln p+(n−k)ln(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">单调 ：ln 递增，最大值位置不变</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">对数似然</span><span class="ve-lbl">逐项取对数</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">梯度 ：k/p−(n−k)/(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">解 ：令梯度为零得 p=k/n</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">对数似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">梯度</span><span class="ve-lbl">逐项求导</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>原始似然是一长串乘积</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">似然 ：L(p)=p^k(1−p)^(n−k)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">问题 ：n=10000 时极易下溢</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>取对数，乘积变加法</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">对数似然 ：ℓ(p)=k ln p+(n−k)ln(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">单调 ：ln 递增，最大值位置不变</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">对数似然</span><span class="ve-lbl">逐项取对数</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>加法形式可求导、可累加</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">梯度 ：k/p−(n−k)/(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">解 ：令梯度为零得 p=k/n</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">对数似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">梯度</span><span class="ve-lbl">逐项求导</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>三帧从乘积形式走到可用形式，第 3 帧已经把最优解写了出来。注意第 2 帧里「单调」节点仍在——这是取对数合法的唯一理由；如果换个不单调的变换，最大值位置就变了。图里的 <code>k</code> 是成功次数、<code>n</code> 是总次数，与程序打印的 <code>successes</code> 和 <code>n</code> 对应。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用大白话说取对数</span></header>
+<div class="box-b">
+<p>一堆小于 1 的数相乘，越乘越小，小到计算机都装不下；取对数相当于把「相乘」改成「把各自的缺点相加」——每个样本对参数的不满程度累加起来，总不满最小的地方就是最合理的参数。 对数是单调的，所以「总不满最小」和「原始乘积最大」是同一件事。这个翻译不丢信息，却让计算从容易溢出变成稳稳当当。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h4">4.4 伯努利的 MLE 就是样本均值</h2>
+<p>伯努利似然：观察到 <code>k</code> 次成功、<code>n−k</code> 次失败（顺序不影响似然，因为独立同分布），所以 <code>L(p) = pᵏ(1−p)ⁿ⁻ᵏ</code>。对数似然 <code>ℓ(p) = k ln p + (n−k) ln(1−p)</code>。求导得 <code>ℓ'(p) = k/p − (n−k)/(1−p)</code>，令它为零：<code>k(1−p) = (n−k)p</code>，化简得 <code>p = k/n</code>。这就是样本均值。二阶导 <code>ℓ''(p) = −k/p² − (n−k)/(1−p)² &lt; 0</code>，所以这是极大值而不是极小值。</p>
+<p>这个结论很漂亮：最大似然估计给出的正是我们凭直觉会用的「成功次数除以总次数」。它给直觉提供了严格依据。程序里的 <code>sample_mean=0.357900</code> 就是 <code>successes/n = 3579/10000</code>，网格搜索找到的 <code>phat=0.36</code> 是最接近它的网格点（网格步长 0.01）。两者稍有差异，纯粹因为网格是离散的；如果把步长缩小到 0.0001，<code>phat</code> 会更接近 0.3579。</p>
+<figure class="viz" data-kind="graph" data-frames="3" data-viz-id="vz-9e1ab1ac">
+<figcaption class="viz-title"><span class="viz-kind">图 / 搜索过程</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-nodes" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="3.6" cy="4" r="1.7"/><circle cx="12.4" cy="4" r="1.7"/><circle cx="8" cy="12.2" r="1.7"/><path d="M5.3 4h5.4M4.6 5.5l2.6 5.1M11.4 5.5l-2.6 5.1"/></svg></span> " 伯努利 MLE 的三步：写似然、取对数、解导数</figcaption>
+<div class="viz-screen" role="group" aria-label="" 伯努利 MLE 的三步：写似然、取对数、解导数：逐步演示">
+<input class="vs-radio" type="radio" name="vz-9e1ab1ac" id="vz-9e1ab1ac-1" checked>
+<input class="vs-radio" type="radio" name="vz-9e1ab1ac" id="vz-9e1ab1ac-2">
+<input class="vs-radio" type="radio" name="vz-9e1ab1ac" id="vz-9e1ab1ac-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-9e1ab1ac-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-9e1ab1ac-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-9e1ab1ac-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本 ：n=10000，k=3579</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">似然 ：L(p)=p^3579(1−p)^6421</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">对数似然 ：ℓ(p)=3579 ln p+6421 ln(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">导数 ：3579/p−6421/(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">对数似然</span><span class="ve-lbl">单调变换</span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">phat ：k/n=0.357900</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">网格值 ：0.36，最接近的网格点</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">导数</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">phat</span><span class="ve-lbl">令导数为零</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>把成功与失败的次数数出来</p><div class="viz-canvas" data-kind="graph" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本 ：n=10000，k=3579</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">似然 ：L(p)=p^3579(1−p)^6421</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>取对数，乘积变和</p><div class="viz-canvas" data-kind="graph" data-step="2"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">对数似然 ：ℓ(p)=3579 ln p+6421 ln(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">导数 ：3579/p−6421/(1−p)</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">似然</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">对数似然</span><span class="ve-lbl">单调变换</span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>解出极大值点</p><div class="viz-canvas" data-kind="graph" data-step="3"><div class="vn-list"><div class="vn" data-state="active" data-new="step" data-depth="0"><span class="vn-text">phat ：k/n=0.357900</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">网格值 ：0.36，最接近的网格点</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">导数</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">phat</span><span class="ve-lbl">令导数为零</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>第 1 帧把真实计数写进节点；第 2 帧是对数和导数；第 3 帧给出解析解与网格解的对照。三帧自包含，第 3 帧仍保留了导数节点。这张图与 4.3 节的通用流程图分工不同：那张讲「为什么取对数」，这张讲「伯努利具体怎么解」。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">心算验算最优性</span></header>
+<div class="box-b">
+<p>在 <code>p=0.36</code> 处，<code>ℓ' = 3579/0.36 − 6421/0.64 ≈ 9941.67 − 10032.81 ≈ −91.1</code>，导数为负，说明已经越过峰值（网格点 0.36 略大于真最优 0.3579）。在 <code>p=0.35</code> 处，<code>ℓ' = 3579/0.35 − 6421/0.65 ≈ 10225.7 − 9878.5 ≈ +347.2</code>，导数为正，说明还没到峰值。两边一正一负，峰值夹在 0.35 与 0.36 之间，与解析解 0.3579 一致。这种「在候选点算导数符号」的办法，能在没有解析解时快速确认网格搜索找对了没有。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h5">4.5 真跑：网格搜索最大化对数似然</h2>
+<p>程序先用固定种子生成一万次伯努利试验，然后在 <code>p=0.01</code> 到 <code>0.99</code> 的网格上逐点调用共用库的 <code>po_bernoulli_loglik</code>，记录最大值。下面是网格搜索的核心代码。</p>
+<figure class="codeblock" data-lang="c" data-file="examples/ch02/mle_bernoulli/src/main.c"><figcaption class="cb-head"><span class="cb-lang">c</span><span class="cb-file">examples/ch02/mle_bernoulli/src/main.c</span><span class="cb-lines">第 15–19 行</span></figcaption><div class="cb-body" style="--tab-size:4"><pre class="code" data-from="15" data-to="19"><span class="cl" data-ln="15"><span class="ln" data-ln="15" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    </span><span class="tk" style="color:#D73A49">for</span><span class="tk" style="color:#24292E"> (grid </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">1</span><span class="tk" style="color:#24292E">; grid </span><span class="tk" style="color:#D73A49">&lt;=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">99</span><span class="tk" style="color:#24292E">; </span><span class="tk" style="color:#D73A49">++</span><span class="tk" style="color:#24292E">grid) {</span></span></span>
+<span class="cl is-marked" data-ln="16"><span class="ln" data-ln="16" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> p </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> grid </span><span class="tk" style="color:#D73A49">/</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#005CC5">100.0</span><span class="tk" style="color:#24292E">;</span><span class="k-note">网格步长0.01</span></span></span>
+<span class="cl is-marked" data-ln="17"><span class="ln" data-ln="17" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">const</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#D73A49">double</span><span class="tk" style="color:#24292E"> ll </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> </span><span class="tk" style="color:#6F42C1">po_bernoulli_loglik</span><span class="tk" style="color:#24292E">(x, MLE_N, p);</span><span class="k-note">调用共用库对数似然</span></span></span>
+<span class="cl is-marked" data-ln="18"><span class="ln" data-ln="18" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">        </span><span class="tk" style="color:#D73A49">if</span><span class="tk" style="color:#24292E"> (ll </span><span class="tk" style="color:#D73A49">&gt;</span><span class="tk" style="color:#24292E"> best) { best </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> ll; phat </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> p; ll_phat </span><span class="tk" style="color:#D73A49">=</span><span class="tk" style="color:#24292E"> ll; }</span><span class="k-note">记录当前最大值</span></span></span>
+<span class="cl" data-ln="19"><span class="ln" data-ln="19" aria-hidden="true"></span><span class="code"><span class="tk" style="color:#24292E">    }</span></span></span></pre></div><ol class="cb-notes"><li><span class="cb-note-ln">16</span>网格步长0.01</li><li><span class="cb-note-ln">17</span>调用共用库对数似然</li><li><span class="cb-note-ln">18</span>记录当前最大值</li></ol></figure>
+<p>共用库里的对数似然函数把每一项的 <code>ln p</code> 或 <code>ln(1−p)</code> 累加起来——这正是 4.3 节说的「乘积变和」。真跑得到的 stdout：</p>
+<figure class="term term-output" data-id="po04-mle-out" data-lang="output"><figcaption class="term-head"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-terminal" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.2" y="3" width="11.6" height="10" rx="1.2"/><path d="M4.6 6.4l1.9 1.8-1.9 1.8"/><path d="M8.4 10.6h3.2"/></svg></span><span class="term-kind">终端输出</span><span class="term-title">终端输出</span><span class="term-id">po04-mle-out</span></figcaption><pre class="term-body"><span class="cl is-text is-term" data-ln="1"><span class="code">n=10000</span></span>
+<span class="cl is-text is-term" data-ln="2"><span class="code">successes=3579</span></span>
+<span class="cl is-text is-term" data-ln="3"><span class="code">sample_mean=0.357900</span></span>
+<span class="cl is-text is-term" data-ln="4"><span class="code">phat=0.36</span></span>
+<span class="cl is-text is-term" data-ln="5"><span class="code">ll_at_phat=-6522.099301</span></span>
+<span class="cl is-text is-term" data-ln="6"><span class="code">ll_at_half=-6931.471806</span></span>
+<span class="cl is-text is-term" data-ln="7"><span class="code">normal_n=3000</span></span>
+<span class="cl is-text is-term" data-ln="8"><span class="code">normal_mu_hat=2.017684</span></span>
+<span class="cl is-text is-term" data-ln="9"><span class="code">normal_var_hat=2.226284</span></span></pre></figure>
+<p>逐行读：<code>successes=3579</code> 是真实成功次数，<code>sample_mean=0.357900</code> 是解析 MLE；<code>phat=0.36</code> 是网格搜索的最大值点；<code>ll_at_phat=−6522.099301</code> 是它对应的对数似然；<code>ll_at_half=−6931.471806</code> 是 <code>p=0.5</code> 处的对数似然，比峰值低了约 409。对数似然差 409 意味着似然本身差 <code>e⁴⁰⁹</code> 倍——数据强烈地不支持 <code>p=0.5</code>。最后三行是正态样本的均值与方差估计，真值分别是 2 和 2.25（即 <code>1.5²</code>），估计值 2.017684 与 2.226284 都在采样误差范围内。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">闸门怎么证明这些数不是编的</span></header>
+<div class="box-b">
+<p>清单 <code>po04-mle.json</code> 用 <code>mode=numerical</code>，九个黄金值全部来自这次真跑。<code>n</code>、<code>successes</code>、<code>sample_mean</code>、<code>phat</code> 是精确的整数或两位小数，给 <code>atol=1e-6</code>；两个对数似然与两个正态估计是浮点采样量，给 <code>atol=1e-3</code>。闸门编译真跑后解析等号行，逐行与正文对账并核对黄金值。想把 <code>phat</code> 改成解析值 0.3579 让书显得「更准」，闸门会报 <code>numeric_value_mismatch</code>——程序打的是网格值，正文就必须写网格值。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h6">4.6 正态 MLE：均值与方差</h2>
+<p>正态分布的密度是 <code>f(x|μ,σ) = (1/(√(2π)σ)) exp(−(x−μ)²/(2σ²))</code>。对 <code>n</code> 个独立样本取对数似然：<code>ℓ(μ,σ) = −n ln(√(2π)σ) − (1/(2σ²))Σ(xᵢ−μ)²</code>。对 <code>μ</code> 求导并令零，得到 <code>μ̂ = (1/n)Σxᵢ</code>，就是样本均值。对 <code>σ²</code> 求导并令零，得到 <code>σ̂² = (1/n)Σ(xᵢ−μ̂)²</code>，分母是 <code>n</code>。</p>
+<p>为什么是 <code>n</code> 而不是 <code>n−1</code>？因为这里是最大似然估计，优化的目标是似然本身，不是「无偏估计总体方差」。MLE 的方差系统性偏小，偏差因子是 <code>(n−1)/n</code>；本例 <code>n=3000</code>，因子 0.99967，小到远低于采样噪声。上一单元讲过，做无偏推断才用 <code>n−1</code>，做经验分布描述和 MLE 用 <code>n</code>——这里的 <code>normal_var_hat=2.226284</code> 与真值 2.25 的差距主要来自采样，不是分母选择。</p>
+<figure class="viz" data-kind="memory" data-frames="3" data-viz-id="vz-1eb8cd76">
+<figcaption class="viz-title"><span class="viz-kind">内存形态</span><span class="ico" aria-hidden="true"><svg class="ico-svg ico-chip" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4.4" y="4.4" width="7.2" height="7.2" rx="1"/><path d="M6.6 2.4v2M9.4 2.4v2M6.6 11.6v2M9.4 11.6v2M2.4 6.6h2M2.4 9.4h2M11.6 6.6h2M11.6 9.4h2"/></svg></span> 正态 MLE 的两个参数：从数据到估计</figcaption>
+<div class="viz-screen" role="group" aria-label="正态 MLE 的两个参数：从数据到估计：逐步演示">
+<input class="vs-radio" type="radio" name="vz-1eb8cd76" id="vz-1eb8cd76-1" checked>
+<input class="vs-radio" type="radio" name="vz-1eb8cd76" id="vz-1eb8cd76-2">
+<input class="vs-radio" type="radio" name="vz-1eb8cd76" id="vz-1eb8cd76-3">
+<div class="vs-bar"><label class="vs-tab" data-step="1" for="vz-1eb8cd76-1">第 1 步</label>
+<label class="vs-tab" data-step="2" for="vz-1eb8cd76-2">第 2 步</label>
+<label class="vs-tab" data-step="3" for="vz-1eb8cd76-3">第 3 步</label><span class="vs-note">点步骤看变化；PDF 版是逐帧静态图</span></div>
+<div class="vs-stage"><div class="vs-frame" data-step="1"><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本数 ：3000，来自 po_normal()</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：mu=2.000000，sigma^2=2.25</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="2"><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">mu_hat ：2.017684，由 po_mean 给出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">偏差 ：+0.017684，约一个标准误</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="vs-frame" data-step="3"><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">var_hat ：2.226284，由 po_variance 给出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">分母 ：n=3000，不是 n−1</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">mu_hat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">var_hat</span><span class="ve-lbl">先有均值才能算离差</span></div></div></div></div></div>
+</div>
+<div class="viz-print"><div class="viz-frame" data-step="1"><p class="viz-step"><span class="viz-step-no">第 1 步</span>数据住在数组里</p><div class="viz-canvas" data-kind="memory" data-step="1"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">样本数 ：3000，来自 po_normal()</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">真值 ：mu=2.000000，sigma^2=2.25</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="2"><p class="viz-step"><span class="viz-step-no">第 2 步</span>均值估计是逐样本累加的平均</p><div class="viz-canvas" data-kind="memory" data-step="2"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">mu_hat ：2.017684，由 po_mean 给出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">偏差 ：+0.017684，约一个标准误</span><span class="vn-tag" aria-hidden="true"></span></div></div></div></div>
+<div class="viz-frame" data-step="3"><p class="viz-step"><span class="viz-step-no">第 3 步</span>方差估计用 mu_hat 作中心</p><div class="viz-canvas" data-kind="memory" data-step="3"><div class="vn-list"><div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">var_hat ：2.226284，由 po_variance 给出</span><span class="vn-tag" aria-hidden="true"></span></div>
+<div class="vn" data-state="pending" data-new="none" data-depth="0"><span class="vn-text">分母 ：n=3000，不是 n−1</span><span class="vn-tag" aria-hidden="true"></span></div></div><div class="ve-list"><div class="ve" data-arrow="to"><span class="ve-a">mu_hat</span><span class="ve-arrow" aria-hidden="true">→</span><span class="ve-b">var_hat</span><span class="ve-lbl">先有均值才能算离差</span></div></div></div></div></div>
+<span class="viz-hooks" hidden><span class="viz-mount" data-viz-mount="screen"></span><span class="viz-mount" data-viz-mount="print"></span></span>
+</figure>
+<p>三帧按「数据 → 均值 → 方差」的顺序推进，第 3 帧仍保留 <code>mu_hat</code> 节点，说明方差计算依赖均值估计。这里用到的 <code>po_mean</code> 与 <code>po_variance</code> 正是上一单元的共用函数——同一套工具，换个场景继续用。<code>normal_var_hat</code> 的真值 <code>1.5²=2.25</code>，偏差 <code>−0.0237</code>，与 <code>n=3000</code> 下方差估计的标准误量级一致。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把样本方差直接当成 MLE 方差</span></header>
+<div class="box-b">
+<p>你会习惯性地写 <code>1/(n−1)Σ(xᵢ−x̄)²</code>，然后说这是「方差的最大似然估计」。严格说不对：那是无偏估计，不是 MLE。两者在 <code>n</code> 大时几乎一样，所以实践里没人计较；但在推导似然方程时，分母必须写 <code>n</code>，否则你在优化的不是似然函数。做模型选择、比较不同分布的 AIC/BIC 时，似然值要算得精确，这时候分母的约定就不能含糊。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h7">4.7 过拟合与正则化：MLE 的边界</h2>
+<p>最大似然只优化对训练数据的拟合程度，不管参数有多复杂。如果模型容量很大，它能把训练数据「背下来」，得到极高的似然，却在新数据上表现很差——这就是过拟合。举一个极端的例子：对一维数据，你可以用一个次数比样本数还高的多项式穿过每个点，残差为零、似然趋于无穷，但这个多项式在两点之间剧烈震荡，毫无预测价值。</p>
+<p>正则化是对 MLE 的修正：在目标函数里加一项惩罚复杂度的项。<code>ℓ(θ) − λ·R(θ)</code> 里 <code>λ</code> 控制惩罚强度，<code>R</code> 衡量参数有多大或有多复杂。加上 L2 惩罚等价于给参数加了一个高斯先验，从贝叶斯角度看这是在求最大后验估计而不是最大似然。这个联系很重要：它告诉你 L2 正则不是拍脑袋加的，它有明确的统计解释。本例只做纯粹的 MLE，正则化留到后面的优化分册展开。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用大白话说过拟合</span></header>
+<div class="box-b">
+<p>MLE 像一个死记硬背的学生：把见过的每一道题的答案都背下来，考原题满分，换个数字就不会了。正则化像老师要求「不许死记，要理解规律」——它限制学生把参数调得太极端，逼模型学到更一般的模式。限制太松会过拟合，太紧会欠拟合，中间的 <code>λ</code> 要靠验证集来选。这套权衡贯穿整个机器学习。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h8">4.8 数值稳定：log 0 与下溢</h2>
+<p>共用库的 <code>po_bernoulli_loglik</code> 在 <code>p=0</code> 且样本成功时会对 0 取对数，结果在 IEEE 浮点里是 <code>−∞</code>。这不是 bug，是数学事实：<code>ln 0</code> 没有有限值。程序里网格从 0.01 开始、到 0.99 结束，正好绕开了这两个端点。如果你把网格改成从 0 开始，峰值附近的比较还可能正常，但端点处会出现负无穷，打印出 <code>−inf</code>，闸门会报 <code>numeric_value_invalid</code>。</p>
+<p>工程上处理这类边界有三种办法。一是避开端点，像本例这样留一个小间隔。二是加一个极小量 <code>ε</code>，用 <code>ln(p+ε)</code> 代替 <code>ln p</code>，缺点是引入了微小偏差。三是在代码里显式判断，遇到零概率就返回一个很大的负数。深度学习框架里的交叉熵实现通常做第三种，还会用 log-sum-exp 技巧避免分子分母同时下溢。你现在知道这些技巧服务的目标是什么：让「对数似然」这个量在浮点里保持可靠。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">把 −inf 当成「很小的值」继续算</span></header>
+<div class="box-b">
+<p>你会觉得 <code>−inf</code> 只是一个特别小的数，加加减减无所谓。真相是它会污染整个计算：<code>−inf + 1 = −inf</code>，<code>−inf − (−inf) = nan</code>。一旦 nan 进了梯度，所有参数都变 nan，训练彻底崩掉。更隐蔽的是 <code>−inf</code> 参与的比较：如果所有候选的对数似然都是 <code>−inf</code>，网格搜索会停在第一个候选上，看起来「找到了最优」，其实全是废值。防御办法是在计算前检查参数范围，在计算后检查有限性，不要等 nan 冒出来才查。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h9">4.9 网格搜索与解析解：两条路互相验证</h2>
+<p>本例用网格搜索，因为它不需要推导导数，代码直白到一眼能看懂。解析解 <code>p̂ = k/n</code> 则给出精确答案。两条路给出的数略有差异：<code>phat=0.36</code> 是网格点，<code>sample_mean=0.357900</code> 是解析值。这个差异不是错误，而是离散化的代价。你可以把网格改成步长 0.001，此时 <code>phat</code> 会变成 0.358，更接近解析解；代价是循环次数放大十倍，但对一万次样本来说仍然瞬间完成。</p>
+<p>什么时候必须用数值优化？当似然方程没有解析解时，比如混合模型、逻辑回归、神经网络。这时梯度下降、牛顿法、EM 算法轮番上场，但它们优化的目标仍然是同一个对数似然。本节的网格搜索就是这些算法的玩具版：枚举候选、算目标、选最大。理解了它，你再看 Adam 更新公式时就知道那一堆运算服务的目标是同一个 <code>ℓ(θ)</code>。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">把网格步长改细，看 phat 怎么变</span></header>
+<div class="box-b">
+<p>把循环改成 <code>grid = 1; grid &lt;= 9999; ++grid</code>、<code>p = grid / 10000.0</code>，理论最优网格点是 3579/10000=0.3579。你可以先写下预测，再真跑核对。注意 <code>ll_at_phat</code> 也会变大（更接近真正的峰值），而 <code>ll_at_half</code> 不变——因为它与网格无关。这个实验让你亲手看到「离散化误差」和「模型本身的不确定性」是两回事：前者可以靠细化网格消除，后者只能靠更多数据缓解。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h10">4.10 与深度学习的对应：交叉熵就是负对数似然</h2>
+<p>分类任务的交叉熵损失，本质就是伯努利或类别分布的负对数似然除以样本数。二分类时，标签 <code>y∈{0,1}</code>、模型预测概率 <code>p</code>，单样本损失 <code>−[y ln p + (1−y)ln(1−p)]</code>，正好是伯努利对数似然取负。整个训练集上的平均交叉熵，就是 <code>−ℓ(p)/n</code>。所以最小化交叉熵与最大化伯努利似然是同一件事，只差一个负号和一个常数因子。</p>
+<p>这个对应关系解释了三件事。第一，为什么分类用交叉熵而不是均方误差——交叉熵直接来自数据的概率模型，梯度在概率接近错误标签时不会饱和得太厉害。第二，为什么训练曲线要报 loss 而不是似然——loss 是负对数似然，越小越好，读起来符合直觉。第三，为什么标签要做独热编码——独热标签让目标分布变成确定性的，交叉熵里目标分布的熵项为零，剩下纯粹的对数似然项。下一单元讲熵与 KL 散度时会把这层关系完全展开。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">为什么框架里用 log_softmax 而不是先 softmax 再 log</span></header>
+<div class="box-b">
+<p>先算 softmax 得到概率，再对概率取对数，中间会把很小的概率下溢成 0，接着 <code>log(0)=−∞</code>。log_softmax 把两步合并，用 log-sum-exp 技巧直接在 log 域计算，数值稳定得多。它的数学结果与「先 softmax 再 log」完全相同，但避开了下溢。你现在知道它服务的目标：让 4.8 节说的负对数似然在浮点里算得准。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h11">4.11 手算核对：把两个似然值算到底</h2>
+<p><code>ll_at_half</code> 可以用解析公式核对。<code>k=3579</code>、<code>n−k=6421</code>，<code>p=0.5</code> 时每一项的对数都是 <code>ln 0.5≈−0.693147</code>，所以 <code>ℓ(0.5)=10000×(−0.69314718056)=−6931.471806</code>，与程序打印逐位一致。这是一个很好的独立尺子：不需要程序，只用自然对数的基本值就能验证。</p>
+<p><code>ll_at_phat</code> 在网格点 0.36 处按公式 <code>3579×ln(0.36)+6421×ln(0.64)</code> 算。<code>ln(0.36)≈−1.021651</code>，<code>ln(0.64)≈−0.446287</code>，两项分别是 <code>−3656.468</code> 与 <code>−2865.631</code>，合计约 <code>−6522.099</code>，与打印值 <code>−6522.099301</code> 一致。两个似然值的差是 <code>409.372505</code>，意味着 <code>p=0.36</code> 的似然是 <code>p=0.5</code> 的 <code>e⁴⁰⁹</code> 倍——这个数字大到没有物理意义，但足以说明数据对 <code>p=0.5</code> 的否定有多坚决。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">别直接比较似然而要比较对数似然</span></header>
+<div class="box-b">
+<p>似然值是 <code>e^(−6522)</code> 这种极小的数，不同参数之间的似然比是 <code>e⁴⁰⁹</code>，任何浮点数都装不下。比较对数似然则完全可行——它的数值范围只有几千，差值 409 一目了然。这也是为什么所有统计量（似然比检验、AIC、BIC）都用对数似然定义。看到别人报「对数似然 −6522」，你要知道这不是「负数所以很差」，而是「取了对数之后的尺度，越大越好」。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h12">4.12 这一节新增了什么，下一节要什么</h2>
+<p>回到 4.1 的第 2 帧：这一节新增的是 <code>mle_bernoulli/</code>，头文件、两个源文件、清单一起到位，共用库没动。真正的新东西是把「从数据反推参数」变成一个可计算的目标函数：写出似然、取对数、求最大。伯努利的解是样本均值，正态的解是样本均值与样本方差，两条都与前面三节的统计量直接接上。你还看到了数值稳定的必要性——<code>log 0</code> 和负无穷会实实在在地毁掉计算。</p>
+<p>下一单元问一个更根本的问题：我们说「交叉熵是损失」，可它为什么叫交叉熵？熵是什么，KL 散度为什么非负又不对称？你会发现交叉熵等于目标分布的熵加上目标与模型之间的 KL 散度，而独热标签让熵项变成零——于是最小化交叉熵就等价于最小化 KL。这一册的主线到此完成从采样到损失函数的闭环。</p>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h13">4.13 充分统计量：为什么只需记住两个计数</h2>
+<p>伯努利的似然 <code>L(p)=pᵏ(1−p)ⁿ⁻ᵏ</code> 只依赖两个数：总次数 <code>n</code> 和成功次数 <code>k</code>，不依赖每个样本的出现顺序。这两个数叫充分统计量——它们已经包含了样本中关于 <code>p</code> 的全部信息。一旦你知道 <code>n</code> 和 <code>k</code>，再看原始的一万次结果不会让 <code>p</code> 的估计更准。这个结论在数据压缩和系统设计中很实用：你不必存下一万个 0/1，存两个整数就够了。</p>
+<p>充分统计量也解释了为什么 MLE 那么容易求。它把高维数据压缩成低维摘要，优化问题从「一万维样本上的函数」变成「一维参数上的函数」。正态分布的充分统计量是样本均值与样本平方和，对应本例打印的 <code>normal_mu_hat</code> 与 <code>normal_var_hat</code>。并非所有分布都有这么紧凑的充分统计量——神经网络的参数估计就没有，这也是深度学习必须依赖数值优化的原因之一。</p>
+<section class="box box-practice" data-box-type="practice"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-gear" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><circle cx="8" cy="8" r="1.8"/><path d="M8 1.9v2.2M8 11.9v2.2M2.6 8h2.2M11.2 8h2.2"/></svg></span><span class="box-kind">工程惯例</span><span class="box-t">充分统计量在在线学习里的用处</span></header>
+<div class="box-b">
+<p>如果你的数据流是逐条到达的，不能一次性把所有历史数据留在内存里，充分统计量让你只保存少量摘要就够了：伯努利只要累加成功次数和总次数，正态只要累加和、平方和、计数。新的样本到来时更新摘要，随时能算出当前 MLE。代价是丢掉了原始样本，事后想验证分布假设或找异常值就做不到了——这是压缩的普遍代价。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h14">4.14 似然比检验：用差值判断参数是否可疑</h2>
+<p>4.11 节算出两个对数似然相差 409，这个差值本身就是一种统计检验。似然比检验的思想是：比较「参数自由取最优值」与「参数被限制在某个假设值」两种情况下的最大对数似然，差值越大，说明限制越不合理。对大样本，统计量 <code>2(ℓ(θ̂)−ℓ(θ₀))</code> 近似服从卡方分布，自由度是被限制的参数个数。本例的差值是 <code>2×409≈818</code>，远大于任何常用临界值，所以 <code>p=0.5</code> 的假设被坚决拒绝。</p>
+<p>这个框架把「估计」和「检验」统一在同一个似然函数下：估计找峰值，检验看峰值与假设点之间的距离。深度学习里做模型比较时用的 AIC 与 BIC 也都建立在对数似然上，只是在峰值附近加了一个参数个数的惩罚项。你现在看到的 <code>ll_at_phat</code> 与 <code>ll_at_half</code> 不只是两个打印数字，它们是一整套统计推断的原料。</p>
+<section class="box box-trap" data-box-type="trap"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-warnTriangle" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.4l5.8 10.6H2.2z"/><path d="M8 6.2v3.4"/><circle cx="8" cy="11.4" r="0.72" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">陷阱</span><span class="box-t">大样本下几乎所有假设都会被拒绝</span></header>
+<div class="box-b">
+<p>你会以为似然比差值越大越有说服力，于是拿一百万条数据去检验「转化率是否等于某个值」。问题在于检验统计量的增长与样本量成正比：再小的真实差异，样本量足够大时也会给出巨大的差值，把原假设拒绝掉。这时统计显著与实际重要是两回事——<code>p=0.3579</code> 与 <code>p=0.36</code> 的差别在商业上可能毫无意义，但一百万条数据能把它判为「高度显著」。报结论时要同时给效应量，不能只给显著性。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h15">4.15 从 MLE 到 MAP：先验怎样进入目标函数</h2>
+<p>最大似然不假设参数有任何偏好。如果你事前就知道 <code>p</code> 大概率在 0.5 附近，可以把这份知识写进先验分布，转而最大化后验——这叫最大后验估计。对伯努利参数，共轭先验是 Beta 分布，加上先验后的最优解不再是单纯的 <code>k/n</code>，而是成功与失败计数各加上一个「伪计数」。样本少时伪计数影响大，样本多时被真实数据淹没。这套机制给了正则化一个清晰的统计解释。</p>
+<p>L2 正则对应高斯先验：惩罚项 <code>λ‖θ‖²</code> 就是负的对数高斯先验。L1 正则对应拉普拉斯先验，它会产生稀疏解。理解这层对应关系，你在调正则化强度 <code>λ</code> 时就知道自己其实在表达「我事前相信参数有多大」——<code>λ</code> 越大，先验越窄，模型越不敢把参数调大。本例没有加正则，属于纯 MLE；这也解释了为什么它只优化训练数据的拟合，不过问参数复杂度。</p>
+<section class="box box-plain" data-box-type="plain"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-bubble" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M13.6 9.2a1.6 1.6 0 0 1-1.6 1.6H6.3L3.2 13.4V4.2a1.6 1.6 0 0 1 1.6-1.6h7.2a1.6 1.6 0 0 1 1.6 1.6z"/><path d="M5.6 6.2h4.8"/><path d="M5.6 8.4h3.2"/></svg></span><span class="box-kind">大白话</span><span class="box-t">用一句话把三种估计串起来</span></header>
+<div class="box-b">
+<p>MLE 只问数据怎么说；MAP 再问先验怎么说；贝叶斯推断不止取一个点，而是把整个后验分布都算出来。三者共用同一个似然函数，区别只在是否引入先验、以及最终要一个点还是一个分布。本单元站在第一级，后面两级在信息论与优化分册里会陆续出现。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h16">4.16 常见误解清单</h2>
+<p>第一句「MLE 一定存在且唯一」。不一定。若数据里全是成功或全是失败，伯努利的似然在 <code>p=1</code> 或 <code>p=0</code> 处取最大，端点处对数发散；若模型不可辨识（两个参数组合给出相同分布），最优点是一条线而不是一个点。第二句「样本越多 MLE 越接近真值」。这要有前提：模型设定正确、样本独立同分布。模型错配时，MLE 收敛到「最接近真分布的那个模型参数」，而不是你心里想的真值。</p>
+<p>第三句「对数似然越大模型越好」。在同一份数据、同一族模型里可以这样比；跨数据集比较就没有意义，因为样本量不同会让对数似然按 <code>n</code> 缩放。这也是 AIC、BIC 要补偿样本量的原因。第四句「网格搜索找到的就是全局最大」。网格只覆盖你列的候选点，若真实峰值在两点之间，网格值只是近似；若似然函数是多峰的，粗网格甚至会漏掉更高的峰。本例的似然是单峰凹函数，网格搜索才万无一失。</p>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h17">4.17 为什么种子对似然实验同样重要</h2>
+<p>本例的采样、正态样本、网格搜索全部由固定种子驱动。伯努利序列的确定性保证了 <code>successes=3579</code> 在任何一次重跑里都一模一样；正态序列用 <code>MLE_SEED+1</code> 作为另一个固定种子，避免与伯努利使用完全相同的均匀数序列——虽然两条序列独立不是统计上的硬性要求，但复用同一条序列会让两个估计的误差产生人为相关，解释起来更麻烦。</p>
+<p>网格搜索本身没有随机性，它是确定性的枚举。但它的输入来自采样，所以整个实验的可复现性仍然系于种子这一处。清单里 <code>successes</code>、<code>sample_mean</code>、<code>phat</code> 给 <code>atol=1e-6</code> 而不是宽松容差，正是因为这些量在固定种子下是精确整数；宽松容差会让「种子写错但碰巧接近」的假实现蒙混过关。数值实验的严格程度要和量的确定性匹配——这是贯穿这一册的容差设计原则。</p>
+<section class="box box-experiment" data-box-type="experiment"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-flask" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 2.6v3.7l-3.1 5.8a1 1 0 0 0 .9 1.5h7.4a1 1 0 0 0 .9-1.5l-3.1-5.8V2.6"/><path d="M5.5 2.6h5"/><path d="M4.8 9.6h6.4"/></svg></span><span class="box-kind">实验记录</span><span class="box-t">复现性检查：两次运行逐字节一致</span></header>
+<div class="box-b">
+<p>在 <code>examples/ch02/mle_bernoulli/</code> 目录下按给定编译命令生成可执行文件，连续运行两次并把输出重定向到两个文件，用 <code>diff</code> 比较。按 LCG 的确定性，两次 stdout 必须完全相同；只要不同，就说明采样路径被某个未固定的因素改变了。再把 <code>MLE_SEED</code> 换成一个别的值，输出应该整体变化而网格搜索逻辑不变——这验证了「种子控制数据、不控制算法」这条分工。</p>
+</div>
+</section>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h18">4.18 用两个数字把整节收束</h2>
+<p>把本例的计数记牢：<code>n=10000</code>、<code>k=3579</code>、<code>n−k=6421</code>。三个数字撑起了所有输出：<code>sample_mean=3579/10000=0.357900</code> 是解析 MLE；网格点 <code>0.36</code> 是它在离散候选里的最近邻；<code>ll_at_half=10000×ln(0.5)=−6931.471806</code> 是原假设处的对数似然；<code>ll_at_phat≈3579×ln(0.36)+6421×ln(0.64)=−6522.099301</code> 是峰值处的对数似然。正态那一半也同理：3000 个来自 <code>N(2,1.5²)</code> 的样本，给出 <code>mu_hat≈2.02</code>、<code>var_hat≈2.23</code>。</p>
+<p>记住这两个场景的共同结构：先确定参数空间（本例是 <code>p∈(0,1)</code>、<code>μ∈ℝ</code>、<code>σ²&gt;0</code>），写出似然，取对数，求最大。无论模型多复杂，这三步不变。神经网络的巨大参数空间让第三步必须靠数值优化，但第一步和第二步的形状完全相同——这就是这一节被称为「训练本质」的原因。你在本节手算的每一个对数，都在训练循环里以某种形式重复出现。</p>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h19">4.19 似然函数的形状：为什么峰值好找</h2>
+<p>伯努利的对数似然是凹函数：二阶导恒为负，曲线只有一个峰，没有局部极大值的干扰。这个性质让网格搜索和牛顿法都能可靠工作，也让我们敢用「在候选点算导数符号」来确认峰值位置。凹性不是所有模型都有的——神经网络的损失函数充满局部极小值和平坦区域，优化器能不能找到好解依赖初始化和调参技巧。本例的简洁正是因为它是一个「教科书级」的单峰问题。</p>
+<p>理解这一点，你就能分清两类难度。一类是「目标函数容易优化但模型太简单」，另一类是「模型表达力强但目标函数难优化」。MLE 的理论框架同时覆盖两者，差别只在求解难度。本单元演示第一类，让你先把「构造目标函数」这件事学扎实；等到优化分册，再专门处理第二类。这样的分工避免了你一上来就被数值细节淹没，看不见统计主线。</p>
+<h2 id="probopt-chapters-ch02-01-maximum-likelihood-md-h20">4.20 一个容易被忽略的细节：顺序无关</h2>
+<p>伯努利样本的出现顺序不影响似然：先成功后失败与先失败后成功，给出同一个 <code>k</code> 和同一个 <code>n</code>，因此同一个似然值。这是独立同分布假设的直接后果——联合概率等于边缘概率的乘积，而乘法可交换。程序里把一万次结果存进数组再逐项调用对数似然，换成流式累加计数再用解析公式，结果完全一样。理解这点，你就能在工程中放心地把批量计算改成增量计算，不必担心顺序改变结论。</p>
+<section class="box box-summary" data-box-type="summary"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-checklist" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 4.3l1.3 1.3 2.2-2.4"/><path d="M2.6 10.5l1.3 1.3 2.2-2.4"/><path d="M8.4 4.4h5"/><path d="M8.4 10.6h5"/></svg></span><span class="box-kind">小结</span><span class="box-t">这一节的要点</span></header>
+<div class="box-b">
+<ul>
+<li>似然是「固定数据、变化参数」的函数，它不是参数的概率；</li>
+<li>取对数把乘积变和、避免下溢，且因单调性不改变最大值位置；</li>
+<li>伯努利 MLE 是 <code>k/n</code>，正态 MLE 的均值是样本均值、方差分母是 <code>n</code>；</li>
+<li>网格搜索与解析解互相验证，端点处 <code>log 0</code> 必须用避开或显式处理；</li>
+<li>交叉熵就是负对数似然，L2 正则等价于高斯先验下的最大后验估计。</li>
+</ul>
+</div>
+</section>
+<section class="box box-quiz" data-box-type="quiz"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-question" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M6.1 6.3a1.9 1.9 0 1 1 2.7 1.8c-.6.3-.9.7-.9 1.4v.3"/><circle cx="8" cy="11.6" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">自测题</span><span class="box-t">自测题（先自己答，再对答案）</span></header>
+<div class="box-b">
+<ol>
+<li>似然与概率的区别是什么？为什么说「参数最可能的值」严格讲不正确？</li>
+<li>写出伯努利样本的对数似然，求导并证明极大值点是 <code>k/n</code>。</li>
+<li>为什么正态 MLE 的方差分母是 <code>n</code> 而不是 <code>n−1</code>？两种分母各用在什么语境？</li>
+<li>本例 <code>phat=0.36</code> 与 <code>sample_mean=0.357900</code> 为什么不相等？怎样让它们更接近？</li>
+<li><code>ll_at_half</code> 为什么能用手算核对？写出核对过程。</li>
+<li>把网格端点改成 <code>p=0</code>，程序会遇到什么问题？给出两种工程上的处理办法。</li>
+<li>交叉熵损失与负对数似然是什么关系？为什么独热标签会让目标分布的熵项变成零？</li>
+</ol>
+</div>
+</section>
+<section class="box box-note" data-box-type="note"><header class="box-h"><span class="ico" aria-hidden="true"><svg class="ico-svg ico-info" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.1"/><path d="M8 7.2v4.2"/><circle cx="8" cy="4.9" r="0.8" fill="currentColor" stroke="none"/></svg></span><span class="box-kind">注</span><span class="box-t">自测题答案</span></header>
+<div class="box-b">
+<ol>
+<li>概率固定参数、变化数据；似然固定数据、变化参数。似然对参数不积分为 1，不是参数的概率分布，因此不能说参数「最可能」；准确说法是「让已观察到的数据最不意外的参数值」。</li>
+<li>对数似然 <code>ℓ(p)=k ln p+(n−k)ln(1−p)</code>，导数 <code>k/p−(n−k)/(1−p)</code>，令零得 <code>k(1−p)=(n−k)p</code>，即 <code>p=k/n</code>；二阶导恒负，故为极大值。</li>
+<li>MLE 优化的是似然函数本身，其方差解的分母是 <code>n</code>；<code>n−1</code> 是总体方差的无偏估计，用于统计推断。做 MLE、描述经验分布、批归一化用 <code>n</code>；做置信区间和假设检验用 <code>n−1</code>。</li>
+<li>网格步长 0.01，<code>phat</code> 只能取两位小数，最接近 0.3579 的点是 0.36。把步长细化到 0.0001 后网格点会更接近 0.3579，离散化误差随之缩小。</li>
+<li><code>p=0.5</code> 时每项的 <code>ln p</code> 与 <code>ln(1−p)</code> 都是 <code>ln 0.5≈−0.69314718056</code>，共 10000 项，故 <code>ℓ=10000×(−0.69314718056)=−6931.471806</code>，与打印一致。</li>
+<li><code>p=0</code> 且样本成功时 <code>ln(0)=−∞</code>，打印会出 <code>−inf</code>，若所有候选都如此还会让比较失效。处理办法：避开端点（留小间隔）、加一个极小量 <code>ε</code> 用 <code>ln(p+ε)</code>、或显式判断零概率并返回很大的负数。</li>
+<li>分类交叉熵就是负对数似然除以样本数；对独热标签，目标分布只有一个取值为 1 的格，其余为 0，<code>−Σq ln q</code> 中只有 <code>q=1</code> 那项有贡献而 <code>ln 1=0</code>，故目标分布的熵为零，交叉熵退化为 <code>−ln p(真实类别)</code>。</li>
+</ol>
+</div>
+</section>
+
+  </article>
+
+  <!-- 图元挂点（契约）：每个图元的两个形态已经内联在正文里（屏幕版 .viz-screen /
+       打印版 .viz-print，由 build/viz.js 从同一份围栏数据同时产出）。
+       下面两个挂点留给「需要页面级交互」的扩展，默认隐藏、不参与布局与打印。 -->
+  <div id="viz-screen-mount" data-viz-mount="screen-root" hidden></div>
+  <div id="viz-print-mount" data-viz-mount="print-root" hidden></div>
+
+  <!-- 页脚：屏幕可见，打印隐藏（纸面上有页码就够了） -->
+  <footer class="doc-foot" id="doc-foot">
+<p class="foot-note">本页由 dev-notes/build/render.js 生成（markdown-it + Shiki 4.5.0）；源码块取自书里的真实文件，终端输出与编译诊断取自真编译真运行闸门。</p><p class="foot-note">教学工具链：gcc/g++ 16.1.0、C17 / C++23、目标 x86_64-w64-mingw32。正文里的版本号一律由 build/toolchain.json 注入。</p>
+  </footer>
+
+</main>
+
+</body>
+</html>

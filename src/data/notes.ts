@@ -1,3 +1,5 @@
+import { studyNotesCollections } from './study-notes';
+
 export interface NoteChapter {
   id: string;
   title: string;
@@ -894,6 +896,7 @@ export const notesCollections: NoteCollection[] = [
       { tag: 'HTML', label: '合书 HTML', file: 'books/rust.html', note: '站内阅读版' },
     ],
   },
+  ...studyNotesCollections,
 ];
 
 export const notesBase = `${import.meta.env.BASE_URL.replace(/\/?$/, '/')}notes/`;
@@ -908,10 +911,10 @@ export function noteDownloadName(file: string): string {
 
 export const notesTotals = {
   kinds: notesCollections.length,
-  units: 136,
+  units: 136 + studyNotesCollections.reduce((n, c) => n + c.chapters.length, 0),
   chapters: 46,
-  chars: 1089490,
+  chars: 1089490 + 448482,
   pages: 2121,
-  examples: 216,
-  graphs: 113,
+  examples: 216 + 88,
+  graphs: 113 + 111,
 };
