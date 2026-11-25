@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-zcode-design>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分册知识图谱 · 笔记阅读器原型</title>
+<style>
+:root{
+  /* ---- 站点令牌（Codrift 亮色，来源 src/styles/tokens.css） ---- */
+  --bg-0:#ffffff; --bg-1:#f4f7fc; --bg-2:#eef3f9; --bg-3:#e4ebf5;
+  --fg-0:#0b1526; --fg-1:#3d4d6b; --fg-2:#5f7092;
+  --accent:#4f8cff; --accent-strong:#1f56c4; --accent-text:#2b66d9;
+  --accent-dim:rgba(79,140,255,.12); --accent-line:rgba(79,140,255,.45);
+  --accent-2:#ff9a4d; --accent-2-text:#b35310; --accent-2-dim:rgba(255,154,77,.14);
+  --on-accent:#071022;
+  --line:rgba(11,21,38,.1); --line-strong:rgba(11,21,38,.22);
+  --shadow-1:0 1px 2px rgba(11,21,38,.08); --shadow-2:0 14px 44px rgba(11,21,38,.14);
+  --glass-bg:rgba(255,255,255,.8); --glass-border:rgba(11,21,38,.1);
+  --tab-hover:rgba(11,21,38,.05); --scrim:rgba(11,21,38,.38);
+  --grid-dot:rgba(11,21,38,.09); --edge:#aebdd4; --edge-soft:#9aabc6;
+  --radius-sm:8px; --radius-md:12px; --radius-lg:20px; --radius-full:9999px;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:24px; --space-6:32px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --fs-xs:11px; --fs-sm:12px; --fs-md:14px; --fs-lg:16px; --fs-xl:22px;
+  --dur-fast:160ms; --dur-base:240ms; --ease-out-quart:cubic-bezier(.22,1,.36,1);
+  /* ---- 图谱可调尺寸 ---- */
+  --stage-w:1680px; --stage-h:820px; --node-w:184px; --node-h:78px;
+}
+html[data-theme="dark"]{
+  --bg-0:#05080f; --bg-1:#070c18; --bg-2:#0c1426; --bg-3:#111b33;
+  --fg-0:#eaf1ff; --fg-1:#a8b8d8; --fg-2:#6b7c9e;
+  --accent:#4f8cff; --accent-strong:#8ab4ff; --accent-text:#8ab4ff;
+  --accent-dim:rgba(79,140,255,.16); --accent-line:rgba(79,140,255,.42);
+  --accent-2:#ff9a4d; --accent-2-text:#ff9a4d; --accent-2-dim:rgba(255,154,77,.16);
+  --line:rgba(140,172,224,.14); --line-strong:rgba(140,172,224,.3);
+  --shadow-1:0 1px 2px rgba(2,6,16,.5); --shadow-2:0 14px 44px rgba(2,6,16,.55);
+  --glass-bg:rgba(12,18,34,.86); --glass-border:rgba(148,172,214,.14);
+  --tab-hover:rgba(140,172,214,.1); --scrim:rgba(2,6,16,.62);
+  --grid-dot:rgba(140,172,224,.12); --edge:#4b5d7d; --edge-soft:#465875;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; color:var(--fg-0); background:var(--bg-1);
+  font-family:var(--font-sans); font-size:var(--fs-md); line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+[hidden]{display:none!important}
+body.graph-open{overflow:hidden}
+.graph-open .reader-top,.graph-open .reader-body,.graph-open .aurora{visibility:hidden}
+
+/* ---- 背景光晕（纯 CSS，无外部资源） ---- */
+.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.aurora i{position:absolute;display:block;border-radius:50%;filter:blur(90px);opacity:.5}
+.aurora i:nth-child(1){width:46vw;height:34vw;left:-10vw;top:-12vw;background:var(--accent-dim)}
+.aurora i:nth-child(2){width:38vw;height:30vw;right:-8vw;top:8vh;background:var(--accent-2-dim)}
+.aurora i:nth-child(3){width:44vw;height:26vw;left:22vw;bottom:-14vw;background:var(--accent-dim);opacity:.32}
+
+/* ---- 阅读器顶栏 ---- */
+.reader-top{
+  position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:14px;
+  min-height:66px;padding:10px 24px;border-bottom:1px solid var(--line);
+  background:var(--glass-bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:36px;padding:0 12px;border:1px solid transparent;border-radius:var(--radius-full);
+  background:transparent;color:var(--fg-1);font-size:var(--fs-md);font-weight:550;
+  transition:background var(--dur-fast) ease-out,color var(--dur-fast) ease-out;
+}
+.icon-btn:hover{background:var(--tab-hover);color:var(--fg-0)}
+.icon-btn svg{flex:none}
+.volume-pill{
+  display:inline-flex;align-items:center;gap:9px;flex:none;height:38px;
+  padding:0 13px 0 12px;border:1px solid var(--accent-line);border-radius:var(--radius-full);
+  background:var(--bg-0);color:var(--fg-0);font-size:var(--fs-md);font-weight:650;
+  box-shadow:var(--shadow-1);transition:border-color var(--dur-fast),background var(--dur-fast),transform var(--dur-fast);
+}
+.volume-pill:hover{border-color:var(--accent);background:var(--accent-dim)}
+.volume-pill:active{transform:scale(.97)}
+.volume-pill .map-glyph{color:var(--accent-text)}
+.volume-pill .chev{color:var(--fg-2);transition:transform var(--dur-base) var(--ease-out-quart)}
+.volume-pill[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.reader-divider{width:1px;height:24px;background:var(--line);flex:none}
+.reader-heading{min-width:0;flex:1}
+.reader-kicker{margin:0;color:var(--fg-2);font-size:var(--fs-sm);letter-spacing:.02em}
+.reader-title{margin:1px 0 0;font-size:var(--fs-lg);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-hint{display:inline-flex;align-items:center;gap:7px;color:var(--fg-2);font-size:var(--fs-sm);white-space:nowrap}
+.theme-btn{width:36px;padding:0;flex:none}
+
+/* ---- 阅读器主体 ---- */
+.reader-body{position:relative;z-index:1;display:grid;grid-template-columns:296px minmax(0,1fr);gap:24px;max-width:1360px;margin:0 auto;padding:28px 24px 64px}
+.chapter-rail{align-self:start;position:sticky;top:94px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--bg-0);box-shadow:var(--shadow-1);overflow:hidden}
+.rail-head{padding:18px 20px 12px;border-bottom:1px solid var(--line)}
+.rail-kicker{margin:0 0 4px;color:var(--accent-text);font-size:var(--fs-sm);font-weight:650;letter-spacing:.08em}
+.rail-title{margin:0;font-size:var(--fs-lg);font-weight:700}
+.rail-sub{margin:4px 0 0;color:var(--fg-2);font-size:var(--fs-sm)}
+.chapter-list{padding:10px;max-height:min(62vh,620px);overflow:auto}
+.chapter-group{margin:10px 10px 6px;color:var(--fg-2);font-size:var(--fs-xs);font-weight:650;letter-spacing:.06em}
+.chapter-item{
+  display:flex;align-items:flex-start;gap:10px;width:100%;padding:9px 11px;margin:2px 0;
+  border:1px solid transparent;border-radius:var(--radius-md);background:transparent;
+  text-align:left;color:var(--fg-1);font-size:var(--fs-md);line-height:1.5;
+  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.chapter-item:hover{background:var(--tab-hover);color:var(--fg-0)}
+.chapter-item .num{flex:none;color:var(--fg-2);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;padding-top:2px}
+.chapter-item.active{background:var(--accent-dim);border-color:var(--accent-line);color:var(--accent-text);font-weight:600}
+.chapter-item.active .num{color:var(--accent-text)}
+.reader-main{min-width:0;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--bg-0);box-shadow:var(--shadow-1);padding:40px clamp(24px,5vw,64px) 64px}
+.doc-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-full);background:var(--accent-dim);color:var(--accent-text);font-size:var(--fs-sm);font-weight:650}
+.doc-title{margin:18px 0 10px;font-size:clamp(24px,3vw,34px);line-height:1.3;letter-spacing:-.02em}
+.doc-lede{margin:0;max-width:56em;color:var(--fg-1);font-size:var(--fs-lg)}
+.doc-rule{height:1px;margin:28px 0;background:var(--line)}
+.block-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.block-chip{display:flex;align-items:center;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--bg-1);font-size:var(--fs-sm);color:var(--fg-1)}
+.block-chip i{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+.prototype-note{margin-top:32px;padding:14px 16px;border-left:3px solid var(--accent);border-radius:0 var(--radius-md) var(--radius-md) 0;background:var(--bg-2);color:var(--fg-1);font-size:var(--fs-sm)}
+.prototype-note strong{color:var(--fg-0)}
+
+/* ---- 知识图谱浮层 ---- */
+.graph-layer{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}
+.graph-backdrop{position:absolute;inset:0;background:var(--scrim);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.graph-panel{
+  position:relative;display:flex;flex-direction:column;width:min(1480px,100%);height:min(900px,calc(100vh - 48px));
+  border:1px solid var(--glass-border);border-radius:var(--radius-lg);background:var(--bg-0);
+  box-shadow:var(--shadow-2);overflow:hidden;
+}
+.graph-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:20px 24px 14px;border-bottom:1px solid var(--line)}
+.eyebrow{margin:0 0 2px;color:var(--accent-text);font-size:var(--fs-xs);font-weight:700;letter-spacing:.12em}
+.graph-head h2{margin:0;font-size:var(--fs-xl);letter-spacing:-.01em}
+.graph-sub{margin:4px 0 0;color:var(--fg-2);font-size:var(--fs-sm)}
+.head-actions{display:flex;gap:8px;flex:none}
+.graph-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 24px;border-bottom:1px solid var(--line);background:var(--bg-1)}
+.filters,.tool-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.filter-chip{
+  height:30px;padding:0 12px;border:1px solid var(--line);border-radius:var(--radius-full);
+  background:var(--bg-0);color:var(--fg-1);font-size:var(--fs-sm);font-weight:550;
+  transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);
+}
+.filter-chip:hover{background:var(--tab-hover);color:var(--fg-0)}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:650}
+.tool-btn{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 9px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg-0);color:var(--fg-1);font-size:var(--fs-sm)}
+.tool-btn:hover{background:var(--tab-hover);color:var(--fg-0)}
+.tool-btn.on{background:var(--accent-dim);border-color:var(--accent-line);color:var(--accent-strong);font-weight:650}
+.zoom-label{min-width:42px;text-align:center;color:var(--fg-2);font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.canvas-hint{display:none;color:var(--fg-2);font-size:var(--fs-sm);white-space:nowrap}
+.tool-sep{width:1px;height:18px;background:var(--line);margin:0 4px}
+
+.graph-canvas{
+  position:relative;flex:1;min-height:0;overflow:auto;background-color:var(--bg-1);
+  background-image:radial-gradient(var(--grid-dot) 1px,transparent 1px);
+  background-size:22px 22px;
+}
+.stage-wrap{position:relative;margin:0 auto}
+.stage{position:relative;transform-origin:0 0}
+.stage-col{position:absolute;top:22px;display:flex;align-items:center;gap:8px;color:var(--fg-2);font-size:var(--fs-sm);font-weight:650;letter-spacing:.08em;white-space:nowrap}
+.stage-col b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:1px solid var(--line-strong);border-radius:50%;font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.edges{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.edge-line{fill:none;stroke:var(--edge-soft);stroke-width:1.6;marker-end:url(#arrow);transition:stroke var(--dur-base),stroke-width var(--dur-base),opacity var(--dur-base)}
+.edge-line.sibling{stroke-dasharray:5 5;stroke:var(--edge)}
+.edge-line.path{stroke:var(--accent);stroke-width:2.6;marker-end:url(#arrow-path)}
+.edge-line.dim{opacity:.14}
+.edge-label{fill:var(--fg-2);font-size:16px;font-weight:600;paint-order:stroke;stroke:var(--bg-1);stroke-width:7px;stroke-linejoin:round;transition:fill var(--dur-base),opacity var(--dur-base)}
+.edge-label.path{fill:var(--accent-text)}
+.edge-label.dim{opacity:.18}
+.node{
+  position:absolute;width:var(--node-w);height:var(--node-h);padding:10px 12px;
+  display:flex;flex-direction:column;gap:1px;text-align:left;
+  border:1px solid var(--line-strong);border-radius:var(--radius-md);background:var(--bg-0);
+  box-shadow:var(--shadow-1);
+  transition:transform var(--dur-base) var(--ease-out-quart),border-color var(--dur-base),background var(--dur-base),box-shadow var(--dur-base),opacity var(--dur-base);
+}
+.node:hover{transform:translateY(-3px);border-color:var(--accent-line);box-shadow:var(--shadow-2);z-index:3}
+.node.path{background:var(--accent-dim);border-color:var(--accent-line)}
+.node.selected{border:2px solid var(--accent);box-shadow:0 0 0 4px var(--accent-dim),var(--shadow-2);background:var(--bg-0)}
+.node.dim{opacity:.2}
+.node.dim:hover{opacity:1}
+.node.faded{opacity:.55}
+.node.faded:hover{opacity:1}
+.node-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.node-kind{display:inline-flex;align-items:center;gap:6px;color:var(--fg-2);font-size:var(--fs-sm);font-weight:600}
+.node-kind i{width:7px;height:7px;border-radius:2px;background:var(--accent)}
+.node[data-group="eng"] .node-kind i{background:var(--accent-2)}
+.node[data-group="bridge"] .node-kind i{background:#38bdd8}
+.node[data-group="core"] .node-kind i{background:#8b7bff}
+.node-index{color:var(--fg-2);font-size:var(--fs-xs);font-variant-numeric:tabular-nums}
+.node-title{font-size:var(--fs-md);font-weight:700;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node-sub{color:var(--fg-2);font-size:var(--fs-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.graph-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;border-top:1px solid var(--line);background:var(--bg-1)}
+.legend{display:flex;align-items:center;gap:18px;flex-wrap:wrap;color:var(--fg-2);font-size:var(--fs-sm)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend .ln{width:22px;height:0;border-top:2px solid var(--edge-soft)}
+.legend .ln.dashed{border-top-style:dashed;border-color:var(--edge)}
+.legend .ln.path{border-color:var(--accent);border-top-width:3px}
+.inspector{display:flex;align-items:center;gap:14px;min-width:0;max-width:560px;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--bg-0)}
+.inspector .ins-main{min-width:0}
+.ins-top{display:flex;align-items:center;gap:8px}
+.ins-name{font-size:var(--fs-md);font-weight:700}
+.ins-kind{padding:1px 7px;border-radius:var(--radius-full);background:var(--accent-dim);color:var(--accent-strong);font-size:var(--fs-sm);font-weight:650}
+.ins-tag{margin:1px 0 0;color:var(--fg-1);font-size:var(--fs-sm)}
+.ins-meta{color:var(--fg-2);font-size:var(--fs-sm);white-space:nowrap}
+.ins-tip{flex:none;padding-left:12px;border-left:1px solid var(--line);color:var(--accent-text);font-size:var(--fs-sm);font-weight:650}
+
+@media (max-width:1000px){
+  .reader-body{grid-template-columns:1fr}
+  .chapter-rail{position:static}
+  .chapter-list{max-height:260px}
+  .top-hint{display:none}
+  .graph-foot{align-items:flex-start;flex-direction:column}
+  .inspector{max-width:100%;width:100%}
+}
+@media (max-width:640px){
+  .reader-top{gap:8px;padding:10px 16px;flex-wrap:wrap}
+  .reader-heading{order:5;flex-basis:100%}
+  .reader-title{white-space:normal}
+  .reader-body{padding:16px 16px 48px}
+  .reader-main{padding:24px 18px 40px}
+  .graph-layer{padding:0}
+  .graph-panel{height:100%;border-radius:0;border:0}
+  .graph-head,.graph-toolbar,.graph-foot{padding-left:16px;padding-right:16px}
+  .graph-sub{display:none}
+  .ins-meta{white-space:normal}
+  .legend{gap:10px;font-size:var(--fs-sm)}
+  .canvas-hint{display:block!important}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="reader-top">
+  <button type="button" class="icon-btn" id="backBtn">
+    <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><path d="M10.5 3.5 5 9l5.5 5.5M5 9h9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>笔记库</span>
+  </button>
+
+  <button type="button" class="volume-pill" id="volumePill" aria-expanded="false" aria-haspopup="dialog" title="打开分册知识图谱">
+    <svg class="map-glyph" viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><circle cx="4" cy="4.5" r="2" fill="currentColor"/><circle cx="14" cy="6" r="2" fill="currentColor"/><circle cx="8" cy="14" r="2" fill="currentColor"/><path d="M5.8 4.8 12 5.7M5 6.2l2.2 6M12.7 7.8 9.4 12.4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".75"/></svg>
+    <span id="pillLabel">Transformer 与 LLM</span>
+    <svg class="chev" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="m4.5 6.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+
+  <span class="reader-divider" aria-hidden="true"></span>
+  <div class="reader-heading">
+    <p class="reader-kicker" id="readerKicker">大模型 · 1 / 10</p>
+    <p class="reader-title" id="readerTitle">手写 self-attention：从 QKᵀ 到多头对照</p>
+  </div>
+
+  <span class="top-hint">
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 7.2v4M8 4.9v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    点分册看关系
+  </span>
+  <button type="button" class="icon-btn theme-btn" id="themeBtn" aria-label="切换到暗色主题" title="切换明暗主题">
+    <svg viewBox="0 0 18 18" width="17" height="17" aria-hidden="true"><path d="M15 11.6A6.6 6.6 0 0 1 6.4 3 6.6 6.6 0 1 0 15 11.6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  </button>
+</header>
+
+<main class="reader-body">
+  <aside class="chapter-rail" aria-label="章节目录">
+    <div class="rail-head">
+      <p class="rail-kicker" id="railKind">大模型 · 10 单元</p>
+      <h2 class="rail-title" id="railTitle">Transformer 与 LLM 系统</h2>
+      <p class="rail-sub" id="railSub">把前面九册的能力汇到一条 LLM 链路上。</p>
+    </div>
+    <nav class="chapter-list" id="chapterList" aria-label="本册单元"></nav>
+  </aside>
+
+  <section class="reader-main" aria-label="正文预览">
+    <span class="doc-tag" id="docTag">第 1 章 · 注意力机制</span>
+    <h1 class="doc-title" id="docTitle">手写 self-attention：从 QKᵀ 到多头对照</h1>
+    <p class="doc-lede" id="docLede">从矩阵乘法出发，把一个注意力头完整写一遍；再用同一组输入对照多头结果，确认每一步都能手写复现。</p>
+    <div class="doc-rule"></div>
+    <p class="rail-kicker">本页语义块</p>
+    <div class="block-grid" id="blockGrid"></div>
+    <p class="prototype-note"><strong>原型说明</strong>：这是阅读器外壳的静态演示，正文为预览占位；交互集中在顶部「分册」按钮打开的流程图知识图谱，点击图谱节点会真正切换右侧分册与目录。</p>
+  </section>
+</main>
+
+<div class="graph-layer" id="graphLayer" hidden>
+  <div class="graph-backdrop" id="graphBackdrop"></div>
+  <section class="graph-panel" role="dialog" aria-modal="true" aria-labelledby="graphTitle">
+    <header class="graph-head">
+      <div>
+        <p class="eyebrow">VOLUME MAP / 13</p>
+        <h2 id="graphTitle">分册知识图谱</h2>
+        <p class="graph-sub">从数学地基到大模型：实线是先修依赖，虚线是同主题分支；点节点切换分册，悬停追一条学习路径。</p>
+      </div>
+      <div class="head-actions">
+        <button type="button" class="tool-btn" id="closeGraph" aria-label="关闭知识图谱" title="关闭（Esc）">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="graph-toolbar">
+      <div class="filters" id="filters" role="group" aria-label="按领域筛选分册"></div>
+      <div class="tool-right">
+        <button type="button" class="tool-btn on" id="pathToggle" aria-pressed="true">学习路径</button>
+        <span class="tool-sep" aria-hidden="true"></span>
+        <button type="button" class="tool-btn" id="zoomOut" aria-label="缩小图谱">−</button>
+        <span class="zoom-label" id="zoomLabel">100%</span>
+        <button type="button" class="tool-btn" id="zoomIn" aria-label="放大图谱">+</button>
+        <button type="button" class="tool-btn" id="zoomFit">适应画布</button>
+        <span class="canvas-hint">左右滑动查看全图</span>
+      </div>
+    </div>
+
+    <div class="graph-canvas" id="graphCanvas">
+      <div class="stage-wrap" id="stageWrap">
+        <div class="stage" id="stage">
+          <svg class="edges" id="edges" viewBox="0 0 1680 820" aria-hidden="true">
+            <defs>
+              <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 7 4.5 1 8" fill="none" stroke="var(--edge-soft)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></marker>
+              <marker id="arrow-path" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 7 4.5 1 8" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <footer class="graph-foot">
+      <div class="legend" aria-label="图例">
+        <span><i class="ln"></i>先修依赖</span>
+        <span><i class="ln dashed"></i>同主题分支</span>
+        <span><i class="ln path"></i>当前学习路径</span>
+      </div>
+      <div class="inspector" id="inspector" aria-live="polite"></div>
+    </footer>
+  </section>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var NW=184, NH=78, SW=1680, SH=820;
+
+  // 数据取自 codrift-space-site/src/data/notes.ts 与 study-notes.ts（分册名、册数、单元标题）
+  var COLLECTIONS=[
+    {id:'gaoshu',name:'高数正课',kind:'正课版',group:'math',x:40,y:70,title:'高等数学 · 正课',sub:'定义 · 证明 · 例题',meta:'7 章 · 464 页',tagline:'把每一步讲透：定义、证明、例题，再加一段大白话。',count:50,
+      units:[['第 1 章','函数与极限'],['第 2 章','导数与微分'],['第 3 章','微分中值定理与导数的应用'],['第 4 章','不定积分'],['第 5 章','定积分'],['第 6 章','定积分的应用'],['第 7 章','微分方程']]},
+    {id:'gaoshu-review',name:'高数复习',kind:'复习版',group:'math',x:40,y:164,title:'高等数学 · 复习',sub:'概念 · 公式 · 做题路径',meta:'7 章 · 102 页',tagline:'只留概念、公式与做题路径，按章速查。',count:49,
+      units:[['第 1 章','函数与极限'],['第 2 章','导数与微分'],['第 3 章','微分中值定理与导数的应用'],['第 4 章','不定积分'],['第 5 章','定积分'],['第 6 章','定积分的应用'],['第 7 章','微分方程']]},
+    {id:'linalg',name:'线性代数',kind:'数学基础',group:'math',x:250,y:268,title:'线性代数 · 为深度学习裁剪',sub:'向量 / 矩阵 / 分解 / 矩阵微分',meta:'4 章 · 10 单元 · 8.1 万字',tagline:'把矩阵看成一层计算，把分解看成换一组坐标。',count:10,
+      units:[['第 1 章','向量：从数组到几何'],['第 1 章','线性组合与张成'],['第 2 章','矩阵乘法：一层的 forward'],['第 2 章','逆与高斯消元'],['第 3 章','特征值与特征向量'],['第 3 章','对称矩阵与谱分解'],['第 3 章','SVD：任意矩阵的谱'],['第 4 章','正定与二次型'],['第 4 章','矩阵微分：转置从哪来']]},
+    {id:'multic',name:'多元微积分',kind:'数学基础',group:'math',x:250,y:358,title:'多元微积分与矩阵微分',sub:'偏导 / 梯度 / Jacobian',meta:'3 章 · 8 单元 · 6.4 万字',tagline:'导数的形状决定反向传播里每一个转置。',count:8,
+      units:[['第 1 章','多元函数与偏导数'],['第 1 章','梯度与方向导数'],['第 2 章','Jacobian 的形状'],['第 2 章','Hessian 与二阶信息'],['第 2 章','链式法则与反向传播'],['第 3 章','多元梯度下降'],['第 3 章','拉格朗日乘子与约束优化'],['第 3 章','矩阵微分：trace 与 Frobenius 内积']]},
+    {id:'probopt',name:'概率与最优化',kind:'数学基础',group:'math',x:250,y:448,title:'概率、信息论与最优化',sub:'采样 / 似然 / 熵 / 凸性 / 收敛',meta:'4 章 · 10 单元 · 8.1 万字',tagline:'用采样看期望，用似然看训练，用熵看损失。',count:10,
+      units:[['第 1 章','随机变量、分布与期望'],['第 1 章','方差、协方差与相关性'],['第 1 章','大数定律与中心极限定理'],['第 2 章','最大似然估计'],['第 2 章','熵、KL 散度与交叉熵'],['第 3 章','凸性与凸函数'],['第 3 章','梯度下降的收敛性'],['第 3 章','动量与自适应方法：Adam'],['第 4 章','拉格朗日对偶与 KKT'],['第 4 章','采样：逆变换与拒绝采样']]},
+    {id:'dlmath',name:'DL 数学试点',kind:'数学基础 · 试点',group:'math',x:40,y:588,title:'深度学习数学基础 · 试点',sub:'两层网络 / 梯度检查',meta:'1 章 · 1 单元 · 0.4 万字',tagline:'一个 13 参数网络，把数值三模式一次性钉死。',count:1,
+      units:[['第 1 章','两层网络：前向、梯度与训练']]},
+    {id:'c',name:'C 语言工程',kind:'工程笔记',group:'eng',x:500,y:440,title:'C 语言 · 工程视角',sub:'编译器 / 内存 / 链接',meta:'20 单元 · 23.7 万字',tagline:'从编译器、内存与链接的视角，重学一遍 C。',count:20,
+      units:[['第 1 章','从源文件到可执行文件'],['第 1 章','编译器的脾气：诊断与警告'],['第 2 章','类型与取值范围'],['第 2 章','整数的边界：提升与溢出'],['第 3 章','分支与循环：把流程写对'],['第 3 章','函数：声明、定义与调用栈'],['第 4 章','数组与字符串：连续的一块内存'],['第 4 章','指针与内存：地址与生命周期']]},
+    {id:'cpp',name:'C++ 语言工程',kind:'工程笔记',group:'eng',x:500,y:530,title:'C++ 语言 · 工程视角',sub:'RAII / 移动 / 模板 / 容器',meta:'20 单元 · 10.0 万字',tagline:'从 C 出发，把现代 C++ 写进真实工程。',count:20,
+      units:[['第 1 章','工具链与第一个程序'],['第 1 章','引用、const 与命名空间'],['第 2 章','类与 RAII'],['第 2 章','拷贝与移动'],['第 2 章','智能指针与所有权'],['第 3 章','继承与虚函数'],['第 4 章','模板基础与 Concepts']]},
+    {id:'algo',name:'算法竞赛',kind:'工程笔记',group:'eng',x:500,y:620,title:'算法 · 从能过题到能拿牌',sub:'手写原理 / STL / 随机对拍',meta:'28 单元 · 34.9 万字',tagline:'原理用 C 手写，应用用 STL，结论用随机数据对拍验证。',count:28,
+      units:[['第 1 章','复杂度与工程约定'],['第 1 章','随机数据与对拍'],['第 2 章','栈、队列与单调结构'],['第 2 章','并查集与堆'],['第 3 章','排序与二分'],['第 4 章','前缀和与差分、双指针'],['第 5 章','树与 LCA']]},
+    {id:'rust',name:'Rust 工程',kind:'工程笔记',group:'eng',x:500,y:710,title:'Rust · 从语法到工程与算法',sub:'所有权 / 并发 / CLI 实战',meta:'34 单元',tagline:'把机制讲透，把工程落地，把算法用 Rust 重写一遍。',count:34,
+      units:[['第 1 章','Rust 工具链与第一个程序'],['第 2 章','类型系统与所有权'],['第 2 章','借用与引用'],['第 2 章','生命周期'],['第 3 章','trait 与泛型'],['第 4 章','Cargo 工程化'],['第 4 章','并发与异步：从所有权到状态机']]},
+    {id:'pybridge',name:'PyTorch 桥接',kind:'工程桥接',group:'bridge',x:820,y:430,title:'Python 与 PyTorch · 从 C 到 autograd',sub:'NumPy / Tensor / nn.Module',meta:'3 章 · 8 单元 · 6.4 万字',tagline:'把手写的数值实验翻译成框架写法，判定标准不变。',count:8,
+      units:[['第 1 章','从 C 到 Python：类型与执行方式'],['第 1 章','NumPy：数组即矩阵'],['第 1 章','Python 工程与可复现实验'],['第 2 章','Tensor 与 autograd'],['第 2 章','用 PyTorch 重写两层网络'],['第 2 章','训练循环与固定种子复现'],['第 3 章','nn.Module、优化器与调度'],['第 3 章','从矩阵到注意力：softmax(QKᵀ/√d)V']]},
+    {id:'mldl',name:'机器学习核心',kind:'深度学习',group:'core',x:1140,y:300,title:'机器学习与深度学习核心',sub:'拟合 / 泛化 / 神经网络 / 架构',meta:'4 章 · 10 单元 · 8.3 万字',tagline:'从「会算梯度」到「会训练模型并判断它学没学会」。',count:10,
+      units:[['第 1 章','监督学习与线性回归'],['第 1 章','逻辑回归与分类损失'],['第 1 章','过拟合、正则化与偏差-方差'],['第 2 章','感知机与多层网络'],['第 2 章','反向传播的矩阵形式'],['第 2 章','初始化、激活与归一化'],['第 3 章','卷积网络'],['第 3 章','RNN、LSTM 与梯度消失'],['第 4 章','正则化工程'],['第 4 章','完整训练实验与可复现检查']]},
+    {id:'llm',name:'Transformer 与 LLM',kind:'大模型',group:'llm',x:1440,y:170,title:'Transformer 与 LLM 系统',sub:'注意力 / 预训练 / 对齐 / 评测',meta:'4 章 · 10 单元 · 8.1 万字',tagline:'把前面九册的能力汇到一条 LLM 链路上。',count:10,
+      units:[['第 1 章','手写 self-attention：从 QKᵀ 到多头对照'],['第 1 章','位置与因果掩码：注意力看不见顺序，怎么补上'],['第 1 章','完整 Transformer block：LN、残差与 FFN'],['第 2 章','分词与语言建模目标'],['第 2 章','预训练循环与规模直觉'],['第 2 章','KV cache 与推理加速'],['第 3 章','SFT：把基座变成助手'],['第 3 章','偏好优化：奖励模型与 DPO'],['第 4 章','解码策略：贪心、温度、top-k 与核采样'],['第 4 章','评测、幻觉与安全']]}
+  ];
+
+  var EDGES=[
+    {from:'gaoshu',to:'multic',label:'先修 · 极限与积分',lift:10},
+    {from:'gaoshu',to:'probopt',lift:30},
+    {from:'gaoshu-review',to:'gaoshu',label:'同源 · 复习版',route:'sibling',type:'sibling'},
+    {from:'linalg',to:'pybridge',label:'矩阵 = 一层计算',lift:60},
+    {from:'multic',to:'pybridge',label:'梯度 · 链式法则',lift:45},
+    {from:'probopt',to:'mldl',label:'似然 · 损失 · 凸性',lift:160},
+    {from:'dlmath',to:'mldl',label:'数值模板',route:'bottom',type:'template'},
+    {from:'c',to:'cpp',label:'语言演进',route:'vertical'},
+    {from:'cpp',to:'algo',label:'STL 应用',route:'vertical'},
+    {from:'algo',to:'rust',label:'Rust 重写',route:'vertical'},
+    {from:'c',to:'pybridge',label:'语言迁移',lift:20},
+    {from:'pybridge',to:'mldl',label:'框架写法',lift:20},
+    {from:'mldl',to:'llm',label:'汇流 · 注意力与训练',lift:20}
+  ];
+
+  var STAGES=[['数学地基',40],['数学进阶',250],['系统编程',500],['框架桥接',820],['模型核心',1140],['大模型',1440]];
+  var FILTERS=[['all','全部'],['math','数学地基'],['eng','系统工程'],['bridge','框架桥接'],['core','模型核心'],['llm','大模型']];
+  var BLOCKS=['学习目标','大白话','工程惯例','实验记录','陷阱','编译器视角','小结','自测题'];
+
+  var byId={}; COLLECTIONS.forEach(function(c,i){c.index=i+1;byId[c.id]=c;});
+  var state={selected:'llm',hover:null,filter:'all',showPath:true,scale:1,chapter:0};
+
+  var $=function(id){return document.getElementById(id);};
+  var el=function(tag,cls,txt){var n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;};
+
+  function svgEl(tag,attrs){var n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(var k in attrs)n.setAttribute(k,attrs[k]);return n;}
+
+  function edgePath(e){
+    var a=byId[e.from],b=byId[e.to],ax=a.x+NW,ay=a.y+NH/2,bx=b.x,by=b.y+NH/2;
+    if(e.route==='sibling')return 'M '+ax+' '+(a.y+NH-8)+' C '+(ax+70)+' '+(a.y+NH-8)+' '+(ax+70)+' '+ay+' '+ax+' '+ay;
+    if(e.route==='vertical'){var x=a.x+NW/2;return 'M '+x+' '+(a.y+NH)+' L '+x+' '+b.y;}
+    if(e.route==='bottom'){var x0=a.x+NW/2,x1=b.x+NW/2;return 'M '+x0+' '+(a.y+NH)+' L '+x0+' 802 L '+x1+' 802 L '+x1+' '+(b.y+NH);}
+    var lift=e.lift||0,span=bx-ax,off=Math.max(18,Math.min(120,span*.35));
+    var c1x=ax+off,c1y=ay-lift,c2x=bx-off,c2y=by;
+    return 'M '+ax+' '+ay+' C '+c1x+' '+c1y+' '+c2x+' '+c2y+' '+bx+' '+by;
+  }
+  function labelPos(e){
+    var a=byId[e.from],b=byId[e.to];
+    if(e.route==='sibling')return [a.x+NW+78,(a.y+b.y+NH)/2];
+    if(e.route==='vertical')return [a.x+NW+18,(a.y+NH+b.y)/2+4];
+    if(e.route==='bottom')return [(a.x+b.x+NW)/2,797];
+    var ax=a.x+NW,ay=a.y+NH/2,bx=b.x,by=b.y+NH/2,lift=e.lift||0,span=bx-ax,off=Math.max(18,Math.min(120,span*.35));
+    if(span<60)return [bx+52,(ay+by)/2];
+    var c1x=ax+off,c1y=ay-lift,c2x=bx-off,c2y=by;
+    return [(ax+3*c1x+3*c2x+bx)/8,(ay+3*c1y+3*c2y+by)/8-8];
+  }
+
+  // 依赖图（实线）用于计算学习路径；试点/复习边不参与
+  var prereqs=EDGES.filter(function(e){return !e.type;});
+  function pathTo(id){
+    var roots=prereqs.filter(function(e){return !prereqs.some(function(x){return x.to===e.from;});}).map(function(e){return e.from;});
+    var seen={},parent={},queue=[],head=0;
+    roots.forEach(function(r){if(seen[r])return;seen[r]=true;queue.push(r);});
+    while(head<queue.length){
+      var cur=queue[head++];
+      if(cur===id)break;
+      prereqs.filter(function(e){return e.from===cur;}).forEach(function(e){
+        if(seen[e.to])return;seen[e.to]=true;parent[e.to]=cur;queue.push(e.to);
+      });
+    }
+    if(!seen[id])return [id];
+    var out=[],p=id;while(p){out.unshift(p);p=parent[p];}return out;
+  }
+
+  function buildGraph(){
+    var stage=$('stage');
+    $('stageWrap').style.width=SW+'px';$('stageWrap').style.height=SH+'px';
+    stage.style.width=SW+'px';stage.style.height=SH+'px';
+    STAGES.forEach(function(s,i){var h=el('div','stage-col');h.style.left=s[1]+'px';h.appendChild(el('b',null,String(i+1)));h.appendChild(document.createTextNode(s[0]));stage.appendChild(h);});
+    var svg=$('edges');
+    EDGES.forEach(function(e,i){
+      var line=svgEl('path',{d:edgePath(e),class:'edge-line'+(e.type?' '+e.type:'')});
+      line.dataset.from=e.from;line.dataset.to=e.to;svg.appendChild(line);
+      e.line=line;
+      if(e.label){
+        var p=labelPos(e),t=svgEl('text',{x:p[0],y:p[1],class:'edge-label', 'text-anchor':'middle'});
+        t.textContent=e.label;t.dataset.from=e.from;t.dataset.to=e.to;svg.appendChild(t);e.labelEl=t;
+      }
+    });
+    COLLECTIONS.forEach(function(c){
+      var n=el('button','node');n.type='button';n.dataset.id=c.id;n.dataset.group=c.group;
+      n.style.left=c.x+'px';n.style.top=c.y+'px';
+      n.setAttribute('aria-label',c.name+'，'+c.kind+'，点击查看上下游并切换分册');
+      var top=el('span','node-top');top.appendChild(el('span','node-kind'));top.lastChild.appendChild(el('i'));top.lastChild.appendChild(document.createTextNode(c.kind));
+      top.appendChild(el('span','node-index',String(c.index).padStart(2,'0')));
+      n.appendChild(top);n.appendChild(el('strong','node-title',c.name));n.appendChild(el('span','node-sub',c.sub));
+      n.addEventListener('mouseenter',function(){state.hover=c.id;render();});
+      n.addEventListener('mouseleave',function(){state.hover=null;render();});
+      n.addEventListener('focus',function(){state.hover=c.id;render();});
+      n.addEventListener('blur',function(){state.hover=null;render();});
+      n.addEventListener('click',function(){select(c.id);closeGraph();});
+      stage.appendChild(n);c.node=n;
+    });
+    FILTERS.forEach(function(f){
+      var b=el('button','filter-chip'+(f[0]==='all'?' active':''),f[1]);b.type='button';b.dataset.group=f[0];
+      b.setAttribute('aria-pressed',String(f[0]==='all'));
+      b.addEventListener('click',function(){state.filter=f[0];render();});
+      $('filters').appendChild(b);
+    });
+  }
+
+  function renderChapters(){
+    var c=byId[state.selected],list=$('chapterList');list.innerHTML='';
+    c.units.forEach(function(u,i){
+      if(i===0||u[0]!==c.units[i-1][0])list.appendChild(el('p','chapter-group',u[0]));
+      var b=el('button','chapter-item'+(i===state.chapter?' active':''));b.type='button';
+      b.appendChild(el('span','num',String(i+1).padStart(2,'0')));
+      b.appendChild(el('span',null,u[1]));
+      b.addEventListener('click',function(){state.chapter=i;renderChapters();renderDoc();});
+      list.appendChild(b);
+    });
+  }
+  function renderDoc(){
+    var c=byId[state.selected],u=c.units[state.chapter]||c.units[0];
+    $('docTag').textContent=u[0]+' · '+c.kind;
+    $('docTitle').textContent=u[1];
+    $('docLede').textContent=c.tagline;
+    $('readerKicker').textContent=c.kind+' · '+(state.chapter+1)+' / '+c.count;
+    $('readerTitle').textContent=u[1];
+    var grid=$('blockGrid');grid.innerHTML='';
+    BLOCKS.forEach(function(b){var chip=el('div','block-chip');chip.appendChild(el('i'));chip.appendChild(document.createTextNode(b));grid.appendChild(chip);});
+  }
+  function renderReader(){
+    var c=byId[state.selected];
+    $('pillLabel').textContent=c.name;
+    $('railKind').textContent=c.kind+' · '+c.count+' 单元';
+    $('railTitle').textContent=c.title;
+    $('railSub').textContent=c.tagline;
+  }
+  function inspect(id){
+    var c=byId[id||state.selected];
+    var up=EDGES.filter(function(e){return e.to===c.id&&!e.type;}).map(function(e){return byId[e.from].name;});
+    var down=EDGES.filter(function(e){return e.from===c.id&&!e.type;}).map(function(e){return byId[e.to].name;});
+    var box=$('inspector');box.innerHTML='';
+    var main=el('div','ins-main');
+    var top=el('div','ins-top');top.appendChild(el('span','ins-name',c.name));top.appendChild(el('span','ins-kind',c.kind));main.appendChild(top);
+    main.appendChild(el('p','ins-tag',c.tagline));
+    main.appendChild(el('div','ins-meta','上游 '+(up.length?up.join('、'):'—')+' → 下游 '+(down.length?down.join('、'):'—')+' · '+c.meta));
+    box.appendChild(main);box.appendChild(el('span','ins-tip','点击节点切换分册'));
+  }
+  function render(){
+    var target=state.hover||state.selected;
+    var path=state.showPath?pathTo(target):[];
+    var inPath={};path.forEach(function(id){inPath[id]=true;});
+    COLLECTIONS.forEach(function(c){
+      var cls=['node'];
+      if(state.filter!=='all'&&c.group!==state.filter)cls.push('dim');
+      else if(state.showPath&&!inPath[c.id]&&state.hover)cls.push('faded');
+      if(inPath[c.id])cls.push('path');
+      if(c.id===state.selected)cls.push('selected');
+      c.node.className=cls.join(' ');
+      c.node.setAttribute('aria-pressed',String(c.id===state.selected));
+    });
+    EDGES.forEach(function(e){
+      var onPath=path.length>1&&inPath[e.from]&&inPath[e.to]&&path.indexOf(e.from)+1===path.indexOf(e.to);
+      var filtered=state.filter!=='all'&&(byId[e.from].group!==state.filter||byId[e.to].group!==state.filter);
+      var cls='edge-line'+(e.type?' '+e.type:'')+(onPath?' path':'')+(filtered?' dim':'');
+      e.line.setAttribute('class',cls);
+      if(e.labelEl)e.labelEl.setAttribute('class','edge-label'+(onPath?' path':'')+(filtered?' dim':''));
+    });
+    Array.prototype.forEach.call($('filters').children,function(b){
+      var on=b.dataset.group===state.filter;b.className='filter-chip'+(on?' active':'');b.setAttribute('aria-pressed',String(on));
+    });
+    var pt=$('pathToggle');pt.className='tool-btn'+(state.showPath?' on':'');pt.setAttribute('aria-pressed',String(state.showPath));
+    inspect(target);
+  }
+  function select(id){state.selected=id;state.chapter=0;renderReader();renderChapters();renderDoc();render();}
+
+  function applyScale(){
+    var s=state.scale;
+    $('stage').style.transform='scale('+s+')';
+    $('stageWrap').style.width=(SW*s)+'px';$('stageWrap').style.height=(SH*s)+'px';
+    $('zoomLabel').textContent=Math.round(s*100)+'%';
+  }
+  function setScale(s){state.scale=Math.max(.5,Math.min(1.3,Math.round(s*100)/100));applyScale();}
+  function fitScale(full){
+    var cw=$('graphCanvas').clientWidth-32,ch=$('graphCanvas').clientHeight-24;
+    // 窄屏不缩到 50%：流程图保持可读字号，靠画布平移浏览。
+    if(cw<900)setScale(1);
+    else setScale(full?Math.min(cw/SW,ch/SH):Math.min(1,cw/SW));
+    $('graphCanvas').scrollTo({left:0,top:0});
+  }
+  function openGraph(){
+    $('graphLayer').hidden=false;document.body.classList.add('graph-open');
+    $('volumePill').setAttribute('aria-expanded','true');
+    fitScale(false);render();$('closeGraph').focus();
+  }
+  function closeGraph(){
+    $('graphLayer').hidden=true;document.body.classList.remove('graph-open');
+    $('volumePill').setAttribute('aria-expanded','false');$('volumePill').focus();
+  }
+
+  $('volumePill').addEventListener('click',function(){$('graphLayer').hidden?openGraph():closeGraph();});
+  $('closeGraph').addEventListener('click',closeGraph);
+  $('graphBackdrop').addEventListener('click',closeGraph);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!$('graphLayer').hidden)closeGraph();});
+  $('pathToggle').addEventListener('click',function(){state.showPath=!state.showPath;render();});
+  $('zoomIn').addEventListener('click',function(){setScale(state.scale+.12);});
+  $('zoomOut').addEventListener('click',function(){setScale(state.scale-.12);});
+  $('zoomFit').addEventListener('click',function(){fitScale(true);});
+  $('themeBtn').addEventListener('click',function(){
+    var dark=document.documentElement.getAttribute('data-theme')==='dark';
+    document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+    $('themeBtn').setAttribute('aria-label',dark?'切换到暗色主题':'切换到亮色主题');
+  });
+  $('backBtn').addEventListener('click',function(){
+    if(!$('graphLayer').hidden){closeGraph();return;}
+    window.scrollTo({top:0,behavior:'smooth'});
+    var first=$('chapterList').querySelector('.chapter-item');if(first)first.focus();
+  });
+
+  buildGraph();select('llm');applyScale();
+})();
+</script>
+</body>
+</html>
